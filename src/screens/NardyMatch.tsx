@@ -147,7 +147,7 @@ export function NardyMatch({ user: _user, config, onExit }: NardyMatchProps) {
         </div>
 
         {/* board */}
-        <div className="my-3 flex flex-1 items-center">
+        <div className="my-3 flex flex-1 items-center justify-center">
           <Board
             s={s}
             sel={sel}
@@ -264,14 +264,36 @@ function Dice({
 }) {
   if (hidden || !rolled) return <span />
   return (
-    <div className="flex gap-1.5">
+    <div className="flex gap-2">
       {dice.map((d, i) => (
+        <Die key={i} n={d} />
+      ))}
+    </div>
+  )
+}
+
+// pip positions per die face (3x3 grid cells)
+const PIPS: Record<number, number[]> = {
+  1: [4],
+  2: [0, 8],
+  3: [0, 4, 8],
+  4: [0, 2, 6, 8],
+  5: [0, 2, 4, 6, 8],
+  6: [0, 2, 3, 5, 6, 8],
+}
+function Die({ n }: { n: number }) {
+  return (
+    <div
+      className="grid h-9 w-9 grid-cols-3 grid-rows-3 gap-0.5 rounded-lg p-1.5 shadow-[0_2px_4px_rgba(0,0,0,0.4)]"
+      style={{ background: 'linear-gradient(150deg,#fdfaf3,#e8dcc4)' }}
+    >
+      {Array.from({ length: 9 }).map((_, c) => (
         <span
-          key={i}
-          className="grid h-8 w-8 place-items-center rounded-lg bg-white text-base font-extrabold text-ink shadow"
-        >
-          {d}
-        </span>
+          key={c}
+          className={`place-self-center rounded-full ${
+            PIPS[n]?.includes(c) ? 'h-1.5 w-1.5 bg-[#b03a2e]' : ''
+          }`}
+        />
       ))}
     </div>
   )
@@ -293,22 +315,22 @@ function Board({
 }) {
   const offReady = targets.has('off')
   return (
-    <div className="w-full overflow-hidden rounded-2xl border-4 border-[#5a3b22] bg-[#7a5432] shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
+    <div className="w-fit overflow-hidden rounded-2xl border-[6px] border-[#93a6b4] bg-[#cdd6dd] shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
       {/* top row */}
       <Row points={TOP} dir="down" s={s} sel={sel} targets={targets} onTap={onTapPoint} />
       {/* bar / off */}
-      <div className="flex items-center justify-between bg-[#5a3b22] px-2 py-1">
+      <div className="flex items-center justify-between bg-[#93a6b4] px-2 py-1">
         <button
           onClick={onTapOff}
           className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
             offReady
               ? 'bg-[#38d66b] text-white'
-              : 'bg-black/25 text-white/70'
+              : 'bg-black/15 text-[#33424e]'
           }`}
         >
           вывод {s.off.w}/15
         </button>
-        <span className="text-[11px] font-semibold text-white/50">длинные нарды</span>
+        <span className="text-[11px] font-semibold text-[#33424e]/70">длинные нарды</span>
       </div>
       {/* bottom row */}
       <Row points={BOTTOM} dir="up" s={s} sel={sel} targets={targets} onTap={onTapPoint} />
@@ -376,12 +398,12 @@ function Point({
       ? 'polygon(0 0, 100% 0, 50% 100%)'
       : 'polygon(50% 0, 0 100%, 100% 100%)'
   const shown = Math.min(count, 5)
-  const CH = 22 // checker size
+  const CH = 26 // checker size
   return (
     <button
       onClick={onTap}
       className="relative block"
-      style={{ width: 26, height: 128 }}
+      style={{ width: 30, height: 146 }}
     >
       {/* triangle */}
       <span
@@ -389,11 +411,11 @@ function Point({
         style={{
           clipPath: tri,
           background: target
-            ? 'rgba(56,214,107,0.55)'
+            ? 'rgba(56,214,107,0.6)'
             : dark
-              ? '#3f7a56'
-              : '#c9a06a',
-          opacity: target ? 1 : 0.92,
+              ? '#a9bcca'
+              : 'repeating-linear-gradient(45deg, rgba(255,255,255,0.14) 0 2px, transparent 2px 6px), #dcae86',
+          opacity: target ? 1 : 0.95,
         }}
       />
       {selected && (
@@ -405,21 +427,34 @@ function Point({
       {/* checkers */}
       {Array.from({ length: shown }).map((_, i) => {
         const pos = i * CH * 0.92
+        const white = owner === 'w'
         return (
           <span
             key={i}
-            className="absolute left-1/2 rounded-full ring-1 ring-black/40"
+            className="absolute left-1/2 grid place-items-center rounded-full"
             style={{
               width: CH,
               height: CH,
               transform: 'translateX(-50%)',
               [dir === 'down' ? 'top' : 'bottom']: pos,
-              background:
-                owner === 'w'
-                  ? 'radial-gradient(circle at 35% 30%, #ffffff, #d9cdb3)'
-                  : 'radial-gradient(circle at 35% 30%, #4a4a4f, #1c1c1f)',
+              background: white
+                ? 'radial-gradient(circle at 35% 30%, #fbf7ee, #d8cdb8)'
+                : 'radial-gradient(circle at 35% 30%, #7d97a8, #3f5a6b)',
+              boxShadow: white
+                ? 'inset 0 0 0 2px rgba(120,140,155,0.5), 0 1px 2px rgba(0,0,0,0.35)'
+                : 'inset 0 0 0 2px rgba(255,255,255,0.35), 0 1px 2px rgba(0,0,0,0.4)',
             } as React.CSSProperties}
-          />
+          >
+            {/* center dot, like the reference */}
+            <span
+              className="rounded-full"
+              style={{
+                width: CH * 0.28,
+                height: CH * 0.28,
+                background: white ? '#8aa0af' : '#b03a2e',
+              }}
+            />
+          </span>
         )
       })}
       {count > 5 && (
