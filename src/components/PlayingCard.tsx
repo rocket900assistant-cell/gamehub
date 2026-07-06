@@ -19,7 +19,33 @@ const SZ = {
 }
 
 const SUIT_CODE: Record<Suit, string> = { '♠': 'S', '♥': 'H', '♦': 'D', '♣': 'C' }
+const CARD_BACK = '/assets/durak/card-back.png'
 const cardSrc = (c: Card) => `/assets/durak/cards/${c.rank}${SUIT_CODE[c.suit]}.png`
+
+// Preload every card once so faces are cached before they're rendered
+// (avoids blank/white cards when many <img> load at the same time).
+let _preloaded = false
+function preloadCards() {
+  if (_preloaded || typeof Image === 'undefined') return
+  _preloaded = true
+  const urls = [CARD_BACK]
+  for (let r = 2; r <= 14; r++)
+    for (const s of ['S', 'H', 'D', 'C']) urls.push(`/assets/durak/cards/${r}${s}.png`)
+  urls.forEach((u) => {
+    const img = new Image()
+    img.src = u
+  })
+}
+preloadCards()
+
+// Retry a failed image load once (transient network hiccup → blank card).
+function retryImg(e: React.SyntheticEvent<HTMLImageElement>) {
+  const el = e.currentTarget
+  if (el.dataset.retry) return
+  el.dataset.retry = '1'
+  const base = el.src.split('?')[0]
+  el.src = `${base}?r=${Date.now()}`
+}
 
 export function PlayingCard({
   card,
@@ -44,9 +70,10 @@ export function PlayingCard({
         style={{ width: s.w, height: s.h, borderRadius: radius, ...style }}
       >
         <img
-          src="/assets/durak/card-back.png"
+          src={CARD_BACK}
           alt=""
           draggable={false}
+          onError={retryImg}
           className="h-full w-full object-cover"
         />
       </div>
@@ -70,6 +97,7 @@ export function PlayingCard({
         src={cardSrc(card)}
         alt=""
         draggable={false}
+        onError={retryImg}
         className="h-full w-full object-contain"
         style={{ padding: Math.round(s.w * 0.06) }}
       />
