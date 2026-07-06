@@ -34,7 +34,10 @@ export function NewChessGame({
   const [friend, setFriend] = useState(false)
   const [copied, setCopied] = useState(false)
   const [invited, setInvited] = useState<Set<string>>(new Set())
+  const [showAllFriends, setShowAllFriends] = useState(false)
   const [gameId] = useState(() => `chess_${Math.random().toString(36).slice(2, 8)}`)
+
+  const visibleFriends = showAllFriends ? friends : friends.slice(0, 3)
 
   function invite(id: string) {
     setInvited((prev) => new Set(prev).add(id))
@@ -129,7 +132,7 @@ export function NewChessGame({
           <section>
             <p className="mb-2 text-sm font-bold">Пригласить из друзей</p>
             <Card className="divide-y divide-line/70 p-0">
-              {friends.map((f) => {
+              {visibleFriends.map((f) => {
                 const isInvited = invited.has(f.id)
                 return (
                   <div key={f.id} className="flex items-center gap-3 p-3">
@@ -161,6 +164,16 @@ export function NewChessGame({
                   </div>
                 )
               })}
+              {friends.length > 3 && (
+                <button
+                  onClick={() => setShowAllFriends((v) => !v)}
+                  className="w-full py-3 text-sm font-bold text-gold-dark"
+                >
+                  {showAllFriends
+                    ? 'Свернуть'
+                    : `Показать всех (${friends.length})`}
+                </button>
+              )}
             </Card>
           </section>
 
