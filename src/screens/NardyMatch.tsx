@@ -116,9 +116,8 @@ export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
 
   function applySeq(from: number, seq: number[]) {
     let st = s
-    let pos: number | 'off' = from
+    let pos = from
     for (const d of seq) {
-      if (pos === 'off') break
       const de = _destOf(st, 'w', pos, d)
       st = move(st, pos, d)
       if (de === 'off' || de === null) break
