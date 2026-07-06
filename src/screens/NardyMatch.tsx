@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react'
-import { ChevronLeft, Flag, RotateCcw } from 'lucide-react'
+import {
+  ChevronLeft,
+  Flag,
+  MessageCircle,
+  RotateCcw,
+  Send,
+  UserPlus,
+  X,
+} from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import type { NardyConfig } from './NardySetup'
 import {
@@ -15,7 +23,7 @@ import {
   type NardyState,
   type NPlayer,
 } from '../lib/nardy'
-import type { TgUser } from '../lib/telegram'
+import { shareInvite, type TgUser } from '../lib/telegram'
 
 interface NardyMatchProps {
   user: TgUser
@@ -34,11 +42,23 @@ const FELT: React.CSSProperties = {
   backgroundPosition: 'center',
 }
 
-export function NardyMatch({ user: _user, config, onExit }: NardyMatchProps) {
+export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
   const [s, setS] = useState<NardyState>(() => createNardy())
   const [sel, setSel] = useState<number | null>(null)
   const [confirmResign, setConfirmResign] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatInput, setChatInput] = useState('')
+  const [messages, setMessages] = useState<{ mine: boolean; text: string }[]>([])
   const bank = config && !config.free ? config.stake * 2 : 0
+
+  function sendChat() {
+    const t = chatInput.trim()
+    if (!t) return
+    setMessages((prev) => [...prev, { mine: true, text: t }])
+    setChatInput('')
+  }
+  const invite = () =>
+    shareInvite(String(user.id || user.username || 'guest'))
 
   // bot plays (rolls, then moves); auto-pass whoever is stuck after a roll
   useEffect(() => {
@@ -182,7 +202,78 @@ export function NardyMatch({ user: _user, config, onExit }: NardyMatchProps) {
             {status}
           </span>
         </div>
+
+        {/* bottom toolbar */}
+        <div className="mt-2 flex items-stretch gap-1.5 rounded-2xl border border-line bg-surface p-1.5 shadow-[var(--shadow-soft)]">
+          <ToolBtn
+            icon={MessageCircle}
+            label="Чат"
+            badge={messages.length}
+            onClick={() => setChatOpen(true)}
+          />
+          <ToolBtn icon={UserPlus} label="Пригласить" onClick={invite} />
+        </div>
       </div>
+
+      {/* chat bottom sheet */}
+      {chatOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-black/40"
+          onClick={() => setChatOpen(false)}
+        >
+          <div
+            className="mx-auto flex h-[58%] w-full max-w-md flex-col rounded-t-[24px] bg-surface"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-line p-4">
+              <p className="font-bold">Чат</p>
+              <button onClick={() => setChatOpen(false)} aria-label="Закрыть">
+                <X size={20} className="text-muted" />
+              </button>
+            </div>
+            <div className="flex-1 space-y-2 overflow-y-auto p-4">
+              {messages.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted">
+                  Сообщений пока нет
+                </p>
+              ) : (
+                messages.map((m, i) => (
+                  <div
+                    key={i}
+                    className={`flex ${m.mine ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <span
+                      className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
+                        m.mine
+                          ? 'bg-gradient-to-b from-gold to-gold-dark text-white'
+                          : 'bg-bg text-ink'
+                      }`}
+                    >
+                      {m.text}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="flex items-center gap-2 border-t border-line p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && sendChat()}
+                placeholder="Сообщение…"
+                className="h-11 flex-1 rounded-[var(--radius-input)] border border-line bg-bg px-3 text-[15px] outline-none placeholder:text-muted"
+              />
+              <button
+                onClick={sendChat}
+                aria-label="Отправить"
+                className="grid h-11 w-11 place-items-center rounded-[var(--radius-input)] bg-gradient-to-b from-gold to-gold-dark text-white"
+              >
+                <Send size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirmResign && !s.result && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6">
@@ -500,5 +591,32 @@ function Board({
         </button>
       )}
     </div>
+  )
+}
+
+function ToolBtn({
+  icon: Icon,
+  label,
+  onClick,
+  badge,
+}: {
+  icon: typeof MessageCircle
+  label: string
+  onClick: () => void
+  badge?: number
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="relative flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-muted transition active:bg-bg"
+    >
+      {badge ? (
+        <span className="absolute right-6 top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
+          {badge}
+        </span>
+      ) : null}
+      <Icon size={20} />
+      <span className="text-[10px]">{label}</span>
+    </button>
   )
 }
