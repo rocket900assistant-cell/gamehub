@@ -141,7 +141,6 @@ export function NardyMatch({ user: _user, config, onExit }: NardyMatchProps) {
         {/* opponent bar */}
         <div className="mt-3 flex items-center justify-between text-white/90">
           <PlayerChip name="Бот" color="b" active={s.turn === 'b' && !s.result} off={s.off.b} />
-          <Dice dice={s.dice} rolled={s.rolled} hidden={!!s.result} />
         </div>
 
         {/* board */}
@@ -251,25 +250,6 @@ function PlayerChip({
   )
 }
 
-function Dice({
-  dice,
-  rolled,
-  hidden,
-}: {
-  dice: number[]
-  rolled: [number, number] | null
-  hidden: boolean
-}) {
-  if (hidden || !rolled) return <span />
-  return (
-    <div className="flex gap-2">
-      {dice.map((d, i) => (
-        <Die key={i} n={d} />
-      ))}
-    </div>
-  )
-}
-
 // pip positions per die face (3x3 grid cells)
 const PIPS: Record<number, number[]> = {
   1: [4],
@@ -343,6 +323,35 @@ function Board({
         draggable={false}
         className="absolute inset-0 h-full w-full"
       />
+
+      {/* last-move trail */}
+      {s.lastMove &&
+        (() => {
+          const anc = (t: number | 'off') =>
+            t === 'off'
+              ? { x: 93, y: 50 }
+              : { x: POS[t].x, y: POS[t].top ? 33 : 67 }
+          const a = anc(s.lastMove.from)
+          const b = anc(s.lastMove.to)
+          const cx = (a.x + b.x) / 2
+          const cy = (a.y + b.y) / 2 + (50 - (a.y + b.y) / 2) * 0.55
+          return (
+            <svg
+              className="pointer-events-none absolute inset-0 h-full w-full"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+            >
+              <path
+                d={`M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`}
+                fill="none"
+                stroke="rgba(255,255,255,0.55)"
+                strokeWidth={3}
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+          )
+        })()}
 
       {/* checkers on points */}
       {Array.from({ length: 24 }).map((_, p) => {
@@ -444,6 +453,18 @@ function Board({
           <span className="absolute inset-2 rounded-lg bg-[#38d66b]/45 ring-2 ring-[#38d66b]" />
         )}
       </button>
+
+      {/* dice on the board (remaining to play) */}
+      {s.rolled && !s.result && s.dice.length > 0 && (
+        <div
+          className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 -translate-y-1/2 gap-2 drop-shadow-[0_3px_6px_rgba(0,0,0,0.45)]"
+          style={{ top: s.turn === 'w' ? '64%' : '36%' }}
+        >
+          {s.dice.map((d, i) => (
+            <Die key={i} n={d} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

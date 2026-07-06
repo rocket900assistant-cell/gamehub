@@ -18,6 +18,7 @@ export interface NardyState {
   dice: number[] // dice still to play this turn ([3,5] or [4,4,4,4])
   rolled: [number, number] | null // last raw roll (for display)
   movedFromHead: boolean // a checker already left the head this turn
+  lastMove: { from: number; to: number | 'off' } | null // for the last-move trail
   result: NPlayer | null
 }
 
@@ -53,6 +54,7 @@ export function createNardy(): NardyState {
     dice,
     rolled,
     movedFromHead: false,
+    lastMove: null,
     result: null,
   }
 }
@@ -143,6 +145,7 @@ export function move(st: NardyState, from: number, d: number): NardyState {
   n.points[from] -= sign(p)
   if (de === 'off') n.off[p]++
   else n.points[de] += sign(p)
+  n.lastMove = { from, to: de }
   const di = n.dice.indexOf(d)
   if (di >= 0) n.dice.splice(di, 1)
   if (from === HEAD[p]) n.movedFromHead = true
