@@ -466,7 +466,7 @@ function Board({
 }: {
   s: NardyState
   sel: number | null
-  targets: Map<number | 'off', number>
+  targets: Map<number | 'off', number[]>
   onTapPoint: (p: number) => void
   onTapOff: () => void
 }) {
