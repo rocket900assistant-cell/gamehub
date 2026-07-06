@@ -17,6 +17,7 @@ export interface NardyState {
   turn: NPlayer
   dice: number[] // dice still to play this turn ([3,5] or [4,4,4,4])
   rolled: [number, number] | null // last raw roll (for display)
+  awaitingRoll: boolean // true = current player must throw the dice before moving
   movedFromHead: boolean // a checker already left the head this turn
   lastMove: { from: number; to: number | 'off' } | null // for the last-move trail
   result: NPlayer | null
@@ -46,17 +47,29 @@ export function createNardy(): NardyState {
   const points = new Array(24).fill(0)
   points[HEAD.w] = 15
   points[HEAD.b] = -15
-  const { rolled, dice } = rollDice()
   return {
     points,
     off: { w: 0, b: 0 },
     turn: 'w',
-    dice,
-    rolled,
+    dice: [],
+    rolled: null,
+    awaitingRoll: true, // white throws first
     movedFromHead: false,
     lastMove: null,
     result: null,
   }
+}
+
+/** Throw the dice for the current player. No-op unless awaiting a roll. */
+export function roll(st: NardyState): NardyState {
+  if (st.result || !st.awaitingRoll) return st
+  const n = clone(st)
+  const r = rollDice()
+  n.rolled = r.rolled
+  n.dice = r.dice
+  n.awaitingRoll = false
+  if (!hasAnyMove(n)) endTurn(n) // rolled dead — turn passes
+  return n
 }
 
 /** Are all of player p's checkers in the home quadrant (track 18..23)? */
@@ -129,9 +142,9 @@ function clone(st: NardyState): NardyState {
 
 function endTurn(n: NardyState) {
   n.turn = other(n.turn)
-  const r = rollDice()
-  n.rolled = r.rolled
-  n.dice = r.dice
+  n.dice = []
+  n.rolled = null
+  n.awaitingRoll = true
   n.movedFromHead = false
 }
 

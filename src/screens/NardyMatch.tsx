@@ -8,6 +8,7 @@ import {
   destOf as _destOf,
   hasAnyMove,
   botStep,
+  roll,
   pass,
   move,
   ownerOf,
@@ -39,14 +40,24 @@ export function NardyMatch({ user: _user, config, onExit }: NardyMatchProps) {
   const [confirmResign, setConfirmResign] = useState(false)
   const bank = config && !config.free ? config.stake * 2 : 0
 
-  // bot plays; auto-pass whoever is stuck
+  // bot plays (rolls, then moves); auto-pass whoever is stuck after a roll
   useEffect(() => {
     if (s.result) return
     if (s.turn === 'b') {
-      const id = setTimeout(() => setS((c) => (c.turn === 'b' ? botStep(c) : c)), 650)
+      if (s.awaitingRoll) {
+        const id = setTimeout(
+          () => setS((c) => (c.turn === 'b' && c.awaitingRoll ? roll(c) : c)),
+          500,
+        )
+        return () => clearTimeout(id)
+      }
+      const id = setTimeout(
+        () => setS((c) => (c.turn === 'b' && !c.awaitingRoll ? botStep(c) : c)),
+        650,
+      )
       return () => clearTimeout(id)
     }
-    if (!hasAnyMove(s)) {
+    if (!s.awaitingRoll && !hasAnyMove(s)) {
       const id = setTimeout(() => setS((c) => (hasAnyMove(c) ? c : pass(c))), 1100)
       return () => clearTimeout(id)
     }
@@ -89,12 +100,16 @@ export function NardyMatch({ user: _user, config, onExit }: NardyMatchProps) {
   const status = s.result
     ? ''
     : s.turn === 'b'
-      ? 'Ход соперника…'
-      : hasAnyMove(s)
-        ? sel != null
-          ? 'Куда пойти?'
-          : 'Ваш ход — выберите шашку'
-        : 'Нет ходов'
+      ? s.awaitingRoll
+        ? 'Соперник бросает…'
+        : 'Ход соперника…'
+      : s.awaitingRoll
+        ? 'Ваш ход — бросьте кубики'
+        : hasAnyMove(s)
+          ? sel != null
+            ? 'Куда пойти?'
+            : 'Выберите шашку'
+          : 'Нет ходов'
 
   return (
     <div
@@ -151,6 +166,7 @@ export function NardyMatch({ user: _user, config, onExit }: NardyMatchProps) {
             targets={targets}
             onTapPoint={tapPoint}
             onTapOff={tapOff}
+            onRoll={() => setS(roll(s))}
           />
         </div>
 
@@ -314,12 +330,14 @@ function Board({
   targets,
   onTapPoint,
   onTapOff,
+  onRoll,
 }: {
   s: NardyState
   sel: number | null
   targets: Map<number | 'off', number>
   onTapPoint: (p: number) => void
   onTapOff: () => void
+  onRoll: () => void
 }) {
   const stackY = (top: boolean, k: number) =>
     top ? TOP_Y0 + k * STEP : BOT_Y0 - k * STEP
@@ -465,16 +483,31 @@ function Board({
         )}
       </button>
 
+      {/* roll animation keyframes */}
+      <style>{`@keyframes nardyDiceIn{0%{transform:translateY(-45%) rotate(-30deg) scale(0.55);opacity:0}55%{opacity:1}100%{transform:translateY(0) rotate(0) scale(1);opacity:1}}`}</style>
+
       {/* dice on the board (remaining to play) */}
       {s.rolled && !s.result && s.dice.length > 0 && (
         <div
+          key={`${s.rolled[0]}-${s.rolled[1]}-${s.turn}`}
           className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 -translate-y-1/2 gap-2 drop-shadow-[0_3px_6px_rgba(0,0,0,0.45)]"
-          style={{ top: s.turn === 'w' ? '64%' : '36%' }}
+          style={{ top: s.turn === 'w' ? '64%' : '36%', animation: 'nardyDiceIn 300ms ease-out' }}
         >
           {s.dice.map((d, i) => (
             <Die key={i} n={d} />
           ))}
         </div>
+      )}
+
+      {/* throw button for the human player */}
+      {s.awaitingRoll && s.turn === 'w' && !s.result && (
+        <button
+          onClick={onRoll}
+          className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-2xl px-6 py-3 text-base font-extrabold text-[#4a2f00] shadow-[0_6px_18px_rgba(0,0,0,0.5)] active:scale-95"
+          style={{ background: 'linear-gradient(180deg,#f6dc9f,#d9b25e)' }}
+        >
+          <span className="text-xl leading-none">🎲</span> Бросить
+        </button>
       )}
     </div>
   )
