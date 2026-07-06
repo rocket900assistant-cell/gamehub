@@ -11,8 +11,6 @@ import {
   pass,
   move,
   ownerOf,
-  countAt,
-  HEAD,
   type NardyState,
   type NPlayer,
 } from '../lib/nardy'
@@ -299,7 +297,26 @@ function Die({ n }: { n: number }) {
   )
 }
 
-// ── board rendering ──
+// ── board rendering (image board + image checkers positioned by %) ──
+// x-centre (% of board width) of the 12 point columns (6 left, 6 right)
+const XCOLS = [8.7, 15.0, 21.3, 27.6, 33.9, 40.2, 53.9, 59.7, 65.4, 71.2, 77.0, 82.7]
+// physical point -> screen slot
+const POS: Record<number, { x: number; top: boolean }> = {}
+TOP.forEach((p, i) => {
+  POS[p] = { x: XCOLS[i], top: true }
+})
+BOTTOM.forEach((p, i) => {
+  POS[p] = { x: XCOLS[i], top: false }
+})
+const CD = 6.7 // checker diameter, % of board width
+const STEP = 7.4 // vertical gap between stacked checkers, % of board height
+const TOP_Y0 = 13
+const BOT_Y0 = 87
+const CHECK = {
+  w: '/assets/nardy/checker-light.png',
+  b: '/assets/nardy/checker-dark.png',
+}
+
 function Board({
   s,
   sel,
@@ -313,158 +330,120 @@ function Board({
   onTapPoint: (p: number) => void
   onTapOff: () => void
 }) {
-  const offReady = targets.has('off')
+  const stackY = (top: boolean, k: number) =>
+    top ? TOP_Y0 + k * STEP : BOT_Y0 - k * STEP
   return (
-    <div className="w-fit overflow-hidden rounded-2xl border-[6px] border-[#93a6b4] bg-[#cdd6dd] shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
-      {/* top row */}
-      <Row points={TOP} dir="down" s={s} sel={sel} targets={targets} onTap={onTapPoint} />
-      {/* bar / off */}
-      <div className="flex items-center justify-between bg-[#93a6b4] px-2 py-1">
-        <button
-          onClick={onTapOff}
-          className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
-            offReady
-              ? 'bg-[#38d66b] text-white'
-              : 'bg-black/15 text-[#33424e]'
-          }`}
-        >
-          вывод {s.off.w}/15
-        </button>
-        <span className="text-[11px] font-semibold text-[#33424e]/70">длинные нарды</span>
-      </div>
-      {/* bottom row */}
-      <Row points={BOTTOM} dir="up" s={s} sel={sel} targets={targets} onTap={onTapPoint} />
-    </div>
-  )
-}
-
-function Row({
-  points,
-  dir,
-  s,
-  sel,
-  targets,
-  onTap,
-}: {
-  points: number[]
-  dir: 'up' | 'down'
-  s: NardyState
-  sel: number | null
-  targets: Map<number | 'off', number>
-  onTap: (p: number) => void
-}) {
-  return (
-    <div className="flex">
-      {points.map((p, i) => (
-        <div key={p} className={i === 6 ? 'ml-2' : ''}>
-          <Point
-            phys={p}
-            dir={dir}
-            dark={i % 2 === 0}
-            value={s.points[p]}
-            head={p === HEAD.w || p === HEAD.b}
-            selected={sel === p}
-            target={targets.has(p)}
-            onTap={() => onTap(p)}
-          />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function Point({
-  phys: _phys,
-  dir,
-  dark,
-  value,
-  selected,
-  target,
-  onTap,
-}: {
-  phys: number
-  dir: 'up' | 'down'
-  dark: boolean
-  value: number
-  head: boolean
-  selected: boolean
-  target: boolean
-  onTap: () => void
-}) {
-  const owner = ownerOf(value)
-  const count = countAt(value)
-  const tri =
-    dir === 'down'
-      ? 'polygon(0 0, 100% 0, 50% 100%)'
-      : 'polygon(50% 0, 0 100%, 100% 100%)'
-  const shown = Math.min(count, 5)
-  const CH = 26 // checker size
-  return (
-    <button
-      onClick={onTap}
-      className="relative block"
-      style={{ width: 30, height: 146 }}
+    <div
+      className="relative w-full overflow-hidden rounded-xl shadow-[0_10px_28px_rgba(0,0,0,0.5)]"
+      style={{ aspectRatio: '1448 / 1086' }}
     >
-      {/* triangle */}
-      <span
-        className="absolute inset-0"
-        style={{
-          clipPath: tri,
-          background: target
-            ? 'rgba(56,214,107,0.6)'
-            : dark
-              ? '#a9bcca'
-              : 'repeating-linear-gradient(45deg, rgba(255,255,255,0.14) 0 2px, transparent 2px 6px), #dcae86',
-          opacity: target ? 1 : 0.95,
-        }}
+      <img
+        src="/assets/nardy/board.jpg"
+        alt=""
+        draggable={false}
+        className="absolute inset-0 h-full w-full"
       />
-      {selected && (
-        <span
-          className="absolute inset-0"
-          style={{ clipPath: tri, background: 'rgba(217,154,43,0.5)' }}
-        />
-      )}
-      {/* checkers */}
-      {Array.from({ length: shown }).map((_, i) => {
-        const pos = i * CH * 0.92
-        const white = owner === 'w'
+
+      {/* checkers on points */}
+      {Array.from({ length: 24 }).map((_, p) => {
+        const v = s.points[p]
+        if (!v) return null
+        const { x, top } = POS[p]
+        const white = v > 0
+        const count = Math.abs(v)
+        const shown = Math.min(count, 5)
         return (
-          <span
-            key={i}
-            className="absolute left-1/2 grid place-items-center rounded-full"
-            style={{
-              width: CH,
-              height: CH,
-              transform: 'translateX(-50%)',
-              [dir === 'down' ? 'top' : 'bottom']: pos,
-              background: white
-                ? 'radial-gradient(circle at 35% 30%, #fbf7ee, #d8cdb8)'
-                : 'radial-gradient(circle at 35% 30%, #7d97a8, #3f5a6b)',
-              boxShadow: white
-                ? 'inset 0 0 0 2px rgba(120,140,155,0.5), 0 1px 2px rgba(0,0,0,0.35)'
-                : 'inset 0 0 0 2px rgba(255,255,255,0.35), 0 1px 2px rgba(0,0,0,0.4)',
-            } as React.CSSProperties}
-          >
-            {/* center dot, like the reference */}
-            <span
-              className="rounded-full"
-              style={{
-                width: CH * 0.28,
-                height: CH * 0.28,
-                background: white ? '#8aa0af' : '#b03a2e',
-              }}
-            />
-          </span>
+          <div key={p}>
+            {Array.from({ length: shown }).map((_, k) => (
+              <img
+                key={k}
+                src={white ? CHECK.w : CHECK.b}
+                alt=""
+                draggable={false}
+                className="absolute"
+                style={{
+                  left: `${x}%`,
+                  top: `${stackY(top, k)}%`,
+                  width: `${CD}%`,
+                  transform: 'translate(-50%,-50%)',
+                  zIndex: k,
+                }}
+              />
+            ))}
+            {count > 5 && (
+              <span
+                className="absolute z-10 grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/70 text-[10px] font-bold text-white"
+                style={{
+                  left: `${x}%`,
+                  top: `${stackY(top, shown - 1)}%`,
+                  width: 16,
+                  height: 16,
+                }}
+              >
+                {count}
+              </span>
+            )}
+          </div>
         )
       })}
-      {count > 5 && (
-        <span
-          className="absolute left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-1 text-[10px] font-bold text-white"
-          style={{ [dir === 'down' ? 'top' : 'bottom']: 5 * CH * 0.92 - 6 } as React.CSSProperties}
-        >
-          {count}
-        </span>
-      )}
-    </button>
+
+      {/* white borne-off checkers in the tray */}
+      {s.off.w > 0 &&
+        Array.from({ length: Math.min(s.off.w, 6) }).map((_, k) => (
+          <img
+            key={`ow${k}`}
+            src={CHECK.w}
+            alt=""
+            draggable={false}
+            className="absolute"
+            style={{
+              left: '92.7%',
+              top: `${14 + k * 5.5}%`,
+              width: `${CD}%`,
+              transform: 'translate(-50%,-50%)',
+            }}
+          />
+        ))}
+
+      {/* tap hotspots per point */}
+      {Array.from({ length: 24 }).map((_, p) => {
+        const { x, top } = POS[p]
+        const isTarget = targets.has(p)
+        return (
+          <button
+            key={`h${p}`}
+            onClick={() => onTapPoint(p)}
+            className="absolute"
+            style={{
+              left: `${x - 3.1}%`,
+              width: '6.2%',
+              top: top ? '6%' : '52%',
+              height: '42%',
+            }}
+          >
+            {sel === p && (
+              <span className="absolute inset-x-1 inset-y-2 rounded-lg bg-[#d99a2b]/35 ring-2 ring-[#d99a2b]" />
+            )}
+            {isTarget && (
+              <span
+                className="absolute left-1/2 h-[26%] w-[80%] -translate-x-1/2 rounded-full bg-[#38d66b]/55 ring-2 ring-[#38d66b]"
+                style={{ [top ? 'top' : 'bottom']: '4%' }}
+              />
+            )}
+          </button>
+        )
+      })}
+
+      {/* bearing-off tray hotspot */}
+      <button
+        onClick={onTapOff}
+        className="absolute"
+        style={{ right: 0, top: '5%', width: '12%', height: '90%' }}
+      >
+        {targets.has('off') && (
+          <span className="absolute inset-2 rounded-lg bg-[#38d66b]/45 ring-2 ring-[#38d66b]" />
+        )}
+      </button>
+    </div>
   )
 }
