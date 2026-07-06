@@ -262,16 +262,27 @@ const PIPS: Record<number, number[]> = {
 function Die({ n }: { n: number }) {
   return (
     <div
-      className="grid h-9 w-9 grid-cols-3 grid-rows-3 gap-0.5 rounded-lg p-1.5 shadow-[0_2px_4px_rgba(0,0,0,0.4)]"
-      style={{ background: 'linear-gradient(150deg,#fdfaf3,#e8dcc4)' }}
+      className="grid h-11 w-11 grid-cols-3 grid-rows-3 gap-[3px] rounded-[11px] p-2"
+      style={{
+        background: 'linear-gradient(145deg,#fbeecb 0%,#efd9a4 45%,#e3c689 100%)',
+        boxShadow:
+          'inset 0 1.5px 2px rgba(255,255,255,0.85), inset 0 -2.5px 4px rgba(150,110,40,0.55), 0 3px 7px rgba(0,0,0,0.45)',
+      }}
     >
       {Array.from({ length: 9 }).map((_, c) => (
-        <span
-          key={c}
-          className={`place-self-center rounded-full ${
-            PIPS[n]?.includes(c) ? 'h-1.5 w-1.5 bg-[#b03a2e]' : ''
-          }`}
-        />
+        <span key={c} className="grid place-items-center">
+          {PIPS[n]?.includes(c) && (
+            <span
+              className="block h-[7px] w-[7px] rounded-full"
+              style={{
+                background:
+                  'radial-gradient(circle at 35% 30%, #a52a3d 0%, #7a1626 55%, #4c0d18 100%)',
+                boxShadow:
+                  'inset 0 1px 1px rgba(255,255,255,0.45), inset 0 -1px 2px rgba(0,0,0,0.6), 0 0 1px rgba(0,0,0,0.4)',
+              }}
+            />
+          )}
+        </span>
       ))}
     </div>
   )
