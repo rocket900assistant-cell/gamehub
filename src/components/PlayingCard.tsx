@@ -13,9 +13,9 @@ interface PlayingCardProps {
 }
 
 const SZ = {
-  sm: { w: 34, h: 48 },
-  md: { w: 50, h: 70 },
-  lg: { w: 66, h: 92 },
+  sm: { w: 40, h: 56 },
+  md: { w: 56, h: 78 },
+  lg: { w: 80, h: 112 },
 }
 
 const SUIT_CODE: Record<Suit, string> = { '♠': 'S', '♥': 'H', '♦': 'D', '♣': 'C' }

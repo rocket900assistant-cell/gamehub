@@ -328,7 +328,7 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
           <div className="pointer-events-none absolute inset-x-2 top-2 flex items-start justify-between">
             {/* deck: trump peeking out from under a stack of face-down cards */}
             {s.deck.length > 0 ? (
-              <div className="relative" style={{ width: 96, height: 90 }}>
+              <div className="relative" style={{ width: 116, height: 100 }}>
                 {/* trump lying under the deck, peeking to the right */}
                 {s.trumpCard && (
                   <PlayingCard
@@ -357,7 +357,7 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
 
             {/* бито (discard pile) */}
             {s.discard > 0 ? (
-              <div className="relative h-[70px] w-[50px]">
+              <div className="relative h-[78px] w-[56px]">
                 <PlayingCard
                   faceDown
                   size="md"
@@ -390,7 +390,7 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
                   key={i}
                   data-pair={i}
                   className="relative"
-                  style={{ width: 84, height: 98 }}
+                  style={{ width: 100, height: 124 }}
                 >
                   <div
                     className={youAttacker ? 'gh-drop-bottom' : 'gh-drop-top'}
@@ -705,7 +705,7 @@ function CardFan({ count }: { count: number }) {
   // straight even row, wide spread with a little overlap (no tilt)
   const step = fanStep(count, cardW, Math.min(w, 250), 8)
   return (
-    <div ref={ref} className="mt-1 flex items-start justify-center">
+    <div ref={ref} className="mt-1 flex w-full items-start justify-center">
       {Array.from({ length: count }).map((_, i) => (
         <div
           key={i}
@@ -718,7 +718,7 @@ function CardFan({ count }: { count: number }) {
             className="gh-deal-opp"
             style={{ animationDelay: `${Math.min(i, 5) * 35}ms` }}
           >
-            <PlayingCard faceDown size="md" />
+            <PlayingCard faceDown size="sm" />
           </div>
         </div>
       ))}
@@ -743,8 +743,8 @@ function HandFan({
   const [ref, w] = useWidth()
   const n = cards.length
   const mid = (n - 1) / 2
-  const cardW = 66
-  const cardH = 92
+  const cardW = 80
+  const cardH = 112
   const step = fanStep(n, cardW, w, 18)
   // gentle arced fan; auto-scaled to fit the width
   const per = n > 1 ? Math.min(3.6, 24 / (n - 1)) : 0
