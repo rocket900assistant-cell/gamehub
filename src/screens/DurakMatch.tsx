@@ -36,7 +36,7 @@ interface DurakMatchProps {
 
 // ── crash-safe save (survives closing the app) ──
 const SAVE_KEY = 'gh_durak_save'
-type DurakSave = { s: DurakState; config: DurakConfig | null }
+type DurakSave = { s: DurakState; config: DurakConfig | null; savedAt: number }
 
 function readDurakSave(): DurakSave | null {
   try {
@@ -76,9 +76,15 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
   const moveMs = (fast ? 30 : 60) * 1000
   const bank = effConfig && !effConfig.free ? effConfig.stake * effConfig.players : 0
 
-  const [s, setS] = useState<DurakState>(
-    () => saved?.s ?? createGame({ deck: deckSize, transfer }),
-  )
+  const [s, setS] = useState<DurakState>(() => {
+    if (saved?.s) {
+      // time kept running while the app was closed → auto-lose if it ran out
+      const elapsed = Date.now() - (saved.savedAt ?? Date.now())
+      if (!saved.s.result && elapsed > moveMs) return resign(saved.s, saved.s.turn)
+      return saved.s
+    }
+    return createGame({ deck: deckSize, transfer })
+  })
 
   // persist the game so a closed/reopened app can continue it
   useEffect(() => {
@@ -122,7 +128,10 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
     if (s.result) clearDurakSave()
     else {
       try {
-        localStorage.setItem(SAVE_KEY, JSON.stringify({ s, config: effConfig }))
+        localStorage.setItem(
+          SAVE_KEY,
+          JSON.stringify({ s, config: effConfig, savedAt: Date.now() }),
+        )
       } catch {
         /* ignore */
       }

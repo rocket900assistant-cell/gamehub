@@ -67,6 +67,7 @@ export type ChessSave = {
   clocks: { w: number; b: number }
   minutes: number
   bot: boolean
+  savedAt: number
 }
 export function readChessSave(): ChessSave | null {
   try {
@@ -145,6 +146,7 @@ export function ChessMatch({ user, match, onMinimize, onExit }: ChessMatchProps)
           clocks: clocksRef.current,
           minutes: match.minutes,
           bot: !!match.bot,
+          savedAt: Date.now(),
         }),
       )
     } catch {

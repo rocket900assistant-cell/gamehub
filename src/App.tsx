@@ -154,12 +154,19 @@ export default function App() {
             setChessSaved(false)
             return
           }
+          // the clock of the side to move keeps running while the app is closed
+          const elapsed = Date.now() - (sv.savedAt ?? Date.now())
+          const side = sv.fen.split(' ')[1] === 'b' ? 'b' : 'w'
+          const clocks = {
+            ...sv.clocks,
+            [side]: Math.max(0, sv.clocks[side] - elapsed),
+          }
           setMatch({
             mode: 'local',
             minutes: sv.minutes,
             bot: sv.bot,
             restoreFen: sv.fen,
-            restoreClocks: sv.clocks,
+            restoreClocks: clocks,
           })
           setMinimized(false)
         }}
