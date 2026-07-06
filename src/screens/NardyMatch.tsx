@@ -539,10 +539,55 @@ function Board({
           )
         })}
 
-      {/* tap hotspots per point */}
+      {/* move indicators — precise, board-% positioned (below tap layer) */}
       {Array.from({ length: 24 }).map((_, p) => {
         const { x, top } = POS[p]
+        const cnt = Math.abs(s.points[p])
+        const step = cnt > 1 ? Math.min(STEP, STACK_SPAN / (cnt - 1)) : 0
+        const tipY = top ? TOP_Y0 + (cnt - 1) * step : BOT_Y0 - (cnt - 1) * step
+        const landY = top ? TOP_Y0 + cnt * STEP : BOT_Y0 - cnt * STEP
+        const selected = sel === p
+        const movable = canMove(p)
         const isTarget = targets.has(p)
+        return (
+          <div key={`ind${p}`} className="pointer-events-none">
+            {/* glow the exposed (tip) checker that will move */}
+            {(selected || movable) && cnt > 0 && (
+              <span
+                className={`absolute rounded-full ${selected ? '' : 'animate-pulse'}`}
+                style={{
+                  left: `${x}%`,
+                  top: `${tipY}%`,
+                  width: `${CD}%`,
+                  aspectRatio: '1',
+                  transform: 'translate(-50%,-50%)',
+                  boxShadow: selected
+                    ? '0 0 0 2px #f6dc9f, 0 0 14px 3px rgba(246,220,159,0.85)'
+                    : '0 0 0 2px rgba(246,220,159,0.85), 0 0 10px 2px rgba(246,220,159,0.5)',
+                }}
+              />
+            )}
+            {/* ghost checker where a move would land */}
+            {isTarget && (
+              <span
+                className="absolute rounded-full border-2 border-[#38d66b] bg-[#38d66b]/30"
+                style={{
+                  left: `${x}%`,
+                  top: `${landY}%`,
+                  width: `${CD}%`,
+                  aspectRatio: '1',
+                  transform: 'translate(-50%,-50%)',
+                  boxShadow: '0 0 10px 2px rgba(56,214,107,0.5)',
+                }}
+              />
+            )}
+          </div>
+        )
+      })}
+
+      {/* tap hotspots per point (transparent) */}
+      {Array.from({ length: 24 }).map((_, p) => {
+        const { x, top } = POS[p]
         return (
           <button
             key={`h${p}`}
@@ -554,26 +599,7 @@ function Board({
               top: top ? '6%' : '52%',
               height: '42%',
             }}
-          >
-            {sel === p && (
-              <span className="absolute inset-x-1 inset-y-2 rounded-lg bg-[#d99a2b]/35 ring-2 ring-[#d99a2b]" />
-            )}
-            {canMove(p) && (
-              <span
-                className="absolute left-1/2 h-[22%] w-[70%] -translate-x-1/2 animate-pulse rounded-full ring-2 ring-[#f6dc9f]"
-                style={{
-                  [top ? 'top' : 'bottom']: '3%',
-                  boxShadow: '0 0 10px 2px rgba(246,220,159,0.6)',
-                }}
-              />
-            )}
-            {isTarget && (
-              <span
-                className="absolute left-1/2 h-[26%] w-[80%] -translate-x-1/2 rounded-full bg-[#38d66b]/55 ring-2 ring-[#38d66b]"
-                style={{ [top ? 'top' : 'bottom']: '4%' }}
-              />
-            )}
-          </button>
+          />
         )
       })}
 
@@ -584,7 +610,10 @@ function Board({
         style={{ right: 0, top: '5%', width: '12%', height: '90%' }}
       >
         {targets.has('off') && (
-          <span className="absolute inset-2 rounded-lg bg-[#38d66b]/45 ring-2 ring-[#38d66b]" />
+          <span
+            className="absolute inset-x-2 inset-y-3 rounded-xl border-2 border-[#38d66b] bg-[#38d66b]/25 animate-pulse"
+            style={{ boxShadow: '0 0 12px 2px rgba(56,214,107,0.45)' }}
+          />
         )}
       </button>
 
