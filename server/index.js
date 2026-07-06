@@ -56,7 +56,14 @@ function addPlayer(room, userId) {
 }
 
 const sidOf = (userId) => users.get(userId)?.socketId
-const io = new Server(createServer().listen(PORT), { cors: { origin: '*' } })
+
+// HTTP server with a health-check route (Render pings "/").
+const httpServer = createServer((req, res) => {
+  res.writeHead(200, { 'content-type': 'text/plain' })
+  res.end('GameHub realtime server ok')
+})
+httpServer.listen(PORT)
+const io = new Server(httpServer, { cors: { origin: '*' } })
 
 function emitToRoom(room, event, payload) {
   for (const p of room.players) {
