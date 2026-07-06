@@ -42,6 +42,29 @@ const FELT: React.CSSProperties = {
   backgroundPosition: 'center',
 }
 
+/**
+ * Every point (or 'off') the checker at `from` can reach this turn, including
+ * moves that chain several dice through one checker (e.g. 3 then 2 = a "5"),
+ * provided each intermediate landing is legal. Value = dice sequence to apply.
+ */
+function reachTargets(st: NardyState, from: number): Map<number | 'off', number[]> {
+  const out = new Map<number | 'off', number[]>()
+  const turn = st.turn
+  const dfs = (state: NardyState, pos: number, seq: number[]) => {
+    if (state.result || state.turn !== turn) return
+    for (const d of legalFrom(state, pos)) {
+      const de = _destOf(state, turn, pos, d)
+      if (de === null) continue
+      const seq2 = [...seq, d]
+      const prev = out.get(de)
+      if (!prev || prev.length > seq2.length) out.set(de, seq2)
+      if (de !== 'off') dfs(move(state, pos, d), de, seq2)
+    }
+  }
+  dfs(st, from, [])
+  return out
+}
+
 export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
   const [s, setS] = useState<NardyState>(() => createNardy())
   const [sel, setSel] = useState<number | null>(null)
@@ -85,21 +108,30 @@ export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
 
   const yourTurn = s.turn === 'w' && !s.result
 
-  // legal destinations for the selected checker → { destKey: die }
-  const targets = new Map<number | 'off', number>()
-  if (sel != null && yourTurn) {
-    for (const d of legalFrom(s, sel)) {
-      const de = _destOf(s, 'w', sel, d)
-      if (de !== null && !targets.has(de)) targets.set(de, d)
+  // All destinations for the selected checker, including COMBINED moves that
+  // use several dice on one checker (e.g. 3+2 = a single "5" landing), as long
+  // as each intermediate step is legal. Value = the dice sequence to apply.
+  const targets =
+    sel != null && yourTurn ? reachTargets(s, sel) : new Map<number | 'off', number[]>()
+
+  function applySeq(from: number, seq: number[]) {
+    let st = s
+    let pos: number | 'off' = from
+    for (const d of seq) {
+      if (pos === 'off') break
+      const de = _destOf(st, 'w', pos, d)
+      st = move(st, pos, d)
+      if (de === 'off' || de === null) break
+      pos = de
     }
+    setS(st)
+    setSel(null)
   }
 
   function tapPoint(phys: number) {
     if (!yourTurn) return
     if (sel != null && targets.has(phys)) {
-      const die = targets.get(phys)!
-      setS(move(s, sel, die))
-      setSel(null)
+      applySeq(sel, targets.get(phys)!)
       return
     }
     // select own checker with moves
@@ -112,8 +144,7 @@ export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
 
   function tapOff() {
     if (sel != null && targets.has('off')) {
-      setS(move(s, sel, targets.get('off')!))
-      setSel(null)
+      applySeq(sel, targets.get('off')!)
     }
   }
 
@@ -620,16 +651,35 @@ function Board({
       {/* roll animation keyframes */}
       <style>{`@keyframes nardyDiceIn{0%{transform:translateY(-45%) rotate(-30deg) scale(0.55);opacity:0}55%{opacity:1}100%{transform:translateY(0) rotate(0) scale(1);opacity:1}}`}</style>
 
-      {/* dice on the board (remaining to play) */}
+      {/* dice on the board — always the rolled pair; used ones dim, doubles show ×N left */}
       {s.rolled && !s.result && s.dice.length > 0 && (
         <div
           key={`${s.rolled[0]}-${s.rolled[1]}-${s.turn}`}
-          className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 -translate-y-1/2 gap-2 drop-shadow-[0_3px_6px_rgba(0,0,0,0.45)]"
+          className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 drop-shadow-[0_3px_6px_rgba(0,0,0,0.45)]"
           style={{ top: s.turn === 'w' ? '64%' : '36%', animation: 'nardyDiceIn 300ms ease-out' }}
         >
-          {s.dice.map((d, i) => (
-            <Die key={i} n={d} />
-          ))}
+          {(() => {
+            const isDouble = s.rolled[0] === s.rolled[1]
+            return s.rolled.map((d, i) => {
+              const used = !isDouble && !s.dice.includes(d)
+              return (
+                <div
+                  key={i}
+                  style={{
+                    opacity: used ? 0.35 : 1,
+                    filter: used ? 'grayscale(1)' : 'none',
+                  }}
+                >
+                  <Die n={d} />
+                </div>
+              )
+            })
+          })()}
+          {s.rolled[0] === s.rolled[1] && (
+            <span className="grid h-6 min-w-6 place-items-center rounded-full bg-black/70 px-1.5 text-xs font-extrabold text-white">
+              ×{s.dice.length}
+            </span>
+          )}
         </div>
       )}
     </div>
