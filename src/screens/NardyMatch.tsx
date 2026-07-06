@@ -186,9 +186,19 @@ export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
             targets={targets}
             onTapPoint={tapPoint}
             onTapOff={tapOff}
-            onRoll={() => setS(roll(s))}
           />
         </div>
+
+        {/* roll button under the board */}
+        {yourTurn && s.awaitingRoll && (
+          <button
+            onClick={() => setS(roll(s))}
+            className="mb-2 flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-base font-extrabold text-[#4a2f00] shadow-[0_6px_18px_rgba(0,0,0,0.45)] active:scale-[0.98]"
+            style={{ background: 'linear-gradient(180deg,#f6dc9f,#d9b25e)' }}
+          >
+            <span className="text-xl leading-none">🎲</span> Бросить кубики
+          </button>
+        )}
 
         {/* your bar */}
         <div className="flex items-center justify-between">
@@ -422,15 +432,20 @@ function Board({
   targets,
   onTapPoint,
   onTapOff,
-  onRoll,
 }: {
   s: NardyState
   sel: number | null
   targets: Map<number | 'off', number>
   onTapPoint: (p: number) => void
   onTapOff: () => void
-  onRoll: () => void
 }) {
+  // points the human can move from right now (guides tapping)
+  const canMove = (p: number) =>
+    sel == null &&
+    s.turn === 'w' &&
+    !s.awaitingRoll &&
+    !s.result &&
+    legalFrom(s, p).length > 0
   return (
     <div
       className="relative w-full overflow-hidden rounded-xl shadow-[0_10px_28px_rgba(0,0,0,0.5)]"
@@ -543,6 +558,15 @@ function Board({
             {sel === p && (
               <span className="absolute inset-x-1 inset-y-2 rounded-lg bg-[#d99a2b]/35 ring-2 ring-[#d99a2b]" />
             )}
+            {canMove(p) && (
+              <span
+                className="absolute left-1/2 h-[22%] w-[70%] -translate-x-1/2 animate-pulse rounded-full ring-2 ring-[#f6dc9f]"
+                style={{
+                  [top ? 'top' : 'bottom']: '3%',
+                  boxShadow: '0 0 10px 2px rgba(246,220,159,0.6)',
+                }}
+              />
+            )}
             {isTarget && (
               <span
                 className="absolute left-1/2 h-[26%] w-[80%] -translate-x-1/2 rounded-full bg-[#38d66b]/55 ring-2 ring-[#38d66b]"
@@ -578,17 +602,6 @@ function Board({
             <Die key={i} n={d} />
           ))}
         </div>
-      )}
-
-      {/* throw button for the human player */}
-      {s.awaitingRoll && s.turn === 'w' && !s.result && (
-        <button
-          onClick={onRoll}
-          className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-2xl px-6 py-3 text-base font-extrabold text-[#4a2f00] shadow-[0_6px_18px_rgba(0,0,0,0.5)] active:scale-95"
-          style={{ background: 'linear-gradient(180deg,#f6dc9f,#d9b25e)' }}
-        >
-          <span className="text-xl leading-none">🎲</span> Бросить
-        </button>
       )}
     </div>
   )
