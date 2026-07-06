@@ -79,10 +79,10 @@ export function Profile({ user, onOpenFriends }: ProfileProps) {
               )}
             </div>
             <button
-              onClick={() => navigator.clipboard?.writeText(String(profile.id))}
+              onClick={() => navigator.clipboard?.writeText(String(user.id))}
               className="mt-0.5 flex items-center gap-1 text-xs text-muted"
             >
-              ID: {profile.id} <Copy size={12} />
+              ID: {user.id} <Copy size={12} />
             </button>
             {user.username && (
               <p className="text-xs text-gold-dark">@{user.username}</p>

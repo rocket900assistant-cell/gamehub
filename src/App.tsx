@@ -50,9 +50,14 @@ export default function App() {
   useEffect(() => {
     const u = initTelegram()
     setUser(u)
-    const userId = u.id
-      ? String(u.id)
-      : `guest_${Math.random().toString(36).slice(2, 8)}`
+    // Per-device id: lets the SAME Telegram account play from two phones
+    // (real users already differ by telegram id). Persisted so reloads keep it.
+    let deviceId = localStorage.getItem('gh_device')
+    if (!deviceId) {
+      deviceId = Math.random().toString(36).slice(2, 10)
+      localStorage.setItem('gh_device', deviceId)
+    }
+    const userId = `${u.id ? u.id : 'guest'}_${deviceId}`
     registerUser({ userId, name: displayName(u), elo: 2350 })
 
     const s = getSocket()
