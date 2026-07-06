@@ -159,7 +159,7 @@ export function NardyMatch({ user: _user, config, onExit }: NardyMatchProps) {
         </div>
 
         {/* board */}
-        <div className="my-3 flex flex-1 items-center justify-center">
+        <div className="-mx-3 my-2 flex flex-1 items-center justify-center px-1.5">
           <Board
             s={s}
             sel={sel}
@@ -317,6 +317,7 @@ BOTTOM.forEach((p, i) => {
 })
 const CD = 6.7 // checker diameter, % of board width
 const STEP = 7.4 // vertical gap between stacked checkers, % of board height
+const STACK_SPAN = 36 // max height a stack may occupy (compresses when many)
 const TOP_Y0 = 13
 const BOT_Y0 = 87
 const CHECK = {
@@ -339,8 +340,6 @@ function Board({
   onTapOff: () => void
   onRoll: () => void
 }) {
-  const stackY = (top: boolean, k: number) =>
-    top ? TOP_Y0 + k * STEP : BOT_Y0 - k * STEP
   return (
     <div
       className="relative w-full overflow-hidden rounded-xl shadow-[0_10px_28px_rgba(0,0,0,0.5)]"
@@ -382,17 +381,17 @@ function Board({
           )
         })()}
 
-      {/* checkers on points */}
+      {/* checkers on points — all shown, stack compresses to fit */}
       {Array.from({ length: 24 }).map((_, p) => {
         const v = s.points[p]
         if (!v) return null
         const { x, top } = POS[p]
         const white = v > 0
         const count = Math.abs(v)
-        const shown = Math.min(count, 5)
+        const step = count > 1 ? Math.min(STEP, STACK_SPAN / (count - 1)) : 0
         return (
           <div key={p}>
-            {Array.from({ length: shown }).map((_, k) => (
+            {Array.from({ length: count }).map((_, k) => (
               <img
                 key={k}
                 src={white ? CHECK.w : CHECK.b}
@@ -401,47 +400,38 @@ function Board({
                 className="absolute"
                 style={{
                   left: `${x}%`,
-                  top: `${stackY(top, k)}%`,
+                  top: `${top ? TOP_Y0 + k * step : BOT_Y0 - k * step}%`,
                   width: `${CD}%`,
                   transform: 'translate(-50%,-50%)',
                   zIndex: k,
                 }}
               />
             ))}
-            {count > 5 && (
-              <span
-                className="absolute z-10 grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/70 text-[10px] font-bold text-white"
-                style={{
-                  left: `${x}%`,
-                  top: `${stackY(top, shown - 1)}%`,
-                  width: 16,
-                  height: 16,
-                }}
-              >
-                {count}
-              </span>
-            )}
           </div>
         )
       })}
 
-      {/* white borne-off checkers in the tray */}
+      {/* white borne-off checkers in the tray (all shown, compressed to fit) */}
       {s.off.w > 0 &&
-        Array.from({ length: Math.min(s.off.w, 6) }).map((_, k) => (
-          <img
-            key={`ow${k}`}
-            src={CHECK.w}
-            alt=""
-            draggable={false}
-            className="absolute"
-            style={{
-              left: '92.7%',
-              top: `${14 + k * 5.5}%`,
-              width: `${CD}%`,
-              transform: 'translate(-50%,-50%)',
-            }}
-          />
-        ))}
+        Array.from({ length: s.off.w }).map((_, k) => {
+          const trayStep = s.off.w > 1 ? Math.min(5.5, 72 / (s.off.w - 1)) : 0
+          return (
+            <img
+              key={`ow${k}`}
+              src={CHECK.w}
+              alt=""
+              draggable={false}
+              className="absolute"
+              style={{
+                left: '92.7%',
+                top: `${14 + k * trayStep}%`,
+                width: `${CD}%`,
+                transform: 'translate(-50%,-50%)',
+                zIndex: k,
+              }}
+            />
+          )
+        })}
 
       {/* tap hotspots per point */}
       {Array.from({ length: 24 }).map((_, p) => {
