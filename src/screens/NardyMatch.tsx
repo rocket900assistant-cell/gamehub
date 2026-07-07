@@ -384,20 +384,6 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
     }
   }
 
-  const status = s.result
-    ? ''
-    : !yourTurn
-      ? s.awaitingRoll
-        ? 'Соперник бросает…'
-        : 'Ход соперника…'
-      : s.awaitingRoll
-        ? 'Ваш ход — бросьте кубики'
-        : hasAnyMove(s)
-          ? sel != null
-            ? 'Куда пойти?'
-            : 'Выберите шашку'
-          : 'Нет ходов'
-
   return (
     <div
       className="relative -mx-4 -mb-6 -mt-[calc(1rem+env(safe-area-inset-top))] flex flex-col overflow-hidden"
@@ -480,7 +466,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
         </div>
 
         {/* action / status slot — fixed height so the layout never jumps */}
-        {yourTurn && s.awaitingRoll ? (
+        {!s.result && yourTurn && s.awaitingRoll ? (
           <button
             onClick={doRoll}
             className="mb-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl text-base font-extrabold text-[#4a2f00] shadow-[0_6px_18px_rgba(0,0,0,0.45)] active:scale-[0.98]"
@@ -488,10 +474,12 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
           >
             <span className="text-xl leading-none">🎲</span> Бросить кубики
           </button>
-        ) : (
+        ) : !s.result && !yourTurn ? (
           <div className="mb-2 flex h-[52px] w-full items-center justify-center rounded-2xl bg-black/25 text-base font-bold text-white/80">
-            {status || ' '}
+            Ход соперника
           </div>
+        ) : (
+          <div className="mb-2 h-[52px]" />
         )}
 
         {/* your bar */}
