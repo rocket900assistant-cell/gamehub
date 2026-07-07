@@ -10,7 +10,7 @@ import { NewChessGame } from './screens/NewChessGame'
 import { ChessMatch, hasChessSave, readChessSave } from './screens/ChessMatch'
 import { DurakMatch, hasDurakSave } from './screens/DurakMatch'
 import { DurakSetup, type DurakConfig } from './screens/DurakSetup'
-import { NardyMatch } from './screens/NardyMatch'
+import { NardyMatch, hasNardySave } from './screens/NardyMatch'
 import { NardySetup, type NardyConfig } from './screens/NardySetup'
 import { Matchmaking } from './screens/Matchmaking'
 import { initTelegram, displayName, type TgUser } from './lib/telegram'
@@ -38,6 +38,8 @@ export default function App() {
   const [durakResume, setDurakResume] = useState(false)
   const [durakSaved, setDurakSaved] = useState(() => hasDurakSave())
   const [chessSaved, setChessSaved] = useState(() => hasChessSave())
+  const [nardyResume, setNardyResume] = useState(false)
+  const [nardySaved, setNardySaved] = useState(() => hasNardySave())
   const [user, setUser] = useState<TgUser | null>(null)
   const [match, setMatch] = useState<MatchConfig | null>(null)
   const [minimized, setMinimized] = useState(false)
@@ -183,11 +185,32 @@ export default function App() {
       </button>
     ) : null
 
+  const nardyBanner =
+    nardySaved && sub !== 'nardy' ? (
+      <button
+        onClick={() => {
+          setNardyResume(true)
+          setSub('nardy')
+        }}
+        className="mb-4 flex w-full items-center gap-3 rounded-2xl border border-gold bg-gold-light/40 p-3 text-left"
+      >
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-b from-gold to-gold-dark text-white">
+          <Swords size={20} />
+        </div>
+        <div className="flex-1">
+          <p className="font-bold leading-tight">Вернуться в партию</p>
+          <p className="text-xs text-muted">Нарды · идёт игра</p>
+        </div>
+        <ChevronRight size={18} className="text-muted" />
+      </button>
+    ) : null
+
   const banners = (
     <>
       {resumeBanner}
       {chessBanner}
       {durakBanner}
+      {nardyBanner}
     </>
   )
 
@@ -262,6 +285,7 @@ export default function App() {
                 onBack={() => setSub(null)}
                 onCreate={(cfg) => {
                   setNardyCfg(cfg)
+                  setNardyResume(false)
                   setSub('nardy')
                 }}
               />
@@ -269,7 +293,12 @@ export default function App() {
               <NardyMatch
                 user={user}
                 config={nardyCfg}
-                onExit={() => setSub(null)}
+                resume={nardyResume}
+                onExit={() => {
+                  setSub(null)
+                  setNardyResume(false)
+                  setNardySaved(hasNardySave())
+                }}
               />
             ) : sub === 'chess-setup' ? (
               <NewChessGame

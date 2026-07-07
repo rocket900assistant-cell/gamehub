@@ -30,7 +30,41 @@ import { shareInvite, type TgUser } from '../lib/telegram'
 interface NardyMatchProps {
   user: TgUser
   config: NardyConfig | null
+  resume?: boolean
   onExit: () => void
+}
+
+// ── crash-safe save (survives closing the app; move timer keeps running) ──
+export interface NardySave {
+  s: NardyState
+  config: NardyConfig | null
+  deadline: number // absolute ms when the current move clock runs out
+}
+const NARDY_SAVE = 'gh_nardy_save'
+export function hasNardySave(): boolean {
+  return !!localStorage.getItem(NARDY_SAVE)
+}
+export function readNardySave(): NardySave | null {
+  try {
+    const raw = localStorage.getItem(NARDY_SAVE)
+    return raw ? (JSON.parse(raw) as NardySave) : null
+  } catch {
+    return null
+  }
+}
+function writeNardySave(v: NardySave) {
+  try {
+    localStorage.setItem(NARDY_SAVE, JSON.stringify(v))
+  } catch {
+    // ignore quota errors
+  }
+}
+function clearNardySave() {
+  try {
+    localStorage.removeItem(NARDY_SAVE)
+  } catch {
+    // ignore
+  }
 }
 
 // screen layout: physical point index for each board slot
@@ -67,14 +101,25 @@ function reachTargets(st: NardyState, from: number): Map<number | 'off', number[
   return out
 }
 
-export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
-  const [s, setS] = useState<NardyState>(() => createNardy())
+export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
+  const MOVE_MS = 60000
+  const [saved] = useState(() => (resume ? readNardySave() : null))
+  const [s, setS] = useState<NardyState>(() => {
+    if (saved) {
+      // move clock ran out while the app was closed → that player loses
+      if (!saved.s.result && saved.deadline <= Date.now())
+        return { ...saved.s, result: other(saved.s.turn) }
+      return saved.s
+    }
+    return createNardy()
+  })
   const [sel, setSel] = useState<number | null>(null)
   const [confirmResign, setConfirmResign] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [chatInput, setChatInput] = useState('')
   const [messages, setMessages] = useState<{ mine: boolean; text: string }[]>([])
-  const bank = config && !config.free ? config.stake * 2 : 0
+  const cfg = saved?.config ?? config
+  const bank = cfg && !cfg.free ? cfg.stake * 2 : 0
 
   // "leaving" checkers: fade a checker out from the END of a stack when it moves,
   // so it's obvious the top (exposed) checker is the one being taken.
@@ -124,11 +169,17 @@ export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
     shareInvite(String(user.id || user.username || 'guest'))
 
   // ── per-move timer: 1 minute per turn; running out = loss ──
-  const MOVE_MS = 60000
-  const [remaining, setRemaining] = useState(MOVE_MS)
-  const deadline = useRef(Date.now() + MOVE_MS)
+  const [remaining, setRemaining] = useState(() =>
+    saved ? Math.max(0, saved.deadline - Date.now()) : MOVE_MS,
+  )
+  const deadline = useRef(saved ? saved.deadline : Date.now() + MOVE_MS)
+  const firstTurn = useRef(true)
   useEffect(() => {
-    // fresh minute whenever the turn passes to the other player
+    // keep the restored/initial deadline on mount; reset on every real turn change
+    if (firstTurn.current) {
+      firstTurn.current = false
+      return
+    }
     deadline.current = Date.now() + MOVE_MS
     setRemaining(MOVE_MS)
   }, [s.turn])
@@ -144,6 +195,13 @@ export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
     }, 250)
     return () => clearInterval(id)
   }, [s.turn, s.result])
+
+  // persist the game so it survives closing the app (timer keeps running via deadline)
+  useEffect(() => {
+    if (s.result) clearNardySave()
+    else writeNardySave({ s, config: cfg, deadline: deadline.current })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s])
 
   // bot plays (rolls, then moves); auto-pass whoever is stuck after a roll
   useEffect(() => {
@@ -435,6 +493,8 @@ export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
                 className="flex-1"
                 onClick={() => {
                   setSel(null)
+                  deadline.current = Date.now() + MOVE_MS
+                  setRemaining(MOVE_MS)
                   setS(createNardy())
                 }}
               >
