@@ -242,7 +242,9 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
       if (!chatOpenRef.current) setUnread((u) => u + 1)
     }
     sock.on('chat:msg', onChat)
-    return () => sock.off('chat:msg', onChat)
+    return () => {
+      sock.off('chat:msg', onChat)
+    }
   }, [isOnline])
   const invite = () =>
     shareInvite(String(user.id || user.username || 'guest'))
