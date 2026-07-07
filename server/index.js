@@ -13,6 +13,8 @@ const socketUser = new Map() // socketId -> userId
 const userTg = new Map() // composite userId -> verified telegram id (for DB)
 const queues = new Map() // "game:minutes" -> [userId]
 const rooms = new Map() // roomId -> room
+const abandonTimers = new Map() // "userId:roomId" -> timeout (reconnect grace)
+const RECONNECT_GRACE_MS = 30000
 
 // persistent DB (Neon Postgres) — optional; no-ops if DATABASE_URL is unset
 initDb().catch((e) => console.error('[db] init failed:', e.message))
@@ -216,6 +218,42 @@ io.on('connection', (socket) => {
     }
     userTg.set(userId, tgId)
 
+    // Reconnect: cancel any pending abandon + resume an in-progress game.
+    for (const [k, t] of abandonTimers) {
+      if (k.startsWith(userId + ':')) {
+        clearTimeout(t)
+        abandonTimers.delete(k)
+      }
+    }
+    for (const room of rooms.values()) {
+      if (room.over || !room.started) continue
+      const me = room.players.find((p) => p.userId === userId)
+      if (!me) continue
+      const opp = room.players.find((p) => p.userId !== userId)
+      if (room.game === 'nardy') {
+        socket.emit('match:found', {
+          roomId: room.id,
+          game: 'nardy',
+          color: me.color,
+          minutes: room.minutes,
+          opponent: { name: opp?.name, elo: opp?.elo },
+          nardy: room.nardy,
+          deadline: room.deadline,
+        })
+        // also push live state so an already-mounted board resyncs
+        socket.emit('nardy:state', { nardy: room.nardy, deadline: room.deadline })
+      } else {
+        socket.emit('match:found', {
+          roomId: room.id,
+          color: me.color,
+          minutes: room.minutes,
+          opponent: { name: opp?.name, elo: opp?.elo },
+          fen: room.chess.fen(),
+          clocks: room.clocks,
+        })
+      }
+    }
+
     if (tgId && dbEnabled) {
       try {
         const row = await upsertUser({
@@ -403,12 +441,27 @@ io.on('connection', (socket) => {
     const userId = socketUser.get(socket.id)
     socketUser.delete(socket.id)
     for (const [k, q] of queues) queues.set(k, q.filter((id) => id !== userId))
+    // Mark offline but keep the mapping; mobile sockets drop when the app
+    // backgrounds. Give a grace period to reconnect before abandoning games.
+    if (users.get(userId)?.socketId === socket.id) {
+      const u = users.get(userId)
+      users.set(userId, { ...u, socketId: null })
+    }
     for (const room of rooms.values()) {
       if (room.over || !room.started) continue
-      const me = room.players.find((p) => p.userId === userId)
-      if (me) endGame(room, me.color === 'w' ? 'b' : 'w', 'abandon')
+      if (!room.players.some((p) => p.userId === userId)) continue
+      const key = `${userId}:${room.id}`
+      if (abandonTimers.has(key)) continue
+      const t = setTimeout(() => {
+        abandonTimers.delete(key)
+        const r = rooms.get(room.id)
+        if (!r || r.over) return
+        if (users.get(userId)?.socketId) return // reconnected — don't abandon
+        const me = r.players.find((p) => p.userId === userId)
+        if (me) endGame(r, me.color === 'w' ? 'b' : 'w', 'abandon')
+      }, RECONNECT_GRACE_MS)
+      abandonTimers.set(key, t)
     }
-    if (users.get(userId)?.socketId === socket.id) users.delete(userId)
   })
 })
 

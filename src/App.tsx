@@ -69,16 +69,20 @@ export default function App() {
       localStorage.setItem('gh_device', deviceId)
     }
     const userId = `${u.id ? u.id : 'guest'}_${deviceId}`
-    registerUser({
-      userId,
-      name: displayName(u),
-      elo: 2350,
-      initData: getInitData(),
-      username: u.username,
-      photoUrl: u.photoUrl,
-    })
+    const doRegister = () =>
+      registerUser({
+        userId,
+        name: displayName(u),
+        elo: 2350,
+        initData: getInitData(),
+        username: u.username,
+        photoUrl: u.photoUrl,
+      })
+    doRegister()
 
     const s = getSocket()
+    // re-register on every (re)connect so the server can resume an active game
+    s.on('connect', doRegister)
     const onProfile = (p: PlayerProfile) => setProfile(p)
     s.on('profile', onProfile)
     const onFound = (m: {
@@ -119,6 +123,7 @@ export default function App() {
     s.on('match:found', onFound)
     s.on('invite:incoming', onInvite)
     return () => {
+      s.off('connect', doRegister)
       s.off('profile', onProfile)
       s.off('match:found', onFound)
       s.off('invite:incoming', onInvite)
