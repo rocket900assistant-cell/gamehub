@@ -486,7 +486,9 @@ function Board({
         const { x, top } = POS[p]
         const white = v > 0
         const count = Math.abs(v)
-        const step = count > 1 ? Math.min(STEP, STACK_SPAN / (count - 1)) : 0
+        // Fixed step (compressed only for tall stacks). Constant per checker so
+        // a stack always shrinks from its END (tip), never re-spaces on removal.
+        const step = count > 5 ? STACK_SPAN / 14 : STEP
         return (
           <div key={p}>
             {Array.from({ length: count }).map((_, k) => (
@@ -536,7 +538,8 @@ function Board({
         if (!targets.has(p)) return null
         const { x, top } = POS[p]
         const cnt = Math.abs(s.points[p])
-        const landY = top ? TOP_Y0 + cnt * STEP : BOT_Y0 - cnt * STEP
+        const landStep = cnt + 1 > 5 ? STACK_SPAN / 14 : STEP
+        const landY = top ? TOP_Y0 + cnt * landStep : BOT_Y0 - cnt * landStep
         return (
           <span
             key={`ind${p}`}
