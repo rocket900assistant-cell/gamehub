@@ -110,7 +110,7 @@ export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
     if (born.length) {
       setGhosts((g) => [...g, ...born])
       const ids = new Set(born.map((n) => n.id))
-      setTimeout(() => setGhosts((g) => g.filter((x) => !ids.has(x.id))), 400)
+      setTimeout(() => setGhosts((g) => g.filter((x) => !ids.has(x.id))), 520)
     }
   }, [s.points])
 
@@ -591,21 +591,21 @@ function Board({
         )
       })}
 
-      {/* leaving checkers — fade+pop from the end of the stack they left */}
-      <style>{`@keyframes nardyLeave{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.35)}}`}</style>
+      {/* leaving checkers — lift + fade from the EXPOSED end of the stack */}
+      <style>{`@keyframes nardyLeaveTop{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-160%) scale(1.5)}}@keyframes nardyLeaveBot{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,60%) scale(1.5)}}`}</style>
       {ghosts.map((g) => (
         <img
           key={g.id}
           src={g.white ? CHECK.w : CHECK.b}
           alt=""
           draggable={false}
-          className="pointer-events-none absolute z-20"
+          className="pointer-events-none absolute z-30"
           style={{
             left: `${g.x}%`,
             top: `${g.y}%`,
             width: `${CD}%`,
             transform: 'translate(-50%,-50%)',
-            animation: 'nardyLeave 400ms ease-out forwards',
+            animation: `${g.top ? 'nardyLeaveTop' : 'nardyLeaveBot'} 500ms ease-out forwards`,
           }}
         />
       ))}
