@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ChevronLeft,
   Flag,
@@ -73,6 +73,44 @@ export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
   const [chatInput, setChatInput] = useState('')
   const [messages, setMessages] = useState<{ mine: boolean; text: string }[]>([])
   const bank = config && !config.free ? config.stake * 2 : 0
+
+  // "leaving" checkers: fade a checker out from the END of a stack when it moves,
+  // so it's obvious the top (exposed) checker is the one being taken.
+  type Ghost = { id: number; x: number; top: boolean; y: number; white: boolean }
+  const [ghosts, setGhosts] = useState<Ghost[]>([])
+  const prevPts = useRef<number[]>(s.points)
+  const ghostId = useRef(0)
+  useEffect(() => {
+    const prev = prevPts.current
+    const cur = s.points
+    const born: Ghost[] = []
+    for (let p = 0; p < 24; p++) {
+      const a = prev[p]
+      const b = cur[p]
+      if (!a) continue
+      const gone = Math.abs(a) - Math.abs(b)
+      if (gone <= 0 || (b !== 0 && Math.sign(a) !== Math.sign(b))) continue
+      const cntPrev = Math.abs(a)
+      const { x, top } = POS[p]
+      const stepPrev = cntPrev > 5 ? STACK_SPAN / 14 : STEP
+      for (let r = 0; r < gone; r++) {
+        const k = cntPrev - 1 - r
+        born.push({
+          id: ghostId.current++,
+          x,
+          top,
+          y: top ? TOP_Y0 + k * stepPrev : BOT_Y0 - k * stepPrev,
+          white: a > 0,
+        })
+      }
+    }
+    prevPts.current = cur
+    if (born.length) {
+      setGhosts((g) => [...g, ...born])
+      const ids = new Set(born.map((n) => n.id))
+      setTimeout(() => setGhosts((g) => g.filter((x) => !ids.has(x.id))), 400)
+    }
+  }, [s.points])
 
   function sendChat() {
     const t = chatInput.trim()
@@ -214,6 +252,7 @@ export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
           <Board
             s={s}
             targets={targets}
+            ghosts={ghosts}
             onTapPoint={tapPoint}
             onTapOff={tapOff}
           />
@@ -459,11 +498,13 @@ const CHECK = {
 function Board({
   s,
   targets,
+  ghosts,
   onTapPoint,
   onTapOff,
 }: {
   s: NardyState
   targets: Map<number | 'off', number[]>
+  ghosts: { id: number; x: number; top: boolean; y: number; white: boolean }[]
   onTapPoint: (p: number) => void
   onTapOff: () => void
 }) {
@@ -510,6 +551,25 @@ function Board({
           </div>
         )
       })}
+
+      {/* leaving checkers — fade+pop from the end of the stack they left */}
+      <style>{`@keyframes nardyLeave{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.35)}}`}</style>
+      {ghosts.map((g) => (
+        <img
+          key={g.id}
+          src={g.white ? CHECK.w : CHECK.b}
+          alt=""
+          draggable={false}
+          className="pointer-events-none absolute z-20"
+          style={{
+            left: `${g.x}%`,
+            top: `${g.y}%`,
+            width: `${CD}%`,
+            transform: 'translate(-50%,-50%)',
+            animation: 'nardyLeave 400ms ease-out forwards',
+          }}
+        />
+      ))}
 
       {/* white borne-off checkers in the tray (all shown, compressed to fit) */}
       {s.off.w > 0 &&
