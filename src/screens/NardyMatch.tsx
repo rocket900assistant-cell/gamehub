@@ -194,20 +194,22 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
     if (src < 0) return
     const stepFor = (c: number) => (c > 5 ? STACK_SPAN / 14 : STEP)
     const slotY = (p: number, k: number, c: number) =>
-      POS[p].top ? TOP_Y0 + k * stepFor(c) : BOT_Y0 - k * stepFor(c)
+      viewPos(myColor, p).top ? TOP_Y0 + k * stepFor(c) : BOT_Y0 - k * stepFor(c)
     const sCnt = Math.abs(prev[src])
-    const fx = POS[src].x
+    const fx = viewPos(myColor, src).x
     const fy = slotY(src, sCnt - 1, sCnt)
     let tx: number
     let ty: number
     if (dst >= 0) {
       const dCnt = Math.abs(cur[dst])
-      tx = POS[dst].x
+      tx = viewPos(myColor, dst).x
       ty = slotY(dst, dCnt - 1, dCnt)
     } else if (offW || offB) {
+      const movedColor: NPlayer = offW ? 'w' : 'b'
       const oc = offW ? s.off.w : s.off.b
+      const step = oc > 1 ? Math.min(5.4, 40 / (oc - 1)) : 0
       tx = TRAY_X
-      ty = 11 + (oc - 1) * (oc > 1 ? Math.min(5.4, 74 / (oc - 1)) : 0)
+      ty = movedColor === myColor ? 92 - (oc - 1) * step : 8 + (oc - 1) * step
     } else {
       return
     }
@@ -446,7 +448,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
             s={s}
             targets={targets}
             movers={movers}
-            flip={myColor === 'b'}
+            view={myColor}
             onTapPoint={tapPoint}
             onTapOff={tapOff}
           />
@@ -678,7 +680,7 @@ function Die({ n }: { n: number }) {
 // ── board rendering (image board + image checkers positioned by %) ──
 // x-centre (% of board width) of the 12 point columns (6 left, 6 right)
 const XCOLS = [9.4, 15.6, 21.8, 28.0, 34.2, 40.4, 54.1, 60.0, 65.9, 71.8, 77.7, 83.6]
-// physical point -> screen slot
+// physical point -> screen slot (white's native layout)
 const POS: Record<number, { x: number; top: boolean }> = {}
 TOP.forEach((p, i) => {
   POS[p] = { x: XCOLS[i], top: true }
@@ -686,6 +688,18 @@ TOP.forEach((p, i) => {
 BOTTOM.forEach((p, i) => {
   POS[p] = { x: XCOLS[i], top: false }
 })
+
+// Each player's route (physical indices from head → last point before bearing off).
+const PATH_N: Record<NPlayer, number[]> = {
+  w: [23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
+  b: [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12],
+}
+// Screen slot for a physical point FROM THE VIEWER's perspective: the viewer always
+// sees their own head top-right and their home bottom-right by the tray (like white).
+function viewPos(view: NPlayer, phys: number): { x: number; top: boolean } {
+  const t = PATH_N[view].indexOf(phys) // viewer's track index
+  return POS[PATH_N.w[t]] // map onto white's native layout
+}
 const CD = 7.2 // checker diameter, % of board width
 const TRAY_X = 91 // bear-off tray channel centre (% of board width)
 const TRAY_CD = 6.3 // borne-off checker width — fits inside the tray channel
@@ -702,21 +716,22 @@ function Board({
   s,
   targets,
   movers,
-  flip,
+  view,
   onTapPoint,
   onTapOff,
 }: {
   s: NardyState
   targets: Map<number | 'off', number[]>
   movers: { id: number; fx: number; fy: number; tx: number; ty: number; white: boolean }[]
-  flip?: boolean
+  view: NPlayer
   onTapPoint: (p: number) => void
   onTapOff: () => void
 }) {
+  const vp = (p: number) => viewPos(view, p)
   return (
     <div
       className="relative w-full overflow-hidden rounded-xl shadow-[0_10px_28px_rgba(0,0,0,0.5)]"
-      style={{ aspectRatio: '1448 / 1086', transform: flip ? 'rotate(180deg)' : undefined }}
+      style={{ aspectRatio: '1448 / 1086' }}
     >
       <img
         src="/assets/nardy/board.jpg"
@@ -729,7 +744,7 @@ function Board({
       {Array.from({ length: 24 }).map((_, p) => {
         const v = s.points[p]
         if (!v) return null
-        const { x, top } = POS[p]
+        const { x, top } = vp(p)
         const white = v > 0
         const count = Math.abs(v)
         // Fixed step (compressed only for tall stacks). Constant per checker so
@@ -780,32 +795,36 @@ function Board({
         />
       ))}
 
-      {/* white borne-off checkers in the tray (centered in the channel, all shown) */}
-      {s.off.w > 0 &&
-        Array.from({ length: s.off.w }).map((_, k) => {
-          const trayStep = s.off.w > 1 ? Math.min(5.4, 74 / (s.off.w - 1)) : 0
-          return (
-            <img
-              key={`ow${k}`}
-              src={CHECK.w}
-              alt=""
-              draggable={false}
-              className="pointer-events-none absolute"
-              style={{
-                left: `${TRAY_X}%`,
-                top: `${11 + k * trayStep}%`,
-                width: `${TRAY_CD}%`,
-                transform: 'translate(-50%,-50%)',
-                zIndex: k,
-              }}
-            />
-          )
-        })}
+      {/* borne-off checkers in the right tray — viewer's own bear-off */}
+      {([
+        [view, false],
+        [other(view), true],
+      ] as const).map(([col, fromTop]) => {
+        const n = s.off[col]
+        if (!n) return null
+        const step = n > 1 ? Math.min(5.4, 40 / (n - 1)) : 0
+        return Array.from({ length: n }).map((_, k) => (
+          <img
+            key={`off-${col}-${k}`}
+            src={CHECK[col]}
+            alt=""
+            draggable={false}
+            className="pointer-events-none absolute"
+            style={{
+              left: `${TRAY_X}%`,
+              top: `${fromTop ? 8 + k * step : 92 - k * step}%`,
+              width: `${TRAY_CD}%`,
+              transform: 'translate(-50%,-50%)',
+              zIndex: k,
+            }}
+          />
+        ))
+      })}
 
       {/* move targets — a clean ghost checker where the move would land */}
       {Array.from({ length: 24 }).map((_, p) => {
         if (!targets.has(p)) return null
-        const { x, top } = POS[p]
+        const { x, top } = vp(p)
         const cnt = Math.abs(s.points[p])
         const landStep = cnt + 1 > 5 ? STACK_SPAN / 14 : STEP
         const landY = top ? TOP_Y0 + cnt * landStep : BOT_Y0 - cnt * landStep
@@ -826,7 +845,7 @@ function Board({
 
       {/* tap hotspots per point (transparent) */}
       {Array.from({ length: 24 }).map((_, p) => {
-        const { x, top } = POS[p]
+        const { x, top } = vp(p)
         return (
           <button
             key={`h${p}`}
