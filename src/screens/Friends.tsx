@@ -3,36 +3,19 @@ import { ArrowLeft, Trash2, UserPlus, Users } from 'lucide-react'
 import { Avatar } from '../components/ui/Avatar'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
-import { friends as initialFriends } from '../data/mock'
-import type { Friend } from '../data/mock'
+import { getFriends, saveFriends, type Friend } from '../lib/friends'
 
 interface FriendsProps {
   onBack: () => void
 }
 
-const STORE = 'gh_friends'
-
-function loadFriends(): Friend[] {
-  try {
-    const raw = localStorage.getItem(STORE)
-    if (raw) return JSON.parse(raw) as Friend[]
-  } catch {
-    // ignore corrupt storage
-  }
-  return initialFriends
-}
-
 export function Friends({ onBack }: FriendsProps) {
-  const [list, setList] = useState<Friend[]>(loadFriends)
+  const [list, setList] = useState<Friend[]>(getFriends)
   const [username, setUsername] = useState('')
 
-  // persist so added / removed friends survive a reload
+  // persist so added / removed friends survive a reload (shared with invites)
   useEffect(() => {
-    try {
-      localStorage.setItem(STORE, JSON.stringify(list))
-    } catch {
-      // ignore quota errors
-    }
+    saveFriends(list)
   }, [list])
 
   function addFriend() {

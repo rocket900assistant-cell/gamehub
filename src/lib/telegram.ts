@@ -22,6 +22,7 @@ interface TelegramWebApp {
   viewportStableHeight?: number
   viewportHeight?: number
   initDataUnsafe?: {
+    start_param?: string
     user?: {
       id: number
       first_name: string
@@ -67,6 +68,16 @@ export function shareInvite(refCode: string) {
   const wa = getWebApp()
   if (wa?.openTelegramLink) wa.openTelegramLink(shareUrl)
   else window.open(shareUrl, '_blank')
+}
+
+/** The `startapp=` deep-link parameter the app was opened with (if any). */
+export function getStartParam(): string | undefined {
+  const wa = getWebApp()
+  const p = wa?.initDataUnsafe?.start_param
+  if (p) return p
+  // browser / preview fallback: ?startapp=… or ?tgWebAppStartParam=…
+  const q = new URLSearchParams(window.location.search)
+  return q.get('startapp') ?? q.get('tgWebAppStartParam') ?? undefined
 }
 
 function getWebApp(): TelegramWebApp | undefined {

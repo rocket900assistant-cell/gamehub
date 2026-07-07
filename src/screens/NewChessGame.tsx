@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowLeft, Bolt, Bot, Check, Copy, Send, Swords, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Avatar } from '../components/ui/Avatar'
 import { makeGameLink, shareGameLink } from '../lib/telegram'
+import { getSocket } from '../lib/socket'
 import { GameTypeToggle, StakeStepper } from '../components/StakePicker'
-import { friends } from '../data/mock'
+import { getFriends } from '../lib/friends'
 import { cn } from '../lib/cn'
 
 const timeControls: { m: number; label: string; icon: LucideIcon }[] = [
@@ -35,8 +36,26 @@ export function NewChessGame({
   const [copied, setCopied] = useState(false)
   const [invited, setInvited] = useState<Set<string>>(new Set())
   const [showAllFriends, setShowAllFriends] = useState(false)
-  const [gameId] = useState(() => `chess_${Math.random().toString(36).slice(2, 8)}`)
+  const [friends] = useState(getFriends)
+  const [roomId, setRoomId] = useState<string | null>(null)
 
+  const stake = free ? 0 : Math.max(0, parseFloat(stakeText.replace(',', '.')) || 0)
+
+  // Create a real server room for the invite link so a friend who taps it
+  // lands straight in this lobby (re-create when the settings change).
+  useEffect(() => {
+    if (!friend) return
+    const t = setTimeout(() => {
+      getSocket().emit(
+        'createRoom',
+        { game: 'chess', minutes, free, stake },
+        (id: string) => setRoomId(id),
+      )
+    }, 300)
+    return () => clearTimeout(t)
+  }, [friend, minutes, free, stake])
+
+  const link = roomId ? makeGameLink(roomId) : ''
   const visibleFriends = showAllFriends ? friends : friends.slice(0, 3)
 
   function invite(id: string) {
@@ -45,7 +64,8 @@ export function NewChessGame({
   }
 
   function copyLink() {
-    navigator.clipboard?.writeText(makeGameLink(gameId))
+    if (!link) return
+    navigator.clipboard?.writeText(link)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
@@ -54,13 +74,15 @@ export function NewChessGame({
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <button
-          onClick={onBack}
+          onClick={() => (friend ? setFriend(false) : onBack())}
           aria-label="Назад"
           className="grid h-9 w-9 place-items-center rounded-xl border border-line bg-surface text-ink"
         >
           <ArrowLeft size={18} />
         </button>
-        <h1 className="text-2xl font-extrabold">Шахматы</h1>
+        <h1 className="text-2xl font-extrabold">
+          {friend ? 'Игра с другом' : 'Шахматы'}
+        </h1>
       </div>
 
       {/* game type */}
@@ -183,7 +205,7 @@ export function NewChessGame({
             <Card className="space-y-3">
               <div className="flex items-center gap-2 rounded-[var(--radius-input)] border border-line bg-bg px-3 py-2.5">
                 <span className="flex-1 truncate text-xs text-muted">
-                  {makeGameLink(gameId)}
+                  {link || 'Создаём ссылку…'}
                 </span>
                 <button onClick={copyLink} className="text-gold-dark">
                   {copied ? <Check size={16} /> : <Copy size={16} />}
@@ -192,8 +214,10 @@ export function NewChessGame({
               <Button
                 variant="secondary"
                 className="w-full"
+                disabled={!roomId}
                 onClick={() =>
-                  shareGameLink(gameId, 'Партия в шахматы в GameHub — заходи!')
+                  roomId &&
+                  shareGameLink(roomId, 'Партия в шахматы в GameHub — заходи!')
                 }
               >
                 <Send size={16} /> Поделиться ссылкой

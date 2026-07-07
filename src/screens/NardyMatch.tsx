@@ -204,8 +204,9 @@ export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
         </div>
 
         {/* opponent bar */}
-        <div className="mt-3 flex items-center justify-between text-white/90">
+        <div className="mt-3 flex min-h-[44px] items-center justify-between text-white/90">
           <PlayerChip name="Бот" color="b" active={s.turn === 'b' && !s.result} off={s.off.b} />
+          <DiceRow s={s} />
         </div>
 
         {/* board */}
@@ -446,7 +447,7 @@ TOP.forEach((p, i) => {
 BOTTOM.forEach((p, i) => {
   POS[p] = { x: XCOLS[i], top: false }
 })
-const CD = 6.7 // checker diameter, % of board width
+const CD = 7.2 // checker diameter, % of board width
 const STEP = 7.4 // vertical gap between stacked checkers, % of board height
 const STACK_SPAN = 36 // max height a stack may occupy (compresses when many)
 const TOP_Y0 = 13
@@ -469,13 +470,6 @@ function Board({
   onTapPoint: (p: number) => void
   onTapOff: () => void
 }) {
-  // points the human can move from right now (guides tapping)
-  const canMove = (p: number) =>
-    sel == null &&
-    s.turn === 'w' &&
-    !s.awaitingRoll &&
-    !s.result &&
-    legalFrom(s, p).length > 0
   return (
     <div
       className="relative w-full overflow-hidden rounded-xl shadow-[0_10px_28px_rgba(0,0,0,0.5)]"
@@ -487,35 +481,6 @@ function Board({
         draggable={false}
         className="absolute inset-0 h-full w-full"
       />
-
-      {/* last-move trail */}
-      {s.lastMove &&
-        (() => {
-          const anc = (t: number | 'off') =>
-            t === 'off'
-              ? { x: 93, y: 50 }
-              : { x: POS[t].x, y: POS[t].top ? 33 : 67 }
-          const a = anc(s.lastMove.from)
-          const b = anc(s.lastMove.to)
-          const cx = (a.x + b.x) / 2
-          const cy = (a.y + b.y) / 2 + (50 - (a.y + b.y) / 2) * 0.55
-          return (
-            <svg
-              className="pointer-events-none absolute inset-0 h-full w-full"
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-            >
-              <path
-                d={`M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`}
-                fill="none"
-                stroke="rgba(255,255,255,0.55)"
-                strokeWidth={3}
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-              />
-            </svg>
-          )
-        })()}
 
       {/* checkers on points — all shown, stack compresses to fit */}
       {Array.from({ length: 24 }).map((_, p) => {
@@ -569,49 +534,24 @@ function Board({
           )
         })}
 
-      {/* move indicators — precise, board-% positioned (below tap layer) */}
+      {/* move targets — a clean ghost checker where the move would land */}
       {Array.from({ length: 24 }).map((_, p) => {
+        if (!targets.has(p)) return null
         const { x, top } = POS[p]
         const cnt = Math.abs(s.points[p])
-        const step = cnt > 1 ? Math.min(STEP, STACK_SPAN / (cnt - 1)) : 0
-        const tipY = top ? TOP_Y0 + (cnt - 1) * step : BOT_Y0 - (cnt - 1) * step
         const landY = top ? TOP_Y0 + cnt * STEP : BOT_Y0 - cnt * STEP
-        const selected = sel === p
-        const movable = canMove(p)
-        const isTarget = targets.has(p)
         return (
-          <div key={`ind${p}`} className="pointer-events-none">
-            {/* glow the exposed (tip) checker that will move */}
-            {(selected || movable) && cnt > 0 && (
-              <span
-                className={`absolute rounded-full ${selected ? '' : 'animate-pulse'}`}
-                style={{
-                  left: `${x}%`,
-                  top: `${tipY}%`,
-                  width: `${CD}%`,
-                  aspectRatio: '1',
-                  transform: 'translate(-50%,-50%)',
-                  boxShadow: selected
-                    ? '0 0 0 2px #f6dc9f, 0 0 14px 3px rgba(246,220,159,0.85)'
-                    : '0 0 0 2px rgba(246,220,159,0.85), 0 0 10px 2px rgba(246,220,159,0.5)',
-                }}
-              />
-            )}
-            {/* ghost checker where a move would land */}
-            {isTarget && (
-              <span
-                className="absolute rounded-full border-2 border-[#38d66b] bg-[#38d66b]/30"
-                style={{
-                  left: `${x}%`,
-                  top: `${landY}%`,
-                  width: `${CD}%`,
-                  aspectRatio: '1',
-                  transform: 'translate(-50%,-50%)',
-                  boxShadow: '0 0 10px 2px rgba(56,214,107,0.5)',
-                }}
-              />
-            )}
-          </div>
+          <span
+            key={`ind${p}`}
+            className="pointer-events-none absolute rounded-full border-2 border-[#38d66b] bg-[#38d66b]/25"
+            style={{
+              left: `${x}%`,
+              top: `${landY}%`,
+              width: `${CD}%`,
+              aspectRatio: '1',
+              transform: 'translate(-50%,-50%)',
+            }}
+          />
         )
       })}
 
@@ -647,39 +587,36 @@ function Board({
         )}
       </button>
 
-      {/* roll animation keyframes */}
-      <style>{`@keyframes nardyDiceIn{0%{transform:translateY(-45%) rotate(-30deg) scale(0.55);opacity:0}55%{opacity:1}100%{transform:translateY(0) rotate(0) scale(1);opacity:1}}`}</style>
+    </div>
+  )
+}
 
-      {/* dice on the board — always the rolled pair; used ones dim, doubles show ×N left */}
-      {s.rolled && !s.result && s.dice.length > 0 && (
-        <div
-          key={`${s.rolled[0]}-${s.rolled[1]}-${s.turn}`}
-          className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 drop-shadow-[0_3px_6px_rgba(0,0,0,0.45)]"
-          style={{ top: s.turn === 'w' ? '64%' : '36%', animation: 'nardyDiceIn 300ms ease-out' }}
-        >
-          {(() => {
-            const isDouble = s.rolled[0] === s.rolled[1]
-            return s.rolled.map((d, i) => {
-              const used = !isDouble && !s.dice.includes(d)
-              return (
-                <div
-                  key={i}
-                  style={{
-                    opacity: used ? 0.35 : 1,
-                    filter: used ? 'grayscale(1)' : 'none',
-                  }}
-                >
-                  <Die n={d} />
-                </div>
-              )
-            })
-          })()}
-          {s.rolled[0] === s.rolled[1] && (
-            <span className="grid h-6 min-w-6 place-items-center rounded-full bg-black/70 px-1.5 text-xs font-extrabold text-white">
-              ×{s.dice.length}
-            </span>
-          )}
-        </div>
+/** The rolled pair (used dice dim; doubles show a ×N remaining counter). */
+function DiceRow({ s }: { s: NardyState }) {
+  if (!s.rolled || s.result || s.dice.length === 0) return null
+  const isDouble = s.rolled[0] === s.rolled[1]
+  return (
+    <div
+      key={`${s.rolled[0]}-${s.rolled[1]}-${s.turn}`}
+      className="flex items-center gap-2 drop-shadow-[0_3px_6px_rgba(0,0,0,0.45)]"
+      style={{ animation: 'nardyDiceIn 300ms ease-out' }}
+    >
+      <style>{`@keyframes nardyDiceIn{0%{transform:translateY(-45%) rotate(-25deg) scale(0.6);opacity:0}100%{transform:none;opacity:1}}`}</style>
+      {s.rolled.map((d, i) => {
+        const used = !isDouble && !s.dice.includes(d)
+        return (
+          <div
+            key={i}
+            style={{ opacity: used ? 0.35 : 1, filter: used ? 'grayscale(1)' : 'none' }}
+          >
+            <Die n={d} />
+          </div>
+        )
+      })}
+      {isDouble && (
+        <span className="grid h-6 min-w-6 place-items-center rounded-full bg-black/40 px-1.5 text-xs font-extrabold text-white">
+          ×{s.dice.length}
+        </span>
       )}
     </div>
   )
