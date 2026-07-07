@@ -1,14 +1,35 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
+import { initDb, upsertUser, getUser, recordResult, dbEnabled } from './db.js'
+import { verifyInitData } from './telegram.js'
 
 const PORT = process.env.PORT || 3001
 
-// ── in-memory state (swap for Redis/DB in production) ──────────────
+// ── in-memory state (live sessions) ──────────────
 const users = new Map() // userId -> { socketId, name, elo }
 const socketUser = new Map() // socketId -> userId
+const userTg = new Map() // composite userId -> verified telegram id (for DB)
 const queues = new Map() // "game:minutes" -> [userId]
 const rooms = new Map() // roomId -> room
+
+// persistent DB (Neon Postgres) — optional; no-ops if DATABASE_URL is unset
+initDb().catch((e) => console.error('[db] init failed:', e.message))
+
+/** Shape a users row for the client. */
+function dbProfile(r) {
+  return {
+    tgId: Number(r.tg_id),
+    name: r.name,
+    username: r.username,
+    photoUrl: r.photo_url,
+    elo: { chess: r.elo_chess, durak: r.elo_durak, nardy: r.elo_nardy },
+    balance: Number(r.balance_gram),
+    games: r.games,
+    wins: r.wins,
+    losses: r.losses,
+  }
+}
 
 const uid = () => Math.random().toString(36).slice(2, 10)
 const qkey = (game, minutes) => `${game}:${minutes}`
@@ -49,6 +70,7 @@ function addPlayer(room, userId) {
   const u = users.get(userId)
   room.players.push({
     userId,
+    tgId: userTg.get(userId) ?? null,
     name: u?.name ?? 'Игрок',
     elo: u?.elo ?? 1200,
     color: room.players.length === 0 ? 'w' : 'b',
@@ -124,6 +146,18 @@ function endGame(room, winnerColor, reason) {
     const dLoss = eloDelta(loser.elo, winner.elo, false)
     if (winner === a) [da, db] = [dWin, dLoss]
     else [da, db] = [dLoss, dWin]
+    // persist the rated result (best-effort)
+    if (dbEnabled) {
+      recordResult({
+        game: room.game,
+        winner: winner.tgId ?? null,
+        loser: loser.tgId ?? null,
+        winnerDelta: winner === a ? da : db,
+        loserDelta: loser === a ? da : db,
+        reason,
+        stake: room.stake ?? 0,
+      })
+    }
   }
   for (const p of room.players) {
     const sid = sidOf(p.userId)
@@ -139,9 +173,48 @@ function endGame(room, winnerColor, reason) {
 }
 
 io.on('connection', (socket) => {
-  socket.on('register', ({ userId, name, elo }) => {
+  socket.on('register', async ({ userId, name, elo, initData, username, photoUrl }) => {
     socketUser.set(socket.id, userId)
     users.set(userId, { socketId: socket.id, name, elo })
+
+    // Resolve a trusted telegram id: verify initData if we have a bot token,
+    // otherwise fall back to the id embedded in the composite userId.
+    const verified = verifyInitData(initData, process.env.BOT_TOKEN)
+    let tgId = null
+    if (verified?.id) tgId = Number(verified.id)
+    else {
+      const parsed = Number(String(userId).split('_')[0])
+      if (Number.isFinite(parsed) && parsed > 0) tgId = parsed
+    }
+    userTg.set(userId, tgId)
+
+    if (tgId && dbEnabled) {
+      try {
+        const row = await upsertUser({
+          tgId,
+          username: verified?.username ?? username,
+          name: verified
+            ? [verified.first_name, verified.last_name].filter(Boolean).join(' ')
+            : name,
+          photoUrl: verified?.photo_url ?? photoUrl,
+        })
+        if (row) socket.emit('profile', dbProfile(row))
+      } catch (e) {
+        console.error('[db] upsert failed:', e.message)
+      }
+    }
+  })
+
+  // Client can request its persisted profile at any time.
+  socket.on('getProfile', async (_p, cb) => {
+    const tgId = userTg.get(socketUser.get(socket.id))
+    if (!tgId || !dbEnabled) return cb?.(null)
+    try {
+      const row = await getUser(tgId)
+      cb?.(row ? dbProfile(row) : null)
+    } catch {
+      cb?.(null)
+    }
   })
 
   socket.on('quickMatch', ({ game, minutes }) => {
