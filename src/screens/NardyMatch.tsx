@@ -876,26 +876,20 @@ function Board({
         )
       })}
 
-      {/* bear-off target — a clean ghost in the tray where the checker lands */}
-      {targets.has('off') &&
-        (() => {
-          const off = s.off[view]
-          const step = off >= 1 ? Math.min(5.4, 40 / off) : 0
-          const landY = 92 - off * step
-          return (
-            <span
-              className="pointer-events-none absolute animate-pulse rounded-full border-2 border-[#38d66b] bg-[#38d66b]/30"
-              style={{
-                left: `${TRAY_X}%`,
-                top: `${landY}%`,
-                width: `${TRAY_CD}%`,
-                aspectRatio: '1',
-                transform: 'translate(-50%,-50%)',
-                boxShadow: '0 0 10px 2px rgba(56,214,107,0.5)',
-              }}
-            />
-          )
-        })()}
+      {/* bear-off target — an elongated green pill aligned to the tray channel */}
+      {targets.has('off') && (
+        <span
+          className="pointer-events-none absolute animate-pulse rounded-full border-2 border-[#38d66b] bg-[#38d66b]/25"
+          style={{
+            left: `${TRAY_X}%`,
+            top: '50%',
+            width: '7%',
+            height: '84%',
+            transform: 'translate(-50%,-50%)',
+            boxShadow: '0 0 12px 2px rgba(56,214,107,0.45)',
+          }}
+        />
+      )}
 
       {/* tap hotspots per point (transparent) */}
       {Array.from({ length: 24 }).map((_, p) => {
