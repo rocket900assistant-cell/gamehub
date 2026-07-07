@@ -67,6 +67,14 @@ function clearNardySave() {
   }
 }
 
+/** Heal an impossible state (no dice AND not awaiting a roll) → let that player roll. */
+function normalizeState(st: NardyState): NardyState {
+  if (!st.result && !st.awaitingRoll && st.dice.length === 0) {
+    return { ...st, awaitingRoll: true, rolled: null }
+  }
+  return st
+}
+
 // screen layout: physical point index for each board slot
 const TOP = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 const BOTTOM = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
@@ -109,7 +117,7 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
       // move clock ran out while the app was closed → that player loses
       if (!saved.s.result && saved.deadline <= Date.now())
         return { ...saved.s, result: other(saved.s.turn) }
-      return saved.s
+      return normalizeState(saved.s)
     }
     return createNardy()
   })
@@ -206,6 +214,11 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
   // bot plays (rolls, then moves); auto-pass whoever is stuck after a roll
   useEffect(() => {
     if (s.result) return
+    // self-heal an impossible state (no dice & not awaiting a roll)
+    if (!s.awaitingRoll && s.dice.length === 0) {
+      setS((c) => normalizeState(c))
+      return
+    }
     if (s.turn === 'b') {
       if (s.awaitingRoll) {
         const id = setTimeout(
@@ -307,6 +320,19 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
             className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-white/90 backdrop-blur active:scale-95"
           >
             <Flag size={17} />
+          </button>
+          <button
+            onClick={() => {
+              setSel(null)
+              deadline.current = Date.now() + MOVE_MS
+              setRemaining(MOVE_MS)
+              clearNardySave()
+              setS(createNardy())
+            }}
+            aria-label="Новая игра"
+            className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-white/90 backdrop-blur active:scale-95"
+          >
+            <RotateCcw size={16} />
           </button>
           <span className="absolute left-1/2 -translate-x-1/2 text-sm font-bold tracking-wide text-white/90">
             Нарды · с ботом
