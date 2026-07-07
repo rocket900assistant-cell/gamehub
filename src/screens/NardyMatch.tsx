@@ -345,19 +345,6 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
           >
             <Flag size={17} />
           </button>
-          <button
-            onClick={() => {
-              setSel(null)
-              deadline.current = Date.now() + MOVE_MS
-              setRemaining(MOVE_MS)
-              clearNardySave()
-              setS(createNardy())
-            }}
-            aria-label="Новая игра"
-            className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-white/90 backdrop-blur active:scale-95"
-          >
-            <RotateCcw size={16} />
-          </button>
           <span className="absolute left-1/2 -translate-x-1/2 text-sm font-bold tracking-wide text-white/90">
             Нарды · с ботом
           </span>
