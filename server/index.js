@@ -76,6 +76,11 @@ const ABORT_WINDOW_MS = 10000
 
 function startRoom(room) {
   if (room.started) return
+  // randomize sides for fairness (50/50 who plays white)
+  if (room.players.length === 2 && Math.random() < 0.5) {
+    room.players[0].color = 'b'
+    room.players[1].color = 'w'
+  }
   room.started = true
   room.startedAt = Date.now()
   room.lastTick = Date.now()
