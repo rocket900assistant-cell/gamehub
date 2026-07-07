@@ -52,6 +52,7 @@ export default function App() {
   const [matchmaking, setMatchmaking] = useState<{
     minutes: number
     label?: string
+    subtitle?: string
   } | null>(null)
   const [invite, setInvite] = useState<IncomingInvite | null>(null)
   const [profile, setProfile] = useState<PlayerProfile | null>(null)
@@ -307,6 +308,7 @@ export default function App() {
               <Matchmaking
                 minutes={matchmaking.minutes}
                 label={matchmaking.label}
+                subtitle={matchmaking.subtitle}
                 onCancel={cancelMatchmaking}
               />
             ) : sub === 'friends' ? (
@@ -341,7 +343,11 @@ export default function App() {
                 }}
                 onQuickMatch={() => {
                   getSocket().emit('quickMatch', { game: 'nardy', minutes: 2 })
-                  setMatchmaking({ minutes: 2, label: 'Поиск соперника…' })
+                  setMatchmaking({
+                    minutes: 2,
+                    label: 'Поиск соперника…',
+                    subtitle: 'Нарды · 2 мин',
+                  })
                   setSub(null)
                 }}
               />
