@@ -163,6 +163,9 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
   const [chatOpen, setChatOpen] = useState(false)
   const [chatInput, setChatInput] = useState('')
   const [messages, setMessages] = useState<{ mine: boolean; text: string }[]>([])
+  const [unread, setUnread] = useState(0)
+  const chatOpenRef = useRef(false)
+  chatOpenRef.current = chatOpen
   const cfg = saved?.config ?? config
   const bank = cfg && !cfg.free ? cfg.stake * 2 : 0
 
@@ -222,8 +225,25 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
     const t = chatInput.trim()
     if (!t) return
     setMessages((prev) => [...prev, { mine: true, text: t }])
+    if (isOnline) getSocket().emit('chat', { roomId: online!.roomId, text: t })
     setChatInput('')
   }
+  function openChat() {
+    setChatOpen(true)
+    setUnread(0)
+  }
+
+  // Online chat: receive the opponent's messages.
+  useEffect(() => {
+    if (!isOnline) return
+    const sock = getSocket()
+    const onChat = (m: { text: string }) => {
+      setMessages((prev) => [...prev, { mine: false, text: m.text }])
+      if (!chatOpenRef.current) setUnread((u) => u + 1)
+    }
+    sock.on('chat:msg', onChat)
+    return () => sock.off('chat:msg', onChat)
+  }, [isOnline])
   const invite = () =>
     shareInvite(String(user.id || user.username || 'guest'))
 
@@ -483,8 +503,8 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
           <ToolBtn
             icon={MessageCircle}
             label="Чат"
-            badge={messages.length}
-            onClick={() => setChatOpen(true)}
+            badge={unread}
+            onClick={openChat}
           />
           <ToolBtn icon={UserPlus} label="Пригласить" onClick={invite} />
         </div>
@@ -924,14 +944,16 @@ function ToolBtn({
   return (
     <button
       onClick={onClick}
-      className="relative flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-muted transition active:bg-bg"
+      className="flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-muted transition active:bg-bg"
     >
-      {badge ? (
-        <span className="absolute right-6 top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
-          {badge}
-        </span>
-      ) : null}
-      <Icon size={20} />
+      <span className="relative">
+        <Icon size={20} />
+        {badge ? (
+          <span className="absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
+            {badge}
+          </span>
+        ) : null}
+      </span>
       <span className="text-[10px]">{label}</span>
     </button>
   )
