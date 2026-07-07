@@ -865,6 +865,27 @@ function Board({
         )
       })}
 
+      {/* bear-off target — a clean ghost in the tray where the checker lands */}
+      {targets.has('off') &&
+        (() => {
+          const off = s.off[view]
+          const step = off >= 1 ? Math.min(5.4, 40 / off) : 0
+          const landY = 92 - off * step
+          return (
+            <span
+              className="pointer-events-none absolute animate-pulse rounded-full border-2 border-[#38d66b] bg-[#38d66b]/30"
+              style={{
+                left: `${TRAY_X}%`,
+                top: `${landY}%`,
+                width: `${TRAY_CD}%`,
+                aspectRatio: '1',
+                transform: 'translate(-50%,-50%)',
+                boxShadow: '0 0 10px 2px rgba(56,214,107,0.5)',
+              }}
+            />
+          )
+        })()}
+
       {/* tap hotspots per point (transparent) */}
       {Array.from({ length: 24 }).map((_, p) => {
         const { x, top } = vp(p)
@@ -883,18 +904,13 @@ function Board({
         )
       })}
 
-      {/* bearing-off tray hotspot */}
+      {/* bearing-off tray hotspot (transparent tap zone) */}
       <button
         onClick={onTapOff}
         className="absolute"
         style={{ right: 0, top: '5%', width: '12%', height: '90%' }}
       >
-        {targets.has('off') && (
-          <span
-            className="absolute inset-x-2 inset-y-3 rounded-xl border-2 border-[#38d66b] bg-[#38d66b]/25 animate-pulse"
-            style={{ boxShadow: '0 0 12px 2px rgba(56,214,107,0.45)' }}
-          />
-        )}
+        {null}
       </button>
 
     </div>
