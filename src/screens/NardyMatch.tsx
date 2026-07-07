@@ -26,11 +26,21 @@ import {
   type NPlayer,
 } from '../lib/nardy'
 import { shareInvite, type TgUser } from '../lib/telegram'
+import { getSocket } from '../lib/socket'
+
+export interface OnlineNardy {
+  roomId: string
+  color: NPlayer
+  opponentName: string
+  initial: NardyState
+  deadline: number
+}
 
 interface NardyMatchProps {
   user: TgUser
   config: NardyConfig | null
   resume?: boolean
+  online?: OnlineNardy | null
   onExit: () => void
 }
 
@@ -125,10 +135,12 @@ function reachTargets(st: NardyState, from: number): Map<number | 'off', number[
   return out
 }
 
-export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
+export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchProps) {
   const MOVE_MS = 120000
+  const isOnline = !!online
+  const myColor: NPlayer = online ? online.color : 'w'
   const [saved] = useState(() => {
-    if (!resume) return null
+    if (isOnline || !resume) return null
     const sv = readNardySave()
     if (!validSave(sv)) {
       clearNardySave()
@@ -137,6 +149,7 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
     return sv
   })
   const [s, setS] = useState<NardyState>(() => {
+    if (online) return online.initial
     if (saved) {
       // move clock ran out while the app was closed → that player loses
       if (!saved.s.result && saved.deadline <= Date.now())
@@ -212,14 +225,13 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
   const invite = () =>
     shareInvite(String(user.id || user.username || 'guest'))
 
-  // ── per-move timer: 1 minute per turn; running out = loss ──
-  const [remaining, setRemaining] = useState(() =>
-    saved ? Math.max(0, saved.deadline - Date.now()) : MOVE_MS,
-  )
-  const deadline = useRef(saved ? saved.deadline : Date.now() + MOVE_MS)
+  // ── per-turn timer (2 min). Local mode: client-driven. Online: server-driven. ──
+  const initDeadline = online ? online.deadline : saved ? saved.deadline : Date.now() + MOVE_MS
+  const [remaining, setRemaining] = useState(() => Math.max(0, initDeadline - Date.now()))
+  const deadline = useRef(initDeadline)
   const firstTurn = useRef(true)
   useEffect(() => {
-    // keep the restored/initial deadline on mount; reset on every real turn change
+    if (isOnline) return // server owns the clock (sent via nardy:state)
     if (firstTurn.current) {
       firstTurn.current = false
       return
@@ -234,22 +246,43 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
       setRemaining(left)
       if (left === 0) {
         clearInterval(id)
-        setS((c) => (c.result ? c : { ...c, result: other(c.turn) }))
+        if (!isOnline) setS((c) => (c.result ? c : { ...c, result: other(c.turn) }))
       }
     }, 250)
     return () => clearInterval(id)
   }, [s.turn, s.result])
 
-  // persist the game so it survives closing the app (timer keeps running via deadline)
+  // Online: apply authoritative server state + handle game over.
   useEffect(() => {
+    if (!isOnline) return
+    const sock = getSocket()
+    const onState = (p: { nardy: NardyState; deadline: number }) => {
+      setS(p.nardy)
+      deadline.current = p.deadline
+      setSel(null)
+    }
+    const onOver = (g: { youWon: boolean | null }) => {
+      setS((c) => (c.result ? c : { ...c, result: g.youWon ? myColor : other(myColor) }))
+    }
+    sock.on('nardy:state', onState)
+    sock.on('game:over', onOver)
+    return () => {
+      sock.off('nardy:state', onState)
+      sock.off('game:over', onOver)
+    }
+  }, [isOnline, myColor])
+
+  // persist the game so it survives closing the app (local games only)
+  useEffect(() => {
+    if (isOnline) return
     if (s.result) clearNardySave()
     else writeNardySave({ s, config: cfg, deadline: deadline.current })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s])
 
-  // bot plays (rolls, then moves); auto-pass whoever is stuck after a roll
+  // bot plays (rolls, then moves); auto-pass whoever is stuck after a roll — local only
   useEffect(() => {
-    if (s.result) return
+    if (isOnline || s.result) return
     // self-heal an impossible state (no dice & not awaiting a roll)
     if (!s.awaitingRoll && s.dice.length === 0) {
       setS((c) => normalizeState(c))
@@ -275,7 +308,7 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
     }
   }, [s])
 
-  const yourTurn = s.turn === 'w' && !s.result
+  const yourTurn = s.turn === myColor && !s.result
 
   // All destinations for the selected checker, including COMBINED moves that
   // use several dice on one checker (e.g. 3+2 = a single "5" landing), as long
@@ -283,11 +316,20 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
   const targets =
     sel != null && yourTurn ? reachTargets(s, sel) : new Map<number | 'off', number[]>()
 
+  function doRoll() {
+    if (isOnline) getSocket().emit('nardy:roll', { roomId: online!.roomId })
+    else setS(roll(s))
+  }
+
   function applySeq(from: number, seq: number[]) {
+    if (isOnline) {
+      getSocket().emit('nardy:move', { roomId: online!.roomId, from, seq })
+    }
+    // apply locally (optimistic online; authoritative offline). Server state reconciles.
     let st = s
     let pos = from
     for (const d of seq) {
-      const de = _destOf(st, 'w', pos, d)
+      const de = _destOf(st, s.turn, pos, d)
       st = move(st, pos, d)
       if (de === 'off' || de === null) break
       pos = de
@@ -303,7 +345,7 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
       return
     }
     // select own checker with moves
-    if (ownerOf(s.points[phys]) === 'w' && legalFrom(s, phys).length) {
+    if (ownerOf(s.points[phys]) === myColor && legalFrom(s, phys).length) {
       setSel(sel === phys ? null : phys)
     } else {
       setSel(null)
@@ -318,7 +360,7 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
 
   const status = s.result
     ? ''
-    : s.turn === 'b'
+    : !yourTurn
       ? s.awaitingRoll
         ? 'Соперник бросает…'
         : 'Ход соперника…'
@@ -358,7 +400,7 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
             <Flag size={17} />
           </button>
           <span className="absolute left-1/2 -translate-x-1/2 text-sm font-bold tracking-wide text-white/90">
-            Нарды · с ботом
+            {isOnline ? 'Нарды · онлайн' : 'Нарды · с ботом'}
           </span>
           <span className="ml-auto flex h-9 items-center gap-1.5 rounded-xl bg-white/95 px-3 text-sm font-extrabold text-ink shadow">
             {bank > 0 ? (
@@ -374,7 +416,12 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
 
         {/* opponent bar */}
         <div className="mt-3 flex min-h-[44px] items-center justify-between text-white/90">
-          <PlayerChip name="Бот" color="b" active={s.turn === 'b' && !s.result} off={s.off.b} />
+          <PlayerChip
+            name={isOnline ? online!.opponentName : 'Бот'}
+            color={other(myColor)}
+            active={s.turn === other(myColor) && !s.result}
+            off={s.off[other(myColor)]}
+          />
           <div className="flex items-center gap-2">
             <DiceRow s={s} />
             {!s.result && (
@@ -407,7 +454,7 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
         {/* roll button under the board */}
         {yourTurn && s.awaitingRoll && (
           <button
-            onClick={() => setS(roll(s))}
+            onClick={doRoll}
             className="mb-2 flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-base font-extrabold text-[#4a2f00] shadow-[0_6px_18px_rgba(0,0,0,0.45)] active:scale-[0.98]"
             style={{ background: 'linear-gradient(180deg,#f6dc9f,#d9b25e)' }}
           >
@@ -419,9 +466,9 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
         <div className="flex items-center justify-between">
           <PlayerChip
             name="Вы"
-            color="w"
+            color={myColor}
             active={yourTurn}
-            off={s.off.w}
+            off={s.off[myColor]}
           />
           <span className="rounded-full bg-black/30 px-3 py-1 text-xs font-medium text-white/90 backdrop-blur">
             {status}
@@ -517,7 +564,8 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
                 className="flex-1"
                 onClick={() => {
                   setConfirmResign(false)
-                  setS((c) => ({ ...c, result: 'b' }))
+                  if (isOnline) getSocket().emit('resign', { roomId: online!.roomId })
+                  else setS((c) => ({ ...c, result: other(myColor) }))
                 }}
               >
                 Сдаться
@@ -531,24 +579,28 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6">
           <div className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
             <p className="text-2xl font-extrabold">
-              {s.result === 'w' ? 'Вы выиграли!' : 'Вы проиграли'}
+              {s.result === myColor ? 'Вы выиграли!' : 'Вы проиграли'}
             </p>
-            <p className="mt-1 text-sm text-muted">Игра с ботом · без рейтинга</p>
+            <p className="mt-1 text-sm text-muted">
+              {isOnline ? 'Онлайн-партия' : 'Игра с ботом · без рейтинга'}
+            </p>
             <div className="mt-6 flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={onExit}>
                 В меню
               </Button>
-              <Button
-                className="flex-1"
-                onClick={() => {
-                  setSel(null)
-                  deadline.current = Date.now() + MOVE_MS
-                  setRemaining(MOVE_MS)
-                  setS(createNardy())
-                }}
-              >
-                <RotateCcw size={16} /> Ещё раз
-              </Button>
+              {!isOnline && (
+                <Button
+                  className="flex-1"
+                  onClick={() => {
+                    setSel(null)
+                    deadline.current = Date.now() + MOVE_MS
+                    setRemaining(MOVE_MS)
+                    setS(createNardy())
+                  }}
+                >
+                  <RotateCcw size={16} /> Ещё раз
+                </Button>
+              )}
             </div>
           </div>
         </div>

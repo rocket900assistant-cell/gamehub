@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Play } from 'lucide-react'
+import { ArrowLeft, Bot, Swords } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { GameTypeToggle, StakeStepper, MIN_STAKE } from '../components/StakePicker'
 
@@ -11,9 +11,10 @@ export interface NardyConfig {
 interface NardySetupProps {
   onBack: () => void
   onCreate: (cfg: NardyConfig) => void
+  onQuickMatch: () => void
 }
 
-export function NardySetup({ onBack, onCreate }: NardySetupProps) {
+export function NardySetup({ onBack, onCreate, onQuickMatch }: NardySetupProps) {
   const [free, setFree] = useState(true)
   const [stakeText, setStakeText] = useState('0.1')
   const num = parseFloat(stakeText) || 0
@@ -34,17 +35,21 @@ export function NardySetup({ onBack, onCreate }: NardySetupProps) {
       <GameTypeToggle free={free} onChange={setFree} />
       {!free && <StakeStepper value={stakeText} onChange={setStakeText} />}
 
-      <p className="px-1 text-sm text-muted">
-        Длинные нарды · игра с ботом. Скоро — онлайн и режимы.
-      </p>
+      <p className="px-1 text-sm text-muted">Длинные нарды. 2 минуты на ход.</p>
 
-      <Button
-        size="lg"
-        className="w-full"
-        onClick={() => onCreate({ free, stake: free ? 0 : Math.max(MIN_STAKE, num) })}
-      >
-        <Play size={18} /> Начать игру
-      </Button>
+      <div className="space-y-3">
+        <Button size="lg" className="w-full" onClick={onQuickMatch}>
+          <Swords size={18} /> Быстрая игра (онлайн)
+        </Button>
+        <Button
+          size="lg"
+          variant="secondary"
+          className="w-full"
+          onClick={() => onCreate({ free, stake: free ? 0 : Math.max(MIN_STAKE, num) })}
+        >
+          <Bot size={18} /> Играть с ботом
+        </Button>
+      </div>
     </div>
   )
 }

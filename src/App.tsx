@@ -10,7 +10,7 @@ import { NewChessGame } from './screens/NewChessGame'
 import { ChessMatch, hasChessSave, readChessSave } from './screens/ChessMatch'
 import { DurakMatch, hasDurakSave } from './screens/DurakMatch'
 import { DurakSetup, type DurakConfig } from './screens/DurakSetup'
-import { NardyMatch, hasNardySave } from './screens/NardyMatch'
+import { NardyMatch, hasNardySave, type OnlineNardy } from './screens/NardyMatch'
 import { NardySetup, type NardyConfig } from './screens/NardySetup'
 import { Matchmaking } from './screens/Matchmaking'
 import {
@@ -55,6 +55,7 @@ export default function App() {
   } | null>(null)
   const [invite, setInvite] = useState<IncomingInvite | null>(null)
   const [profile, setProfile] = useState<PlayerProfile | null>(null)
+  const [nardyOnline, setNardyOnline] = useState<OnlineNardy | null>(null)
 
   useEffect(() => {
     const u = initTelegram()
@@ -84,13 +85,34 @@ export default function App() {
       color: 'w' | 'b'
       minutes: number
       opponent: { name: string; elo: number }
-      fen: string
-      clocks: { w: number; b: number }
+      game?: string
+      fen?: string
+      clocks?: { w: number; b: number }
+      nardy?: OnlineNardy['initial']
+      deadline?: number
     }) => {
-      setMatch({ mode: 'online', ...m })
       setMatchmaking(null)
-      setMinimized(false)
       setSub(null)
+      if (m.game === 'nardy' && m.nardy) {
+        setNardyOnline({
+          roomId: m.roomId,
+          color: m.color,
+          opponentName: m.opponent?.name ?? 'Соперник',
+          initial: m.nardy,
+          deadline: m.deadline ?? Date.now() + 120000,
+        })
+        return
+      }
+      setMatch({
+        mode: 'online',
+        roomId: m.roomId,
+        color: m.color,
+        minutes: m.minutes,
+        opponent: m.opponent,
+        fen: m.fen!,
+        clocks: m.clocks!,
+      })
+      setMinimized(false)
     }
     const onInvite = (inv: IncomingInvite) => setInvite(inv)
     s.on('match:found', onFound)
@@ -237,7 +259,7 @@ export default function App() {
       style={{ height: 'var(--app-h, 100dvh)' }}
     >
       {/* Match layer — kept mounted to preserve state; hidden when minimized */}
-      {match && (
+      {match && !nardyOnline && (
         <div
           className={
             inMatchFull
@@ -258,8 +280,20 @@ export default function App() {
         </div>
       )}
 
+      {/* Online Nardy — fullscreen while active */}
+      {nardyOnline && (
+        <main className="flex flex-1 flex-col overflow-y-auto px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-6">
+          <NardyMatch
+            user={user}
+            config={null}
+            online={nardyOnline}
+            onExit={() => setNardyOnline(null)}
+          />
+        </main>
+      )}
+
       {/* Normal app — hidden while a match is fullscreen */}
-      {!inMatchFull && (
+      {!inMatchFull && !nardyOnline && (
         <>
           <main className="flex-1 overflow-y-auto px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-6">
             {invite && (
@@ -304,6 +338,11 @@ export default function App() {
                   setNardyCfg(cfg)
                   setNardyResume(false)
                   setSub('nardy')
+                }}
+                onQuickMatch={() => {
+                  getSocket().emit('quickMatch', { game: 'nardy', minutes: 2 })
+                  setMatchmaking({ minutes: 2, label: 'Поиск соперника…' })
+                  setSub(null)
                 }}
               />
             ) : sub === 'nardy' ? (
