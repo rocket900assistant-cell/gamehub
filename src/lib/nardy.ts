@@ -137,7 +137,9 @@ export function legalMoves(st: NardyState): { from: number; die: number; dest: n
 export const hasAnyMove = (st: NardyState) => legalMoves(st).length > 0
 
 function clone(st: NardyState): NardyState {
-  return { ...st, points: [...st.points], off: { ...st.off } }
+  // NB: dice must be a fresh array — move() splices it; a shared reference would
+  // corrupt the caller's state (e.g. when reachTargets explores moves).
+  return { ...st, points: [...st.points], off: { ...st.off }, dice: [...st.dice] }
 }
 
 function endTurn(n: NardyState) {
