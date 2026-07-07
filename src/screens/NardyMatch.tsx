@@ -688,7 +688,7 @@ function Board({
                 src={white ? CHECK.w : CHECK.b}
                 alt=""
                 draggable={false}
-                className="absolute"
+                className="pointer-events-none absolute"
                 style={{
                   left: `${x}%`,
                   top: `${top ? TOP_Y0 + k * step : BOT_Y0 - k * step}%`,
@@ -735,7 +735,7 @@ function Board({
               src={CHECK.w}
               alt=""
               draggable={false}
-              className="absolute"
+              className="pointer-events-none absolute"
               style={{
                 left: `${TRAY_X}%`,
                 top: `${11 + k * trayStep}%`,
