@@ -176,17 +176,29 @@ function endGame(room, winnerColor, reason) {
     const dLoss = eloDelta(loser.elo, winner.elo, false)
     if (winner === a) [da, db] = [dWin, dLoss]
     else [da, db] = [dLoss, dWin]
-    // persist the rated result (best-effort)
+    // persist the rated result, then push fresh profiles so the app updates now
     if (dbEnabled) {
-      recordResult({
-        game: room.game,
-        winner: winner.tgId ?? null,
-        loser: loser.tgId ?? null,
-        winnerDelta: winner === a ? da : db,
-        loserDelta: loser === a ? da : db,
-        reason,
-        stake: room.stake ?? 0,
-      })
+      ;(async () => {
+        await recordResult({
+          game: room.game,
+          winner: winner.tgId ?? null,
+          loser: loser.tgId ?? null,
+          winnerDelta: winner === a ? da : db,
+          loserDelta: loser === a ? da : db,
+          reason,
+          stake: room.stake ?? 0,
+        })
+        for (const pl of room.players) {
+          if (!pl.tgId) continue
+          try {
+            const row = await getUser(pl.tgId)
+            const sid = sidOf(pl.userId)
+            if (row && sid) io.to(sid).emit('profile', dbProfile(row))
+          } catch {
+            /* ignore */
+          }
+        }
+      })()
     }
   }
   for (const p of room.players) {

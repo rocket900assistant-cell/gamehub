@@ -80,6 +80,35 @@ function allHome(st: NardyState, p: NPlayer): boolean {
   return true
 }
 
+/**
+ * Long-nardy prime rule: a player may not build a solid wall of 6+ consecutive
+ * points if it traps ALL the opponent's checkers (none in front of the wall).
+ * Returns true if `points` would illegally trap the opponent for player `p`.
+ */
+function createsTrap(points: number[], off: { w: number; b: number }, p: NPlayer): boolean {
+  const o = other(p)
+  const path = PATH[o] // opponent's track order (head → home)
+  let runStart = -1
+  for (let i = 0; i <= 24; i++) {
+    const blocked = i < 24 && ownerOf(points[path[i]]) === p
+    if (blocked) {
+      if (runStart < 0) runStart = i
+    } else {
+      if (runStart >= 0 && i - runStart >= 6) {
+        let ahead = off[o] > 0 // a borne-off checker counts as "in front"
+        for (let j = i; j < 24 && !ahead; j++)
+          if (ownerOf(points[path[j]]) === o) ahead = true
+        let behind = false
+        for (let j = 0; j < runStart && !behind; j++)
+          if (ownerOf(points[path[j]]) === o) behind = true
+        if (!ahead && behind) return true
+      }
+      runStart = -1
+    }
+  }
+  return false
+}
+
 /** Where a checker at physical `from` lands with die `d`: point index | 'off' | null. */
 export function destOf(
   st: NardyState,
@@ -94,6 +123,11 @@ export function destOf(
     const phys = PATH[p][nt]
     const o = ownerOf(st.points[phys])
     if (o && o !== p) return null // blocked by opponent
+    // prime rule: reject a move that would trap all opponent checkers
+    const np = [...st.points]
+    np[from] -= sign(p)
+    np[phys] += sign(p)
+    if (createsTrap(np, st.off, p)) return null
     return phys
   }
   if (!allHome(st, p)) return null

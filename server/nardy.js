@@ -53,6 +53,31 @@ function allHome(st, p) {
   return true
 }
 
+// Long-nardy prime rule: can't build a solid 6+ wall that traps ALL opponent checkers.
+function createsTrap(points, off, p) {
+  const o = other(p)
+  const path = PATH[o]
+  let runStart = -1
+  for (let i = 0; i <= 24; i++) {
+    const blocked = i < 24 && ownerOf(points[path[i]]) === p
+    if (blocked) {
+      if (runStart < 0) runStart = i
+    } else {
+      if (runStart >= 0 && i - runStart >= 6) {
+        let ahead = off[o] > 0
+        for (let j = i; j < 24 && !ahead; j++)
+          if (ownerOf(points[path[j]]) === o) ahead = true
+        let behind = false
+        for (let j = 0; j < runStart && !behind; j++)
+          if (ownerOf(points[path[j]]) === o) behind = true
+        if (!ahead && behind) return true
+      }
+      runStart = -1
+    }
+  }
+  return false
+}
+
 export function destOf(st, p, from, d) {
   const t = trackIndex(p, from)
   if (t < 0) return null
@@ -61,6 +86,10 @@ export function destOf(st, p, from, d) {
     const phys = PATH[p][nt]
     const o = ownerOf(st.points[phys])
     if (o && o !== p) return null
+    const np = [...st.points]
+    np[from] -= sign(p)
+    np[phys] += sign(p)
+    if (createsTrap(np, st.off, p)) return null
     return phys
   }
   if (!allHome(st, p)) return null
