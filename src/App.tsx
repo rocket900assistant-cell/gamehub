@@ -55,7 +55,15 @@ export default function App() {
     subtitle?: string
   } | null>(null)
   const [invite, setInvite] = useState<IncomingInvite | null>(null)
-  const [profile, setProfile] = useState<PlayerProfile | null>(null)
+  // seed from the last cached profile so real values show instantly (no mock flash)
+  const [profile, setProfile] = useState<PlayerProfile | null>(() => {
+    try {
+      const raw = localStorage.getItem('gh_profile')
+      return raw ? (JSON.parse(raw) as PlayerProfile) : null
+    } catch {
+      return null
+    }
+  })
   const [nardyOnline, setNardyOnline] = useState<OnlineNardy | null>(null)
 
   useEffect(() => {
@@ -83,7 +91,14 @@ export default function App() {
     const s = getSocket()
     // re-register on every (re)connect so the server can resume an active game
     s.on('connect', doRegister)
-    const onProfile = (p: PlayerProfile) => setProfile(p)
+    const onProfile = (p: PlayerProfile) => {
+      setProfile(p)
+      try {
+        localStorage.setItem('gh_profile', JSON.stringify(p))
+      } catch {
+        // ignore quota
+      }
+    }
     s.on('profile', onProfile)
     const onFound = (m: {
       roomId: string
