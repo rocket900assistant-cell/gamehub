@@ -5,6 +5,7 @@ import {
   MessageCircle,
   RotateCcw,
   Send,
+  Timer,
   UserPlus,
   X,
 } from 'lucide-react'
@@ -19,6 +20,7 @@ import {
   roll,
   pass,
   move,
+  other,
   ownerOf,
   type NardyState,
   type NPlayer,
@@ -120,6 +122,28 @@ export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
   }
   const invite = () =>
     shareInvite(String(user.id || user.username || 'guest'))
+
+  // ── per-move timer: 1 minute per turn; running out = loss ──
+  const MOVE_MS = 60000
+  const [remaining, setRemaining] = useState(MOVE_MS)
+  const deadline = useRef(Date.now() + MOVE_MS)
+  useEffect(() => {
+    // fresh minute whenever the turn passes to the other player
+    deadline.current = Date.now() + MOVE_MS
+    setRemaining(MOVE_MS)
+  }, [s.turn])
+  useEffect(() => {
+    if (s.result) return
+    const id = setInterval(() => {
+      const left = Math.max(0, deadline.current - Date.now())
+      setRemaining(left)
+      if (left === 0) {
+        clearInterval(id)
+        setS((c) => (c.result ? c : { ...c, result: other(c.turn) }))
+      }
+    }, 250)
+    return () => clearInterval(id)
+  }, [s.turn, s.result])
 
   // bot plays (rolls, then moves); auto-pass whoever is stuck after a roll
   useEffect(() => {
@@ -244,7 +268,22 @@ export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
         {/* opponent bar */}
         <div className="mt-3 flex min-h-[44px] items-center justify-between text-white/90">
           <PlayerChip name="Бот" color="b" active={s.turn === 'b' && !s.result} off={s.off.b} />
-          <DiceRow s={s} />
+          <div className="flex items-center gap-2">
+            <DiceRow s={s} />
+            {!s.result && (
+              <span
+                className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-extrabold tabular-nums ${
+                  remaining <= 10000
+                    ? 'animate-pulse bg-danger text-white'
+                    : 'bg-black/35 text-white'
+                }`}
+              >
+                <Timer size={14} />
+                {Math.floor(remaining / 60000)}:
+                {String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0')}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* board */}
