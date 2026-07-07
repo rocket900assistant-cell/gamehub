@@ -10,6 +10,14 @@ import { StarBalance } from '../components/ui/StarBalance'
 import { comingGames, player, popularGames, resumeGames } from '../data/mock'
 import type { TgUser } from '../lib/telegram'
 import { displayName, shareInvite } from '../lib/telegram'
+import type { Profile as PlayerProfile } from '../lib/socket'
+
+// map a UI game id → the per-game Elo field in the DB profile
+const ELO_KEY: Record<string, 'chess' | 'durak' | 'nardy'> = {
+  chess: 'chess',
+  durak: 'durak',
+  backgammon: 'nardy',
+}
 
 const V = '?v=4' // cache-bust when assets change
 const gameImg: Record<string, string> = {
@@ -23,12 +31,17 @@ const gameImg: Record<string, string> = {
 
 interface HomeProps {
   user: TgUser
+  profile: PlayerProfile | null
   onOpenProfile: () => void
   onPlay: (gameId: string) => void
   resumeBanner?: ReactNode
 }
 
-export function Home({ user, onOpenProfile, onPlay, resumeBanner }: HomeProps) {
+export function Home({ user, profile, onOpenProfile, onPlay, resumeBanner }: HomeProps) {
+  const eloFor = (id: string, fallback: number) => {
+    const key = ELO_KEY[id]
+    return profile && key ? profile.elo[key] : fallback
+  }
   return (
     <div className="space-y-6">
       <AppHeader />
@@ -47,7 +60,7 @@ export function Home({ user, onOpenProfile, onPlay, resumeBanner }: HomeProps) {
             </p>
           </div>
         </button>
-        <StarBalance amount={player.balance} />
+        <StarBalance amount={profile?.balance ?? player.balance} />
       </div>
 
       <StarPromoBanner />
@@ -70,7 +83,7 @@ export function Home({ user, onOpenProfile, onPlay, resumeBanner }: HomeProps) {
                 </div>
                 <div className="p-3.5">
                   <p className="font-bold leading-tight">{g.name}</p>
-                  <p className="mt-0.5 text-xs text-muted">Твой Elo {g.elo}</p>
+                  <p className="mt-0.5 text-xs text-muted">Твой Elo {eloFor(g.id, g.elo)}</p>
                 </div>
               </Card>
             </button>
@@ -93,7 +106,7 @@ export function Home({ user, onOpenProfile, onPlay, resumeBanner }: HomeProps) {
               </div>
               <div className="flex-1 px-4">
                 <p className="font-bold leading-tight">{g.name}</p>
-                <p className="mt-0.5 text-xs text-muted">Твой Elo {g.elo}</p>
+                <p className="mt-0.5 text-xs text-muted">Твой Elo {eloFor(g.id, g.elo)}</p>
               </div>
               <ChevronRight size={18} className="mr-4 text-muted" />
             </Card>

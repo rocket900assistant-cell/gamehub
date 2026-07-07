@@ -386,6 +386,7 @@ export default function App() {
                 {tab === 'games' && (
                   <Home
                     user={user}
+                    profile={profile}
                     onOpenProfile={() => setTab('profile')}
                     onPlay={(id) => {
                       if (id === 'chess') setSub('chess-setup')
