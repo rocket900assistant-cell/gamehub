@@ -24,7 +24,7 @@ import {
   registerUser,
   type IncomingInvite,
   type MatchConfig,
-  type Profile,
+  type Profile as PlayerProfile,
 } from './lib/socket'
 
 type SubScreen =
@@ -54,7 +54,7 @@ export default function App() {
     label?: string
   } | null>(null)
   const [invite, setInvite] = useState<IncomingInvite | null>(null)
-  const [profile, setProfile] = useState<Profile | null>(null)
+  const [profile, setProfile] = useState<PlayerProfile | null>(null)
 
   useEffect(() => {
     const u = initTelegram()
@@ -77,7 +77,7 @@ export default function App() {
     })
 
     const s = getSocket()
-    const onProfile = (p: Profile) => setProfile(p)
+    const onProfile = (p: PlayerProfile) => setProfile(p)
     s.on('profile', onProfile)
     const onFound = (m: {
       roomId: string
