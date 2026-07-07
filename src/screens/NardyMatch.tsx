@@ -446,6 +446,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
             s={s}
             targets={targets}
             movers={movers}
+            flip={myColor === 'b'}
             onTapPoint={tapPoint}
             onTapOff={tapOff}
           />
@@ -701,19 +702,21 @@ function Board({
   s,
   targets,
   movers,
+  flip,
   onTapPoint,
   onTapOff,
 }: {
   s: NardyState
   targets: Map<number | 'off', number[]>
   movers: { id: number; fx: number; fy: number; tx: number; ty: number; white: boolean }[]
+  flip?: boolean
   onTapPoint: (p: number) => void
   onTapOff: () => void
 }) {
   return (
     <div
       className="relative w-full overflow-hidden rounded-xl shadow-[0_10px_28px_rgba(0,0,0,0.5)]"
-      style={{ aspectRatio: '1448 / 1086' }}
+      style={{ aspectRatio: '1448 / 1086', transform: flip ? 'rotate(180deg)' : undefined }}
     >
       <img
         src="/assets/nardy/board.jpg"
