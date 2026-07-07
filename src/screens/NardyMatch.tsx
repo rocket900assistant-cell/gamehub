@@ -479,15 +479,19 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
           />
         </div>
 
-        {/* roll button under the board */}
-        {yourTurn && s.awaitingRoll && (
+        {/* action / status slot — fixed height so the layout never jumps */}
+        {yourTurn && s.awaitingRoll ? (
           <button
             onClick={doRoll}
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-base font-extrabold text-[#4a2f00] shadow-[0_6px_18px_rgba(0,0,0,0.45)] active:scale-[0.98]"
+            className="mb-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl text-base font-extrabold text-[#4a2f00] shadow-[0_6px_18px_rgba(0,0,0,0.45)] active:scale-[0.98]"
             style={{ background: 'linear-gradient(180deg,#f6dc9f,#d9b25e)' }}
           >
             <span className="text-xl leading-none">🎲</span> Бросить кубики
           </button>
+        ) : (
+          <div className="mb-2 flex h-[52px] w-full items-center justify-center rounded-2xl bg-black/25 text-base font-bold text-white/80">
+            {status || ' '}
+          </div>
         )}
 
         {/* your bar */}
@@ -499,9 +503,6 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
             off={s.off[myColor]}
             elo={isOnline ? online!.myElo : undefined}
           />
-          <span className="rounded-full bg-black/30 px-3 py-1 text-xs font-medium text-white/90 backdrop-blur">
-            {status}
-          </span>
         </div>
 
         {/* bottom toolbar */}
