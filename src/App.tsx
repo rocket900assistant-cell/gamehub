@@ -91,6 +91,7 @@ export default function App() {
       minutes: number
       opponent: { name: string; elo: number }
       game?: string
+      elo?: number
       fen?: string
       clocks?: { w: number; b: number }
       nardy?: OnlineNardy['initial']
@@ -103,6 +104,8 @@ export default function App() {
           roomId: m.roomId,
           color: m.color,
           opponentName: m.opponent?.name ?? 'Соперник',
+          opponentElo: m.opponent?.elo ?? 1200,
+          myElo: m.elo ?? 1200,
           initial: m.nardy,
           deadline: m.deadline ?? Date.now() + 120000,
         })

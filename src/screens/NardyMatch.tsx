@@ -32,6 +32,8 @@ export interface OnlineNardy {
   roomId: string
   color: NPlayer
   opponentName: string
+  opponentElo: number
+  myElo: number
   initial: NardyState
   deadline: number
 }
@@ -445,6 +447,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
             color={other(myColor)}
             active={s.turn === other(myColor) && !s.result}
             off={s.off[other(myColor)]}
+            elo={isOnline ? online!.opponentElo : undefined}
           />
           <div className="flex items-center gap-2">
             <DiceRow s={s} />
@@ -494,6 +497,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
             color={myColor}
             active={yourTurn}
             off={s.off[myColor]}
+            elo={isOnline ? online!.myElo : undefined}
           />
           <span className="rounded-full bg-black/30 px-3 py-1 text-xs font-medium text-white/90 backdrop-blur">
             {status}
@@ -639,11 +643,13 @@ function PlayerChip({
   color,
   active,
   off,
+  elo,
 }: {
   name: string
   color: NPlayer
   active: boolean
   off: number
+  elo?: number
 }) {
   return (
     <div
@@ -656,6 +662,11 @@ function PlayerChip({
         style={{ background: color === 'w' ? '#f2ead9' : '#26262a' }}
       />
       <span className="text-xs font-bold text-white">{name}</span>
+      {elo != null && (
+        <span className="rounded-full bg-white/15 px-1.5 text-[10px] font-bold text-gold-light">
+          {elo}
+        </span>
+      )}
       {off > 0 && <span className="text-[11px] font-semibold text-white/70">вышло {off}</span>}
     </div>
   )

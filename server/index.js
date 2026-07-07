@@ -82,7 +82,7 @@ function addPlayer(room, userId) {
     userId,
     tgId: userTg.get(userId) ?? null,
     name: u?.name ?? 'Игрок',
-    elo: u?.elo ?? 1200,
+    elo: u?.elos?.[room.game] ?? u?.elo ?? 1200,
     color: room.players.length === 0 ? 'w' : 'b',
   })
 }
@@ -127,6 +127,7 @@ function startRoom(room) {
         game: 'nardy',
         color: p.color,
         minutes: room.minutes,
+        elo: p.elo,
         opponent: { name: opp.name, elo: opp.elo },
         nardy: room.nardy,
         deadline: room.deadline,
@@ -248,6 +249,7 @@ io.on('connection', (socket) => {
           game: 'nardy',
           color: me.color,
           minutes: room.minutes,
+          elo: me.elo,
           opponent: { name: opp?.name, elo: opp?.elo },
           nardy: room.nardy,
           deadline: room.deadline,
@@ -276,7 +278,14 @@ io.on('connection', (socket) => {
             : name,
           photoUrl: verified?.photo_url ?? photoUrl,
         })
-        if (row) socket.emit('profile', dbProfile(row))
+        if (row) {
+          users.set(userId, {
+            ...users.get(userId),
+            name: row.name ?? name,
+            elos: { chess: row.elo_chess, durak: row.elo_durak, nardy: row.elo_nardy },
+          })
+          socket.emit('profile', dbProfile(row))
+        }
       } catch (e) {
         console.error('[db] upsert failed:', e.message)
       }
