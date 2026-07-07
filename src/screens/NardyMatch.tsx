@@ -70,9 +70,25 @@ function clearNardySave() {
 /** Heal an impossible state (no dice AND not awaiting a roll) → let that player roll. */
 function normalizeState(st: NardyState): NardyState {
   if (!st.result && !st.awaitingRoll && st.dice.length === 0) {
-    return { ...st, awaitingRoll: true, rolled: null }
+    return { ...st, awaitingRoll: true, rolled: null, movedFromHead: false }
   }
   return st
+}
+
+/** Sanity-check a restored save; a corrupt one is discarded so we start fresh. */
+function validSave(sv: NardySave | null): sv is NardySave {
+  const st = sv?.s
+  if (!st || !Array.isArray(st.points) || st.points.length !== 24) return false
+  if (!st.off || (st.turn !== 'w' && st.turn !== 'b')) return false
+  if (!Array.isArray(st.dice)) return false
+  let w = st.off.w ?? 0
+  let b = st.off.b ?? 0
+  for (const v of st.points) {
+    if (typeof v !== 'number') return false
+    if (v > 0) w += v
+    else if (v < 0) b += -v
+  }
+  return w === 15 && b === 15
 }
 
 // screen layout: physical point index for each board slot
@@ -111,7 +127,15 @@ function reachTargets(st: NardyState, from: number): Map<number | 'off', number[
 
 export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
   const MOVE_MS = 60000
-  const [saved] = useState(() => (resume ? readNardySave() : null))
+  const [saved] = useState(() => {
+    if (!resume) return null
+    const sv = readNardySave()
+    if (!validSave(sv)) {
+      clearNardySave()
+      return null
+    }
+    return sv
+  })
   const [s, setS] = useState<NardyState>(() => {
     if (saved) {
       // move clock ran out while the app was closed → that player loses
