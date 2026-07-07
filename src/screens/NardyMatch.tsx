@@ -213,7 +213,6 @@ export function NardyMatch({ user, config, onExit }: NardyMatchProps) {
         <div className="-mx-3 my-2 flex flex-1 items-center justify-center px-1.5">
           <Board
             s={s}
-            sel={sel}
             targets={targets}
             onTapPoint={tapPoint}
             onTapOff={tapOff}
@@ -459,13 +458,11 @@ const CHECK = {
 
 function Board({
   s,
-  sel,
   targets,
   onTapPoint,
   onTapOff,
 }: {
   s: NardyState
-  sel: number | null
   targets: Map<number | 'off', number[]>
   onTapPoint: (p: number) => void
   onTapOff: () => void
