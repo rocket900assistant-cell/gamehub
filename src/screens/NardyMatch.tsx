@@ -153,43 +153,55 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
   const cfg = saved?.config ?? config
   const bank = cfg && !cfg.free ? cfg.stake * 2 : 0
 
-  // "leaving" checkers: fade a checker out from the END of a stack when it moves,
-  // so it's obvious the top (exposed) checker is the one being taken.
-  type Ghost = { id: number; x: number; top: boolean; y: number; white: boolean }
-  const [ghosts, setGhosts] = useState<Ghost[]>([])
+  // Move animation: a checker slides from the EXPOSED end (tip) of its source
+  // stack to where it lands — so it's clear it's taken from that end, not a teleport.
+  type Mover = { id: number; fx: number; fy: number; tx: number; ty: number; white: boolean }
+  const [movers, setMovers] = useState<Mover[]>([])
   const prevPts = useRef<number[]>(s.points)
-  const ghostId = useRef(0)
+  const prevOff = useRef<{ w: number; b: number }>(s.off)
+  const moverId = useRef(0)
   useEffect(() => {
     const prev = prevPts.current
     const cur = s.points
-    const born: Ghost[] = []
+    const poff = prevOff.current
+    let src = -1
+    let dst = -1
+    let white = true
     for (let p = 0; p < 24; p++) {
-      const a = prev[p]
-      const b = cur[p]
-      if (!a) continue
-      const gone = Math.abs(a) - Math.abs(b)
-      if (gone <= 0 || (b !== 0 && Math.sign(a) !== Math.sign(b))) continue
-      const cntPrev = Math.abs(a)
-      const { x, top } = POS[p]
-      const stepPrev = cntPrev > 5 ? STACK_SPAN / 14 : STEP
-      for (let r = 0; r < gone; r++) {
-        const k = cntPrev - 1 - r
-        born.push({
-          id: ghostId.current++,
-          x,
-          top,
-          y: top ? TOP_Y0 + k * stepPrev : BOT_Y0 - k * stepPrev,
-          white: a > 0,
-        })
+      if (Math.abs(cur[p]) < Math.abs(prev[p])) {
+        src = p
+        white = prev[p] > 0
       }
+      if (Math.abs(cur[p]) > Math.abs(prev[p])) dst = p
     }
+    const offW = s.off.w > poff.w
+    const offB = s.off.b > poff.b
     prevPts.current = cur
-    if (born.length) {
-      setGhosts((g) => [...g, ...born])
-      const ids = new Set(born.map((n) => n.id))
-      setTimeout(() => setGhosts((g) => g.filter((x) => !ids.has(x.id))), 520)
+    prevOff.current = s.off
+    if (src < 0) return
+    const stepFor = (c: number) => (c > 5 ? STACK_SPAN / 14 : STEP)
+    const slotY = (p: number, k: number, c: number) =>
+      POS[p].top ? TOP_Y0 + k * stepFor(c) : BOT_Y0 - k * stepFor(c)
+    const sCnt = Math.abs(prev[src])
+    const fx = POS[src].x
+    const fy = slotY(src, sCnt - 1, sCnt)
+    let tx: number
+    let ty: number
+    if (dst >= 0) {
+      const dCnt = Math.abs(cur[dst])
+      tx = POS[dst].x
+      ty = slotY(dst, dCnt - 1, dCnt)
+    } else if (offW || offB) {
+      const oc = offW ? s.off.w : s.off.b
+      tx = TRAY_X
+      ty = 11 + (oc - 1) * (oc > 1 ? Math.min(5.4, 74 / (oc - 1)) : 0)
+    } else {
+      return
     }
-  }, [s.points])
+    const id = moverId.current++
+    setMovers((m) => [...m, { id, fx, fy, tx, ty, white }])
+    setTimeout(() => setMovers((m) => m.filter((x) => x.id !== id)), 300)
+  }, [s.points, s.off])
 
   function sendChat() {
     const t = chatInput.trim()
@@ -386,7 +398,7 @@ export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
           <Board
             s={s}
             targets={targets}
-            ghosts={ghosts}
+            movers={movers}
             onTapPoint={tapPoint}
             onTapOff={tapOff}
           />
@@ -636,13 +648,13 @@ const CHECK = {
 function Board({
   s,
   targets,
-  ghosts,
+  movers,
   onTapPoint,
   onTapOff,
 }: {
   s: NardyState
   targets: Map<number | 'off', number[]>
-  ghosts: { id: number; x: number; top: boolean; y: number; white: boolean }[]
+  movers: { id: number; fx: number; fy: number; tx: number; ty: number; white: boolean }[]
   onTapPoint: (p: number) => void
   onTapOff: () => void
 }) {
@@ -690,22 +702,26 @@ function Board({
         )
       })}
 
-      {/* leaving checkers — lift + fade from the EXPOSED end of the stack */}
-      <style>{`@keyframes nardyLeaveTop{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-160%) scale(1.5)}}@keyframes nardyLeaveBot{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,60%) scale(1.5)}}`}</style>
-      {ghosts.map((g) => (
+      {/* sliding checker — travels from the tip of its source stack to where it lands */}
+      <style>{`@keyframes nardyMove{to{left:var(--tx);top:var(--ty)}}`}</style>
+      {movers.map((m) => (
         <img
-          key={g.id}
-          src={g.white ? CHECK.w : CHECK.b}
+          key={m.id}
+          src={m.white ? CHECK.w : CHECK.b}
           alt=""
           draggable={false}
-          className="pointer-events-none absolute z-30"
-          style={{
-            left: `${g.x}%`,
-            top: `${g.y}%`,
-            width: `${CD}%`,
-            transform: 'translate(-50%,-50%)',
-            animation: `${g.top ? 'nardyLeaveTop' : 'nardyLeaveBot'} 500ms ease-out forwards`,
-          }}
+          className="pointer-events-none absolute z-40"
+          style={
+            {
+              left: `${m.fx}%`,
+              top: `${m.fy}%`,
+              width: `${CD}%`,
+              transform: 'translate(-50%,-50%)',
+              '--tx': `${m.tx}%`,
+              '--ty': `${m.ty}%`,
+              animation: 'nardyMove 260ms ease-out forwards',
+            } as React.CSSProperties
+          }
         />
       ))}
 
