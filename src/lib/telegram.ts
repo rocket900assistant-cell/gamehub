@@ -21,6 +21,7 @@ interface TelegramWebApp {
   onEvent?: (event: string, cb: () => void) => void
   viewportStableHeight?: number
   viewportHeight?: number
+  initData?: string
   initDataUnsafe?: {
     start_param?: string
     user?: {
@@ -68,6 +69,11 @@ export function shareInvite(refCode: string) {
   const wa = getWebApp()
   if (wa?.openTelegramLink) wa.openTelegramLink(shareUrl)
   else window.open(shareUrl, '_blank')
+}
+
+/** Raw signed initData string — sent to the server to verify the user's identity. */
+export function getInitData(): string {
+  return getWebApp()?.initData ?? ''
 }
 
 /** The `startapp=` deep-link parameter the app was opened with (if any). */

@@ -11,8 +11,28 @@ export function getSocket(): Socket {
   return socket
 }
 
-export function registerUser(u: { userId: string; name: string; elo: number }) {
+export function registerUser(u: {
+  userId: string
+  name: string
+  elo: number
+  initData?: string
+  username?: string
+  photoUrl?: string
+}) {
   getSocket().emit('register', u)
+}
+
+/** Persisted player profile from the server DB. */
+export interface Profile {
+  tgId: number
+  name: string
+  username?: string
+  photoUrl?: string
+  elo: { chess: number; durak: number; nardy: number }
+  balance: number
+  games: number
+  wins: number
+  losses: number
 }
 
 export interface Opponent {

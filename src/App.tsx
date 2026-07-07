@@ -13,12 +13,18 @@ import { DurakSetup, type DurakConfig } from './screens/DurakSetup'
 import { NardyMatch, hasNardySave } from './screens/NardyMatch'
 import { NardySetup, type NardyConfig } from './screens/NardySetup'
 import { Matchmaking } from './screens/Matchmaking'
-import { initTelegram, displayName, type TgUser } from './lib/telegram'
+import {
+  initTelegram,
+  displayName,
+  getInitData,
+  type TgUser,
+} from './lib/telegram'
 import {
   getSocket,
   registerUser,
   type IncomingInvite,
   type MatchConfig,
+  type Profile,
 } from './lib/socket'
 
 type SubScreen =
@@ -48,6 +54,7 @@ export default function App() {
     label?: string
   } | null>(null)
   const [invite, setInvite] = useState<IncomingInvite | null>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
 
   useEffect(() => {
     const u = initTelegram()
@@ -60,9 +67,18 @@ export default function App() {
       localStorage.setItem('gh_device', deviceId)
     }
     const userId = `${u.id ? u.id : 'guest'}_${deviceId}`
-    registerUser({ userId, name: displayName(u), elo: 2350 })
+    registerUser({
+      userId,
+      name: displayName(u),
+      elo: 2350,
+      initData: getInitData(),
+      username: u.username,
+      photoUrl: u.photoUrl,
+    })
 
     const s = getSocket()
+    const onProfile = (p: Profile) => setProfile(p)
+    s.on('profile', onProfile)
     const onFound = (m: {
       roomId: string
       color: 'w' | 'b'
@@ -80,6 +96,7 @@ export default function App() {
     s.on('match:found', onFound)
     s.on('invite:incoming', onInvite)
     return () => {
+      s.off('profile', onProfile)
       s.off('match:found', onFound)
       s.off('invite:incoming', onInvite)
     }
@@ -334,7 +351,11 @@ export default function App() {
                 {tab === 'profile' && (
                   <>
                     {banners}
-                    <Profile user={user} onOpenFriends={() => setSub('friends')} />
+                    <Profile
+                      user={user}
+                      profile={profile}
+                      onOpenFriends={() => setSub('friends')}
+                    />
                   </>
                 )}
               </>
