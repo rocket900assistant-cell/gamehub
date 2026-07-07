@@ -3,6 +3,7 @@ import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
 import { initDb, upsertUser, getUser, recordResult, dbEnabled } from './db.js'
 import { verifyInitData } from './telegram.js'
+import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther } from './nardy.js'
 
 const PORT = process.env.PORT || 3001
 
@@ -49,18 +50,25 @@ function eloDelta(myElo, oppElo, won) {
 
 function createRoom(game, minutes) {
   const id = uid()
-  rooms.set(id, {
+  const room = {
     id,
     game,
     minutes,
-    chess: new Chess(),
-    players: [], // [{ userId, name, elo, color }]
-    clocks: { w: minutes * 60000, b: minutes * 60000 },
-    lastTick: null,
+    players: [], // [{ userId, tgId, name, elo, color }]
     started: false,
     over: false,
     timer: null,
-  })
+  }
+  if (game === 'nardy') {
+    room.nardy = createNardy()
+    room.moveMs = (minutes || 2) * 60000 // per-turn clock (default 2 min)
+    room.deadline = 0
+  } else {
+    room.chess = new Chess()
+    room.clocks = { w: minutes * 60000, b: minutes * 60000 }
+    room.lastTick = null
+  }
+  rooms.set(id, room)
   return id
 }
 
@@ -105,11 +113,23 @@ function startRoom(room) {
   }
   room.started = true
   room.startedAt = Date.now()
-  room.lastTick = Date.now()
+  if (room.game === 'nardy') room.deadline = Date.now() + room.moveMs
+  else room.lastTick = Date.now()
   for (const p of room.players) {
     const opp = room.players.find((x) => x.userId !== p.userId)
     const sid = sidOf(p.userId)
-    if (sid)
+    if (!sid) continue
+    if (room.game === 'nardy') {
+      io.to(sid).emit('match:found', {
+        roomId: room.id,
+        game: 'nardy',
+        color: p.color,
+        minutes: room.minutes,
+        opponent: { name: opp.name, elo: opp.elo },
+        nardy: room.nardy,
+        deadline: room.deadline,
+      })
+    } else {
       io.to(sid).emit('match:found', {
         roomId: room.id,
         color: p.color,
@@ -118,12 +138,20 @@ function startRoom(room) {
         fen: room.chess.fen(),
         clocks: room.clocks,
       })
+    }
   }
   room.timer = setInterval(() => tick(room), 250)
 }
 
 function tick(room) {
   if (room.over || !room.started) return
+  if (room.game === 'nardy') {
+    // per-turn clock: whoever is to move loses when it runs out
+    if (room.deadline && Date.now() >= room.deadline) {
+      endGame(room, nardyOther(room.nardy.turn), 'time')
+    }
+    return
+  }
   const now = Date.now()
   const dt = now - room.lastTick
   room.lastTick = now
@@ -293,6 +321,48 @@ io.on('connection', (socket) => {
         endGame(room, room.chess.turn() === 'w' ? 'b' : 'w', 'mate')
       else endGame(room, null, 'draw')
     }
+  })
+
+  // ── Nardy (online) ──
+  const myColor = (room) =>
+    room.players.find((p) => p.userId === socketUser.get(socket.id))?.color
+
+  socket.on('nardy:roll', ({ roomId }) => {
+    const room = rooms.get(roomId)
+    if (!room || room.over || room.game !== 'nardy') return
+    if (myColor(room) !== room.nardy.turn || !room.nardy.awaitingRoll) return
+    const before = room.nardy.turn
+    room.nardy = nardyRoll(room.nardy)
+    if (room.nardy.turn !== before) room.deadline = Date.now() + room.moveMs
+    emitToRoom(room, 'nardy:state', { nardy: room.nardy, deadline: room.deadline })
+    if (room.nardy.result) endGame(room, room.nardy.result, 'win')
+  })
+
+  socket.on('nardy:move', ({ roomId, from, seq }) => {
+    const room = rooms.get(roomId)
+    if (!room || room.over || room.game !== 'nardy') return
+    const color = myColor(room)
+    if (color !== room.nardy.turn || !Array.isArray(seq) || seq.length === 0) return
+    // apply the dice sequence to one checker, validating each hop server-side
+    let st = room.nardy
+    let pos = from
+    for (const d of seq) {
+      const de = nardyDest(st, color, pos, d)
+      const nx = nardyMove(st, pos, d)
+      if (nx === st) {
+        // illegal (or out of sync) → re-send authoritative state, ignore
+        emitToRoom(room, 'nardy:state', { nardy: room.nardy, deadline: room.deadline })
+        return
+      }
+      st = nx
+      if (de === 'off' || de === null) break
+      pos = de
+    }
+    const turnChanged = st.turn !== color || !!st.result
+    room.nardy = st
+    if (turnChanged && !st.result) room.deadline = Date.now() + room.moveMs
+    emitToRoom(room, 'nardy:state', { nardy: room.nardy, deadline: room.deadline })
+    if (room.nardy.result) endGame(room, room.nardy.result, 'win')
   })
 
   socket.on('chat', ({ roomId, text }) => {
