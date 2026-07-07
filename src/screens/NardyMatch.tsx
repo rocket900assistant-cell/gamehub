@@ -126,7 +126,7 @@ function reachTargets(st: NardyState, from: number): Map<number | 'off', number[
 }
 
 export function NardyMatch({ user, config, resume, onExit }: NardyMatchProps) {
-  const MOVE_MS = 60000
+  const MOVE_MS = 120000
   const [saved] = useState(() => {
     if (!resume) return null
     const sv = readNardySave()
