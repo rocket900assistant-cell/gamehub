@@ -437,7 +437,7 @@ function Die({ n }: { n: number }) {
 
 // ── board rendering (image board + image checkers positioned by %) ──
 // x-centre (% of board width) of the 12 point columns (6 left, 6 right)
-const XCOLS = [8.7, 15.0, 21.3, 27.6, 33.9, 40.2, 53.9, 59.7, 65.4, 71.2, 77.0, 82.7]
+const XCOLS = [9.4, 15.6, 21.8, 28.0, 34.2, 40.4, 54.1, 60.0, 65.9, 71.8, 77.7, 83.6]
 // physical point -> screen slot
 const POS: Record<number, { x: number; top: boolean }> = {}
 TOP.forEach((p, i) => {
@@ -447,10 +447,10 @@ BOTTOM.forEach((p, i) => {
   POS[p] = { x: XCOLS[i], top: false }
 })
 const CD = 7.2 // checker diameter, % of board width
-const STEP = 7.4 // vertical gap between stacked checkers, % of board height
-const STACK_SPAN = 36 // max height a stack may occupy (compresses when many)
-const TOP_Y0 = 13
-const BOT_Y0 = 87
+const STEP = 7.0 // vertical gap between stacked checkers, % of board height
+const STACK_SPAN = 30 // max height a stack may occupy (compresses when many)
+const TOP_Y0 = 11.5 // first checker centre from the top (triangle base ≈ 6%)
+const BOT_Y0 = 88.5 // first checker centre from the bottom (base ≈ 94%)
 const CHECK = {
   w: '/assets/nardy/checker-light.png',
   b: '/assets/nardy/checker-dark.png',
