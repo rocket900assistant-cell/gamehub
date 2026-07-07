@@ -622,6 +622,8 @@ BOTTOM.forEach((p, i) => {
   POS[p] = { x: XCOLS[i], top: false }
 })
 const CD = 7.2 // checker diameter, % of board width
+const TRAY_X = 91 // bear-off tray channel centre (% of board width)
+const TRAY_CD = 6.3 // borne-off checker width — fits inside the tray channel
 const STEP = 7.0 // vertical gap between stacked checkers, % of board height
 const STACK_SPAN = 30 // max height a stack may occupy (compresses when many)
 const TOP_Y0 = 11.5 // first checker centre from the top (triangle base ≈ 6%)
@@ -707,10 +709,10 @@ function Board({
         />
       ))}
 
-      {/* white borne-off checkers in the tray (all shown, compressed to fit) */}
+      {/* white borne-off checkers in the tray (centered in the channel, all shown) */}
       {s.off.w > 0 &&
         Array.from({ length: s.off.w }).map((_, k) => {
-          const trayStep = s.off.w > 1 ? Math.min(5.5, 72 / (s.off.w - 1)) : 0
+          const trayStep = s.off.w > 1 ? Math.min(5.4, 74 / (s.off.w - 1)) : 0
           return (
             <img
               key={`ow${k}`}
@@ -719,9 +721,9 @@ function Board({
               draggable={false}
               className="absolute"
               style={{
-                left: '92.7%',
-                top: `${14 + k * trayStep}%`,
-                width: `${CD}%`,
+                left: `${TRAY_X}%`,
+                top: `${11 + k * trayStep}%`,
+                width: `${TRAY_CD}%`,
                 transform: 'translate(-50%,-50%)',
                 zIndex: k,
               }}
