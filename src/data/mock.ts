@@ -82,16 +82,8 @@ export interface Friend {
   elo: number
 }
 
-export const friends: Friend[] = [
-  { id: '1', name: 'Дмитрий', username: 'dmitry', online: true, elo: 2280 },
-  { id: '2', name: 'Мария', username: 'maria_k', online: true, elo: 1950 },
-  { id: '3', name: 'Иван', username: 'ivan99', online: false, elo: 1720 },
-  { id: '4', name: 'Алексей', username: 'alex_ch', online: true, elo: 2110 },
-  { id: '5', name: 'Ольга', username: 'olga_p', online: false, elo: 1580 },
-  { id: '6', name: 'Тимур', username: 'timur_x', online: true, elo: 1990 },
-  { id: '7', name: 'Никита', username: 'nikita7', online: false, elo: 2040 },
-  { id: '8', name: 'Егор', username: 'egor_g', online: false, elo: 1830 },
-]
+// Empty by default — the user's real friends live in localStorage (added by @username).
+export const friends: Friend[] = []
 
 export interface ProfileMenuItem {
   id: string

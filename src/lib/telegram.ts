@@ -48,12 +48,12 @@ export function openStarsBot() {
 
 /** Deep link that opens the mini app straight into a specific game room. */
 export function makeGameLink(gameId: string): string {
-  return `https://t.me/${BOT_USERNAME}/app?startapp=${gameId}`
+  return `https://t.me/${BOT_USERNAME}?startapp=${gameId}`
 }
 
 /** Deep link that drops a friend straight into a specific game room (lobby). */
 export function makeJoinLink(roomId: string): string {
-  return `https://t.me/${BOT_USERNAME}/app?startapp=join_${roomId}`
+  return `https://t.me/${BOT_USERNAME}?startapp=join_${roomId}`
 }
 
 /** Opens Telegram's share sheet with a room-join link. */
@@ -76,7 +76,7 @@ export function shareGameLink(gameId: string, text: string) {
 
 /** Opens Telegram's share sheet with a referral link to the whole app. */
 export function shareInvite(refCode: string) {
-  const url = `https://t.me/${BOT_USERNAME}/app?startapp=ref_${refCode}`
+  const url = `https://t.me/${BOT_USERNAME}?startapp=ref_${refCode}`
   const text =
     'Играй со мной в GameHub — шахматы, дурак и нарды. Заходи, и мы оба получим бонус GRAM 🎁'
   const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`

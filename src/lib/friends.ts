@@ -1,6 +1,6 @@
 import { friends as seed, type Friend } from '../data/mock'
 
-const KEY = 'gh_friends'
+const KEY = 'gh_friends2' // bumped to drop the old demo friends cached under gh_friends
 
 /** The user's friends, persisted in localStorage (shared across all screens). */
 export function getFriends(): Friend[] {

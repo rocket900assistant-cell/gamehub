@@ -154,6 +154,11 @@ export function NewChessGame({
           <section>
             <p className="mb-2 text-sm font-bold">Пригласить из друзей</p>
             <Card className="divide-y divide-line/70 p-0">
+              {friends.length === 0 && (
+                <p className="p-4 text-center text-sm text-muted">
+                  Пока нет друзей. Добавь их в профиле или пригласи по ссылке ниже.
+                </p>
+              )}
               {visibleFriends.map((f) => {
                 const isInvited = invited.has(f.id)
                 return (
