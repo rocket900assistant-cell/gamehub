@@ -4,6 +4,7 @@ import { Chess } from 'chess.js'
 import { initDb, upsertUser, getUser, recordResult, dbEnabled } from './db.js'
 import { verifyInitData } from './telegram.js'
 import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther } from './nardy.js'
+import * as durak from './durak.js'
 
 const PORT = process.env.PORT || 3001
 
@@ -65,6 +66,10 @@ function createRoom(game, minutes) {
     room.nardy = createNardy()
     room.moveMs = (minutes || 2) * 60000 // per-turn clock (default 2 min)
     room.deadline = 0
+  } else if (game === 'durak') {
+    room.durak = durak.createGame({ deck: minutes || 36 }) // minutes reused as deck size
+    room.moveMs = 60000 // per-action clock
+    room.deadline = 0
   } else {
     room.chess = new Chess()
     room.clocks = { w: minutes * 60000, b: minutes * 60000 }
@@ -104,6 +109,37 @@ function emitToRoom(room, event, payload) {
   }
 }
 
+// ── Durak (online) helpers ──
+const durakSeat = (room, userId) => (room.players[0]?.userId === userId ? 'you' : 'opp')
+
+function durakBroadcast(room) {
+  for (const p of room.players) {
+    const sid = sidOf(p.userId)
+    if (sid)
+      io.to(sid).emit('durak:state', {
+        durak: durak.viewFor(room.durak, durakSeat(room, p.userId)),
+        deadline: room.deadline,
+      })
+  }
+}
+
+/** Apply a committed Durak state: reset clock, broadcast views, end on result. */
+function durakCommit(room, next) {
+  if (!next || next === room.durak) return
+  room.durak = next
+  room.deadline = Date.now() + room.moveMs
+  durakBroadcast(room)
+  if (room.durak.result) durakFinish(room)
+}
+
+function durakFinish(room) {
+  const loserSeat = room.durak.result?.loser
+  if (loserSeat == null) return endGame(room, null, 'draw')
+  const loserId = loserSeat === 'you' ? room.players[0]?.userId : room.players[1]?.userId
+  const winner = room.players.find((p) => p.userId !== loserId)
+  endGame(room, winner ? winner.color : null, 'durak')
+}
+
 const ABORT_WINDOW_MS = 10000
 
 function startRoom(room) {
@@ -115,13 +151,24 @@ function startRoom(room) {
   }
   room.started = true
   room.startedAt = Date.now()
-  if (room.game === 'nardy') room.deadline = Date.now() + room.moveMs
+  if (room.game === 'nardy' || room.game === 'durak') room.deadline = Date.now() + room.moveMs
   else room.lastTick = Date.now()
   for (const p of room.players) {
     const opp = room.players.find((x) => x.userId !== p.userId)
     const sid = sidOf(p.userId)
     if (!sid) continue
-    if (room.game === 'nardy') {
+    if (room.game === 'durak') {
+      io.to(sid).emit('match:found', {
+        roomId: room.id,
+        game: 'durak',
+        seat: durakSeat(room, p.userId),
+        minutes: room.minutes,
+        elo: p.elo,
+        opponent: { name: opp.name, elo: opp.elo },
+        durak: durak.viewFor(room.durak, durakSeat(room, p.userId)),
+        deadline: room.deadline,
+      })
+    } else if (room.game === 'nardy') {
       io.to(sid).emit('match:found', {
         roomId: room.id,
         game: 'nardy',
@@ -152,6 +199,12 @@ function tick(room) {
     // per-turn clock: whoever is to move loses when it runs out
     if (room.deadline && Date.now() >= room.deadline) {
       endGame(room, nardyOther(room.nardy.turn), 'time')
+    }
+    return
+  }
+  if (room.game === 'durak') {
+    if (room.deadline && Date.now() >= room.deadline) {
+      durakCommit(room, durak.resign(room.durak, room.durak.turn)) // player to act loses
     }
     return
   }
@@ -256,6 +309,22 @@ io.on('connection', (socket) => {
         })
         // also push live state so an already-mounted board resyncs
         socket.emit('nardy:state', { nardy: room.nardy, deadline: room.deadline })
+      } else if (room.game === 'durak') {
+        const seat = durakSeat(room, userId)
+        socket.emit('match:found', {
+          roomId: room.id,
+          game: 'durak',
+          seat,
+          minutes: room.minutes,
+          elo: me.elo,
+          opponent: { name: opp?.name, elo: opp?.elo },
+          durak: durak.viewFor(room.durak, seat),
+          deadline: room.deadline,
+        })
+        socket.emit('durak:state', {
+          durak: durak.viewFor(room.durak, seat),
+          deadline: room.deadline,
+        })
       } else {
         socket.emit('match:found', {
           roomId: room.id,
@@ -422,6 +491,45 @@ io.on('connection', (socket) => {
     if (turnChanged && !st.result) room.deadline = Date.now() + room.moveMs
     emitToRoom(room, 'nardy:state', { nardy: room.nardy, deadline: room.deadline })
     if (room.nardy.result) endGame(room, room.nardy.result, 'win')
+  })
+
+  // ── Durak (online) actions ──
+  const durakGuard = (roomId) => {
+    const room = rooms.get(roomId)
+    if (!room || room.over || room.game !== 'durak') return null
+    if (!room.players.some((p) => p.userId === socketUser.get(socket.id))) return null
+    return room
+  }
+  socket.on('durak:attack', ({ roomId, card }) => {
+    const room = durakGuard(roomId)
+    if (!room) return
+    if (durakSeat(room, socketUser.get(socket.id)) !== room.durak.attacker) return
+    durakCommit(room, durak.playAttack(room.durak, card))
+  })
+  socket.on('durak:defend', ({ roomId, card, pair }) => {
+    const room = durakGuard(roomId)
+    if (!room) return
+    if (durakSeat(room, socketUser.get(socket.id)) !== durak.other(room.durak.attacker)) return
+    durakCommit(room, durak.playDefend(room.durak, card, pair))
+  })
+  socket.on('durak:take', ({ roomId }) => {
+    const room = durakGuard(roomId)
+    if (!room) return
+    if (durakSeat(room, socketUser.get(socket.id)) !== durak.other(room.durak.attacker)) return
+    durakCommit(room, durak.beginTake(room.durak))
+  })
+  socket.on('durak:transfer', ({ roomId, card }) => {
+    const room = durakGuard(roomId)
+    if (!room) return
+    if (durakSeat(room, socketUser.get(socket.id)) !== durak.other(room.durak.attacker)) return
+    durakCommit(room, durak.playTransfer(room.durak, card))
+  })
+  socket.on('durak:done', ({ roomId }) => {
+    const room = durakGuard(roomId)
+    if (!room) return
+    if (durakSeat(room, socketUser.get(socket.id)) !== room.durak.attacker) return
+    if (room.durak.taking) durakCommit(room, durak.finishTake(room.durak))
+    else if (durak.canPass(room.durak)) durakCommit(room, durak.endBout(room.durak))
   })
 
   socket.on('chat', ({ roomId, text }) => {
