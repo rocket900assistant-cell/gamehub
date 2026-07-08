@@ -5,9 +5,8 @@ import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Avatar } from '../components/ui/Avatar'
 import { makeJoinLink, shareJoinLink } from '../lib/telegram'
-import { getSocket } from '../lib/socket'
+import { getSocket, type ServerFriend } from '../lib/socket'
 import { GameTypeToggle, StakeStepper } from '../components/StakePicker'
-import { getFriends } from '../lib/friends'
 import { cn } from '../lib/cn'
 
 const timeControls: { m: number; label: string; icon: LucideIcon }[] = [
@@ -19,8 +18,9 @@ const timeControls: { m: number; label: string; icon: LucideIcon }[] = [
 interface NewChessGameProps {
   onBack: () => void
   onQuickMatch: (minutes: number) => void
-  onInvite: (friendUserId: string, minutes: number) => void
+  onInvite: (friendTg: number, minutes: number) => void
   onBot: (minutes: number) => void
+  friends: ServerFriend[]
 }
 
 export function NewChessGame({
@@ -28,15 +28,15 @@ export function NewChessGame({
   onQuickMatch,
   onInvite,
   onBot,
+  friends,
 }: NewChessGameProps) {
   const [minutes, setMinutes] = useState(5)
   const [free, setFree] = useState(true)
   const [stakeText, setStakeText] = useState('0.1')
   const [friend, setFriend] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [invited, setInvited] = useState<Set<string>>(new Set())
+  const [invited, setInvited] = useState<Set<number>>(new Set())
   const [showAllFriends, setShowAllFriends] = useState(false)
-  const [friends] = useState(getFriends)
   const [roomId, setRoomId] = useState<string | null>(null)
 
   const stake = free ? 0 : Math.max(0, parseFloat(stakeText.replace(',', '.')) || 0)
@@ -56,9 +56,10 @@ export function NewChessGame({
   }, [friend, minutes, free, stake])
 
   const link = roomId ? makeJoinLink(roomId) : ''
-  const visibleFriends = showAllFriends ? friends : friends.slice(0, 3)
+  const sortedFriends = [...friends].sort((a, b) => Number(b.online) - Number(a.online))
+  const visibleFriends = showAllFriends ? sortedFriends : sortedFriends.slice(0, 3)
 
-  function invite(id: string) {
+  function invite(id: number) {
     setInvited((prev) => new Set(prev).add(id))
     onInvite(id, minutes)
   }
@@ -164,7 +165,7 @@ export function NewChessGame({
                 return (
                   <div key={f.id} className="flex items-center gap-3 p-3">
                     <div className="relative">
-                      <Avatar name={f.name} size={38} />
+                      <Avatar name={f.name} src={f.photoUrl ?? undefined} size={38} />
                       {f.online && (
                         <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface bg-success" />
                       )}
@@ -178,6 +179,7 @@ export function NewChessGame({
                     <Button
                       size="sm"
                       variant={isInvited ? 'secondary' : 'primary'}
+                      disabled={!f.online || isInvited}
                       onClick={() => invite(f.id)}
                     >
                       {isInvited ? (

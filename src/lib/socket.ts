@@ -22,6 +22,36 @@ export function registerUser(u: {
   getSocket().emit('register', u)
 }
 
+/** A friend as the server sees them: real telegram id + live online flag. */
+export interface ServerFriend {
+  id: number
+  name: string
+  username?: string | null
+  photoUrl?: string | null
+  elo: number
+  online: boolean
+}
+
+/** Add a friend by their telegram id (from a `friend_<id>` invite link). */
+export function addFriend(code: string | number) {
+  getSocket().emit('friend:add', { code })
+}
+
+/** Ask the server for the current friend list (also pushed automatically). */
+export function requestFriends() {
+  getSocket().emit('friend:list')
+}
+
+/** Invite a friend (by telegram id) into a private room for a game. */
+export function inviteFriend(
+  toTg: number,
+  game: 'chess' | 'durak' | 'nardy',
+  minutes: number,
+  transfer?: boolean,
+) {
+  getSocket().emit('invite', { toTg, game, minutes, transfer })
+}
+
 /** Persisted player profile from the server DB. */
 export interface Profile {
   tgId: number

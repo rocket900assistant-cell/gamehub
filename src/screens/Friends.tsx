@@ -1,52 +1,21 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, Trash2, UserPlus, Users } from 'lucide-react'
+import { ArrowLeft, Send, UserPlus, Users } from 'lucide-react'
 import { Avatar } from '../components/ui/Avatar'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
-import { getFriends, saveFriends, type Friend } from '../lib/friends'
+import { shareFriendLink } from '../lib/telegram'
+import type { ServerFriend } from '../lib/socket'
 
 interface FriendsProps {
+  friends: ServerFriend[]
+  myId: number | string
   onBack: () => void
 }
 
-export function Friends({ onBack }: FriendsProps) {
-  const [list, setList] = useState<Friend[]>(getFriends)
-  const [username, setUsername] = useState('')
-
-  // persist so added / removed friends survive a reload (shared with invites)
-  useEffect(() => {
-    saveFriends(list)
-  }, [list])
-
-  function addFriend() {
-    const handle = username.trim().replace(/^@/, '')
-    if (!handle) return
-    if (list.some((f) => f.username.toLowerCase() === handle.toLowerCase())) {
-      setUsername('')
-      return
-    }
-    setList((prev) => [
-      {
-        id: crypto.randomUUID(),
-        name: handle,
-        username: handle,
-        online: false,
-        elo: 500,
-      },
-      ...prev,
-    ])
-    setUsername('')
-  }
-
-  function removeFriend(id: string) {
-    setList((prev) => prev.filter((f) => f.id !== id))
-  }
-
-  // online first, then by name
-  const sorted = [...list].sort(
+export function Friends({ friends, myId, onBack }: FriendsProps) {
+  const sorted = [...friends].sort(
     (a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name),
   )
-  const onlineCount = list.filter((f) => f.online).length
+  const onlineCount = friends.filter((f) => f.online).length
 
   return (
     <div className="space-y-5">
@@ -60,31 +29,29 @@ export function Friends({ onBack }: FriendsProps) {
           <ArrowLeft size={18} />
         </button>
         <h1 className="text-2xl font-extrabold">Друзья</h1>
-        {list.length > 0 && (
+        {friends.length > 0 && (
           <span className="ml-auto rounded-full bg-surface px-3 py-1 text-xs font-bold text-muted">
-            {list.length} · <span className="text-success">{onlineCount} в сети</span>
+            {friends.length} · <span className="text-success">{onlineCount} в сети</span>
           </span>
         )}
       </div>
 
-      {/* Add by username */}
-      <Card>
-        <p className="mb-2 text-sm font-bold">Добавить друга</p>
-        <div className="flex gap-2">
-          <div className="flex flex-1 items-center rounded-[var(--radius-input)] border border-line bg-bg px-3">
-            <span className="text-muted">@</span>
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addFriend()}
-              placeholder="username"
-              className="h-11 flex-1 bg-transparent px-1 text-[15px] outline-none placeholder:text-muted"
-            />
+      {/* Add a friend by sharing an invite link */}
+      <Card className="space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gold-light/50 text-gold-dark">
+            <UserPlus size={20} />
           </div>
-          <Button onClick={addFriend}>
-            <UserPlus size={16} /> Добавить
-          </Button>
+          <div>
+            <p className="font-bold leading-tight">Добавить друга</p>
+            <p className="text-xs text-muted">
+              Отправь ссылку. Друг откроет — и вы добавитесь друг к другу.
+            </p>
+          </div>
         </div>
+        <Button className="w-full" onClick={() => shareFriendLink(myId)}>
+          <Send size={16} /> Поделиться ссылкой
+        </Button>
       </Card>
 
       {/* Friends list */}
@@ -96,99 +63,31 @@ export function Friends({ onBack }: FriendsProps) {
           <div>
             <p className="font-bold">Пока никого нет</p>
             <p className="mt-0.5 text-sm text-muted">
-              Добавь друга по @username выше
+              Пригласи друга по ссылке выше
             </p>
           </div>
         </div>
       ) : (
-        <>
-          <Card className="divide-y divide-line/70 overflow-hidden p-0">
-            {sorted.map((f) => (
-              <SwipeRow key={f.id} onDelete={() => removeFriend(f.id)}>
-                <div className="flex items-center gap-3 bg-surface p-3.5">
-                  <div className="relative">
-                    <Avatar name={f.name} size={44} />
-                    {f.online && (
-                      <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface bg-success" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-bold leading-tight">{f.name}</p>
-                    <p className="truncate text-xs text-muted">
-                      @{f.username} · {f.online ? 'в сети' : 'не в сети'}
-                    </p>
-                  </div>
-                </div>
-              </SwipeRow>
-            ))}
-          </Card>
-          <p className="px-1 text-center text-xs text-muted">
-            Смахни влево, чтобы удалить
-          </p>
-        </>
+        <Card className="divide-y divide-line/70 overflow-hidden p-0">
+          {sorted.map((f) => (
+            <div key={f.id} className="flex items-center gap-3 bg-surface p-3.5">
+              <div className="relative">
+                <Avatar name={f.name} src={f.photoUrl ?? undefined} size={44} />
+                {f.online && (
+                  <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface bg-success" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-bold leading-tight">{f.name}</p>
+                <p className="truncate text-xs text-muted">
+                  {f.username ? `@${f.username} · ` : ''}
+                  {f.online ? 'в сети' : 'не в сети'}
+                </p>
+              </div>
+            </div>
+          ))}
+        </Card>
       )}
-    </div>
-  )
-}
-
-/** iOS-style swipe-left row: reveals a red «Удалить» action behind the content. */
-function SwipeRow({
-  children,
-  onDelete,
-}: {
-  children: ReactNode
-  onDelete: () => void
-}) {
-  const OPEN = -88
-  const [x, setX] = useState(0)
-  const [dragging, setDragging] = useState(false)
-  const startX = useRef(0)
-  const base = useRef(0)
-
-  function down(clientX: number) {
-    setDragging(true)
-    startX.current = clientX
-    base.current = x
-  }
-  function move(clientX: number) {
-    if (!dragging) return
-    const nx = Math.max(-104, Math.min(0, base.current + clientX - startX.current))
-    setX(nx)
-  }
-  function up() {
-    if (!dragging) return
-    setDragging(false)
-    setX(x < OPEN / 2 ? OPEN : 0)
-  }
-
-  return (
-    <div className="relative">
-      {/* delete action behind the row */}
-      <button
-        onClick={onDelete}
-        aria-label="Удалить"
-        className="absolute inset-y-0 right-0 flex w-[88px] flex-col items-center justify-center gap-0.5 bg-danger text-white"
-      >
-        <Trash2 size={18} />
-        <span className="text-[11px] font-bold">Удалить</span>
-      </button>
-      {/* sliding content */}
-      <div
-        style={{
-          transform: `translateX(${x}px)`,
-          transition: dragging ? 'none' : 'transform 0.22s ease',
-          touchAction: 'pan-y',
-        }}
-        onPointerDown={(e) => {
-          e.currentTarget.setPointerCapture(e.pointerId)
-          down(e.clientX)
-        }}
-        onPointerMove={(e) => move(e.clientX)}
-        onPointerUp={up}
-        onPointerCancel={up}
-      >
-        {children}
-      </div>
     </div>
   )
 }

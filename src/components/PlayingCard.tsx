@@ -1,5 +1,6 @@
 import type { Card, Suit } from '../lib/durak'
 import { cn } from '../lib/cn'
+import { equippedDurakBackSrc } from '../lib/skins'
 
 interface PlayingCardProps {
   card?: Card
@@ -19,7 +20,6 @@ const SZ = {
 }
 
 const SUIT_CODE: Record<Suit, string> = { '♠': 'S', '♥': 'H', '♦': 'D', '♣': 'C' }
-const CARD_BACK = '/assets/durak/card-back.png'
 const cardSrc = (c: Card) => `/assets/durak/cards/${c.rank}${SUIT_CODE[c.suit]}.png`
 
 // Preload every card once so faces are cached before they're rendered
@@ -28,7 +28,7 @@ let _preloaded = false
 function preloadCards() {
   if (_preloaded || typeof Image === 'undefined') return
   _preloaded = true
-  const urls = [CARD_BACK]
+  const urls = [equippedDurakBackSrc()]
   for (let r = 2; r <= 14; r++)
     for (const s of ['S', 'H', 'D', 'C']) urls.push(`/assets/durak/cards/${r}${s}.png`)
   urls.forEach((u) => {
@@ -70,7 +70,7 @@ export function PlayingCard({
         style={{ width: s.w, height: s.h, borderRadius: radius, ...style }}
       >
         <img
-          src={CARD_BACK}
+          src={equippedDurakBackSrc()}
           alt=""
           draggable={false}
           onError={retryImg}

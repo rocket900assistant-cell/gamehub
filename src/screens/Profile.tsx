@@ -30,6 +30,7 @@ import type { FavGame } from '../data/mock'
 import type { TgUser } from '../lib/telegram'
 import { displayName } from '../lib/telegram'
 import type { Profile as PlayerProfile } from '../lib/socket'
+import { isVip } from '../lib/skins'
 
 const gameIcons: Record<string, LucideIcon> = {
   chess: Crown,
@@ -50,6 +51,7 @@ interface ProfileProps {
 }
 
 export function Profile({ user, profile, onOpenFriends }: ProfileProps) {
+  const vip = isVip()
   const balance = profile?.balance ?? player.balance
   const eloMain = profile
     ? Math.max(profile.elo.chess, profile.elo.durak, profile.elo.nardy)
@@ -96,11 +98,11 @@ export function Profile({ user, profile, onOpenFriends }: ProfileProps) {
       {/* Identity card */}
       <Card className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 gap-3">
-          <Avatar name={displayName(user)} src={user.photoUrl} size={56} vip />
+          <Avatar name={displayName(user)} src={user.photoUrl} size={56} vip={vip} />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <p className="truncate text-lg font-bold">{displayName(user)}</p>
-              {profileMock.vip && (
+              {vip && (
                 <span className="rounded-full bg-gradient-to-b from-gold to-gold-dark px-2 py-0.5 text-[10px] font-bold text-white">
                   VIP
                 </span>

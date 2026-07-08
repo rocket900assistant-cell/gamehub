@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { equippedCheckerSrcs } from '../lib/skins'
 import {
   ChevronLeft,
   Flag,
@@ -729,10 +730,6 @@ const STEP = 7.0 // vertical gap between stacked checkers, % of board height
 const STACK_SPAN = 30 // max height a stack may occupy (compresses when many)
 const TOP_Y0 = 11.5 // first checker centre from the top (triangle base ≈ 6%)
 const BOT_Y0 = 88.5 // first checker centre from the bottom (base ≈ 94%)
-const CHECK = {
-  w: '/assets/nardy/checker-light.png',
-  b: '/assets/nardy/checker-dark.png',
-}
 
 function Board({
   s,
@@ -750,6 +747,11 @@ function Board({
   onTapOff: () => void
 }) {
   const vp = (p: number) => viewPos(view, p)
+  // Equipped checker set (chosen in the shop, read once per match).
+  const CHECK = useMemo(() => {
+    const c = equippedCheckerSrcs()
+    return { w: c.light, b: c.dark }
+  }, [])
   return (
     <div
       className="relative w-full overflow-hidden rounded-xl shadow-[0_10px_28px_rgba(0,0,0,0.5)]"

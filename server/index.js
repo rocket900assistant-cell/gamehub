@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, dbEnabled } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, dbEnabled, addFriendship, getFriends } from './db.js'
 import { verifyInitData } from './telegram.js'
 import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther } from './nardy.js'
 import * as durak from './durak.js'
@@ -12,6 +12,8 @@ const PORT = process.env.PORT || 3001
 const users = new Map() // userId -> { socketId, name, elo }
 const socketUser = new Map() // socketId -> userId
 const userTg = new Map() // composite userId -> verified telegram id (for DB)
+const tgSocket = new Map() // telegram id -> socketId (presence: online friends)
+const tgInfo = new Map() // telegram id -> { name, username, photoUrl, elos } (last seen)
 const queues = new Map() // "game:minutes" -> [userId]
 const rooms = new Map() // roomId -> room
 const abandonTimers = new Map() // "userId:roomId" -> timeout (reconnect grace)
@@ -94,6 +96,33 @@ function addPlayer(room, userId) {
 }
 
 const sidOf = (userId) => users.get(userId)?.socketId
+
+// ── friends (mutual, by telegram id) ──────────────
+/** Build the friend list for a player: profile + live online flag. */
+async function friendListFor(tgId) {
+  if (!tgId) return []
+  const rows = await getFriends(tgId)
+  return rows.map((r) => {
+    const id = Number(r.tg_id)
+    const info = tgInfo.get(id)
+    const elo = r.elo_chess ?? info?.elos?.chess ?? 1200
+    return {
+      id,
+      name: r.name ?? info?.name ?? 'Игрок',
+      username: r.username ?? info?.username ?? null,
+      photoUrl: r.photo_url ?? info?.photoUrl ?? null,
+      elo,
+      online: tgSocket.has(id),
+    }
+  })
+}
+
+/** Push a fresh friend list to a player if they're online. */
+async function pushFriends(tgId) {
+  const sid = tgSocket.get(Number(tgId))
+  if (!sid) return
+  io.to(sid).emit('friends', await friendListFor(tgId))
+}
 
 // HTTP server with a health-check route (Render pings "/").
 const httpServer = createServer((req, res) => {
@@ -285,6 +314,15 @@ io.on('connection', (socket) => {
     }
     userTg.set(userId, tgId)
 
+    // Presence: mark this telegram id online, remember its profile, and refresh
+    // friend lists (mine + notify my online friends that I'm now online).
+    if (tgId) {
+      tgSocket.set(tgId, socket.id)
+      tgInfo.set(tgId, { name, username, photoUrl, elos: tgInfo.get(tgId)?.elos })
+      pushFriends(tgId).catch(() => {})
+      for (const f of await friendListFor(tgId)) pushFriends(f.id).catch(() => {})
+    }
+
     // Reconnect: cancel any pending abandon + resume an in-progress game.
     for (const [k, t] of abandonTimers) {
       if (k.startsWith(userId + ':')) {
@@ -349,10 +387,13 @@ io.on('connection', (socket) => {
           photoUrl: verified?.photo_url ?? photoUrl,
         })
         if (row) {
-          users.set(userId, {
-            ...users.get(userId),
+          const elos = { chess: row.elo_chess, durak: row.elo_durak, nardy: row.elo_nardy }
+          users.set(userId, { ...users.get(userId), name: row.name ?? name, elos })
+          tgInfo.set(tgId, {
             name: row.name ?? name,
-            elos: { chess: row.elo_chess, durak: row.elo_durak, nardy: row.elo_nardy },
+            username: row.username ?? username,
+            photoUrl: row.photo_url ?? photoUrl,
+            elos,
           })
           socket.emit('profile', dbProfile(row))
         }
@@ -412,20 +453,40 @@ io.on('connection', (socket) => {
     if (room.players.length === 2) startRoom(room)
   })
 
-  socket.on('invite', ({ toUserId, game, minutes }) => {
+  // Invite a friend (by their telegram id) into a private room for a game.
+  socket.on('invite', ({ toTg, game, minutes, transfer }) => {
     const fromId = socketUser.get(socket.id)
-    const roomId = createRoom(game, minutes)
+    const targetSid = tgSocket.get(Number(toTg))
+    if (!targetSid) {
+      socket.emit('invite:offline') // friend isn't online right now
+      return
+    }
+    const roomId = createRoom(game, minutes, { transfer })
     addPlayer(rooms.get(roomId), fromId)
     const from = users.get(fromId)
-    const targetSid = sidOf(toUserId)
-    if (targetSid)
-      io.to(targetSid).emit('invite:incoming', {
-        roomId,
-        from: { name: from?.name },
-        game,
-        minutes,
-      })
+    io.to(targetSid).emit('invite:incoming', {
+      roomId,
+      from: { name: from?.name },
+      game,
+      minutes,
+    })
     socket.emit('invite:sent', { roomId })
+  })
+
+  // ── friends ──
+  socket.on('friend:add', async ({ code }) => {
+    const myTg = userTg.get(socketUser.get(socket.id))
+    const friendTg = Number(code)
+    if (!myTg || !friendTg || myTg === friendTg) return
+    await addFriendship(myTg, friendTg)
+    pushFriends(myTg).catch(() => {})
+    pushFriends(friendTg).catch(() => {})
+    socket.emit('friend:added', { id: friendTg, name: tgInfo.get(friendTg)?.name ?? null })
+  })
+
+  socket.on('friend:list', async () => {
+    const myTg = userTg.get(socketUser.get(socket.id))
+    socket.emit('friends', await friendListFor(myTg))
   })
 
   socket.on('move', ({ roomId, from, to }) => {
@@ -572,6 +633,14 @@ io.on('connection', (socket) => {
     const userId = socketUser.get(socket.id)
     socketUser.delete(socket.id)
     for (const [k, q] of queues) queues.set(k, q.filter((id) => id !== userId))
+    // Presence: go offline + tell my friends (only if THIS socket was the live one).
+    const tgId = userTg.get(userId)
+    if (tgId && tgSocket.get(tgId) === socket.id) {
+      tgSocket.delete(tgId)
+      friendListFor(tgId)
+        .then((list) => list.forEach((f) => pushFriends(f.id).catch(() => {})))
+        .catch(() => {})
+    }
     // Mark offline but keep the mapping; mobile sockets drop when the app
     // backgrounds. Give a grace period to reconnect before abandoning games.
     if (users.get(userId)?.socketId === socket.id) {

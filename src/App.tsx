@@ -6,6 +6,7 @@ import { Home } from './screens/Home'
 import { Store } from './screens/Store'
 import { Profile } from './screens/Profile'
 import { Friends } from './screens/Friends'
+import { FriendInvite } from './screens/FriendInvite'
 import { NewChessGame } from './screens/NewChessGame'
 import { ChessMatch, hasChessSave, readChessSave } from './screens/ChessMatch'
 import { DurakMatch, hasDurakSave, type OnlineDurak } from './screens/DurakMatch'
@@ -18,15 +19,18 @@ import {
   displayName,
   getInitData,
   getStartParam,
-  shareJoinLink,
   type TgUser,
 } from './lib/telegram'
 import {
   getSocket,
   registerUser,
+  addFriend,
+  requestFriends,
+  inviteFriend as emitInviteFriend,
   type IncomingInvite,
   type MatchConfig,
   type Profile as PlayerProfile,
+  type ServerFriend,
 } from './lib/socket'
 
 type SubScreen =
@@ -36,7 +40,15 @@ type SubScreen =
   | 'durak'
   | 'nardy-setup'
   | 'nardy'
+  | 'invite'
   | null
+
+interface PendingInvite {
+  game: 'durak' | 'nardy'
+  minutes: number
+  transfer?: boolean
+  label: string
+}
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('games')
@@ -69,6 +81,8 @@ export default function App() {
   const [nardyOnline, setNardyOnline] = useState<OnlineNardy | null>(null)
   const [durakOnline, setDurakOnline] = useState<OnlineDurak | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
+  const [friends, setFriends] = useState<ServerFriend[]>([])
+  const [pendingInvite, setPendingInvite] = useState<PendingInvite | null>(null)
 
   useEffect(() => {
     const u = initTelegram()
@@ -81,7 +95,7 @@ export default function App() {
       localStorage.setItem('gh_device', deviceId)
     }
     const userId = `${u.id ? u.id : 'guest'}_${deviceId}`
-    const doRegister = () =>
+    const doRegister = () => {
       registerUser({
         userId,
         name: displayName(u),
@@ -90,6 +104,8 @@ export default function App() {
         username: u.username,
         photoUrl: u.photoUrl,
       })
+      requestFriends()
+    }
     doRegister()
 
     const s = getSocket()
@@ -158,15 +174,26 @@ export default function App() {
       setMatchmaking(null)
       setJoinError('Партия не найдена или уже началась')
     }
+    const onFriends = (list: ServerFriend[]) => setFriends(list)
+    const onInviteOffline = () => {
+      setMatchmaking(null)
+      setJoinError('Друг сейчас не в сети')
+    }
     s.on('match:found', onFound)
     s.on('invite:incoming', onInvite)
     s.on('room:notfound', onNotFound)
+    s.on('friends', onFriends)
+    s.on('invite:offline', onInviteOffline)
 
-    // Opened via a friend's invite link → join their room straight away.
+    // Opened via a deep link.
     const sp = getStartParam()
     if (sp && sp.startsWith('join_')) {
+      // friend's game-invite link → join their room straight away.
       s.emit('joinRoom', { roomId: sp.slice(5) })
       setMatchmaking({ minutes: 0, label: 'Заходим в игру…', subtitle: 'Подключение к сопернику' })
+    } else if (sp && sp.startsWith('friend_')) {
+      // friend-add link → become mutual friends (after register is sent).
+      addFriend(sp.slice(7))
     }
 
     return () => {
@@ -175,6 +202,8 @@ export default function App() {
       s.off('match:found', onFound)
       s.off('invite:incoming', onInvite)
       s.off('room:notfound', onNotFound)
+      s.off('friends', onFriends)
+      s.off('invite:offline', onInviteOffline)
     }
   }, [])
 
@@ -185,9 +214,15 @@ export default function App() {
     setMatchmaking({ minutes })
     setSub(null)
   }
-  function inviteFriend(friendUserId: string, minutes: number) {
-    getSocket().emit('invite', { toUserId: friendUserId, game: 'chess', minutes })
-    setMatchmaking({ minutes, label: 'Ждём соперника…' })
+  function inviteFriend(
+    toTg: number,
+    game: 'chess' | 'durak' | 'nardy',
+    minutes: number,
+    transfer?: boolean,
+  ) {
+    emitInviteFriend(toTg, game, minutes, transfer)
+    const label = game === 'chess' ? 'Шахматы' : game === 'durak' ? 'Дурак' : 'Нарды'
+    setMatchmaking({ minutes, label: 'Ждём друга…', subtitle: `${label} · по приглашению` })
     setSub(null)
   }
   function acceptInvite() {
@@ -199,24 +234,6 @@ export default function App() {
     getSocket().emit('cancelQuick')
     setMatchmaking(null)
   }
-  // Create a private room and share a Telegram link so a friend can join the lobby.
-  function startFriendGame(
-    game: 'chess' | 'durak' | 'nardy',
-    minutes: number,
-    opts: { transfer?: boolean } = {},
-  ) {
-    getSocket().emit(
-      'createRoom',
-      { game, minutes, transfer: opts.transfer },
-      (roomId: string) => {
-        shareJoinLink(roomId, 'Заходи сыграть со мной в GameHub!')
-        const label = game === 'chess' ? 'Шахматы' : game === 'durak' ? 'Дурак' : 'Нарды'
-        setMatchmaking({ minutes, label: 'Ждём друга…', subtitle: `${label} · по приглашению` })
-        setSub(null)
-      },
-    )
-  }
-
   const inMatchFull = match && !minimized
 
   const resumeBanner =
@@ -403,7 +420,21 @@ export default function App() {
                 onCancel={cancelMatchmaking}
               />
             ) : sub === 'friends' ? (
-              <Friends onBack={() => setSub(null)} />
+              <Friends friends={friends} myId={user.id} onBack={() => setSub(null)} />
+            ) : sub === 'invite' && pendingInvite ? (
+              <FriendInvite
+                title="Игра с другом"
+                subtitle={pendingInvite.label}
+                game={pendingInvite.game}
+                minutes={pendingInvite.minutes}
+                transfer={pendingInvite.transfer}
+                friends={friends}
+                shareText="Заходи сыграть со мной в GameHub!"
+                onBack={() => setSub(pendingInvite.game === 'durak' ? 'durak-setup' : 'nardy-setup')}
+                onInviteFriend={(tg) =>
+                  inviteFriend(tg, pendingInvite.game, pendingInvite.minutes, pendingInvite.transfer)
+                }
+              />
             ) : sub === 'durak-setup' ? (
               <DurakSetup
                 onBack={() => setSub(null)}
@@ -421,7 +452,15 @@ export default function App() {
                   })
                   setSub(null)
                 }}
-                onInvite={(deck, transfer) => startFriendGame('durak', deck, { transfer })}
+                onInvite={(deck, transfer) => {
+                  setPendingInvite({
+                    game: 'durak',
+                    minutes: deck,
+                    transfer,
+                    label: `Дурак · ${deck} карт${transfer ? ' · переводной' : ''}`,
+                  })
+                  setSub('invite')
+                }}
               />
             ) : sub === 'durak' ? (
               <DurakMatch
@@ -451,7 +490,10 @@ export default function App() {
                   })
                   setSub(null)
                 }}
-                onInvite={() => startFriendGame('nardy', 2)}
+                onInvite={() => {
+                  setPendingInvite({ game: 'nardy', minutes: 2, label: 'Нарды · 2 мин' })
+                  setSub('invite')
+                }}
               />
             ) : sub === 'nardy' ? (
               <NardyMatch
@@ -466,9 +508,10 @@ export default function App() {
               />
             ) : sub === 'chess-setup' ? (
               <NewChessGame
+                friends={friends}
                 onBack={() => setSub(null)}
                 onQuickMatch={startQuick}
-                onInvite={inviteFriend}
+                onInvite={(tg, minutes) => inviteFriend(tg, 'chess', minutes)}
                 onBot={(minutes) => {
                   setMatch({ mode: 'local', minutes, bot: true })
                   setMinimized(false)

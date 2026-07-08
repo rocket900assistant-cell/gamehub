@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, Flag, Gem, MessageCircle, RotateCcw, Send, X } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { PlayingCard } from '../components/PlayingCard'
+import { equippedDurakFeltSrc } from '../lib/skins'
 import type { DurakConfig } from './DurakSetup'
 import {
   createGame,
@@ -69,16 +70,20 @@ export const clearDurakSave = () => {
   }
 }
 
-// Blue leather table texture (baked grain + vignette).
-const FELT: React.CSSProperties = {
+// Table felt base — the image comes from the equipped skin (see `felt` below).
+const FELT_BASE: React.CSSProperties = {
   backgroundColor: '#2f4560',
-  backgroundImage: "url('/assets/durak/felt.jpg')",
   backgroundSize: 'cover',
   backgroundPosition: 'center',
 }
 
 export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchProps) {
   const isOnline = !!online
+  // Equipped table felt (chosen in the shop, read once per match).
+  const felt = useMemo(
+    () => ({ ...FELT_BASE, backgroundImage: `url('${equippedDurakFeltSrc()}')` }),
+    [],
+  )
   // resumed game restores its state + original config from storage
   const saved = useRef(!isOnline && resume ? readDurakSave() : null).current
   const effConfig = config ?? saved?.config ?? null
@@ -338,7 +343,7 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
   return (
     <div
       className="relative -mx-4 -mb-6 -mt-[calc(1rem+env(safe-area-inset-top))] flex flex-col overflow-hidden"
-      style={{ ...FELT, minHeight: 'var(--app-h, 100dvh)' }}
+      style={{ ...felt, minHeight: 'var(--app-h, 100dvh)' }}
     >
       <div
         className="pointer-events-none absolute inset-0"
@@ -392,10 +397,13 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
           <CardFan count={s.hands.opp.length} />
         </div>
 
-        {/* table (drop zone) */}
-        <div data-table className="relative flex flex-1 items-center justify-center">
-          {/* deck (left) + бито (right) */}
-          <div className="pointer-events-none absolute inset-x-2 top-2 flex items-start justify-between">
+        {/* table (drop zone) — column: deck/бито row on top, pairs below */}
+        <div data-table className="relative flex flex-1 flex-col">
+          {/* deck (left) + бито (right) — own top row, so pairs never cover it */}
+          <div
+            className="pointer-events-none flex shrink-0 items-start justify-between px-2 pt-2"
+            style={{ minHeight: 104 }}
+          >
             {/* deck: trump peeking out from under a stack of face-down cards */}
             {s.deck.length > 0 ? (
               <div className="relative" style={{ width: 116, height: 100 }}>
@@ -444,18 +452,16 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
             )}
           </div>
 
-          {/* pre-game hint */}
-          {!started && (
-            <span className="rounded-full bg-black/30 px-6 py-3 text-lg font-bold text-white/90 backdrop-blur">
-              Нажмите «Готов»
-            </span>
-          )}
-
-          {/* attack / defend pairs */}
-          <div className="flex max-w-[88%] flex-wrap items-center justify-center gap-x-2 gap-y-3">
-            {!started || s.table.length === 0
-              ? null
-              : s.table.map((p, i) => (
+          {/* pre-game hint + attack/defend pairs — centred column under the deck,
+              kept narrow so rows never reach the deck (left) or бито (right) */}
+          <div className="mx-auto flex w-full max-w-[340px] flex-1 flex-wrap content-center items-center justify-center gap-x-2 gap-y-3 pb-2">
+            {!started && (
+              <span className="rounded-full bg-black/30 px-6 py-3 text-lg font-bold text-white/90 backdrop-blur">
+                Нажмите «Готов»
+              </span>
+            )}
+            {started &&
+              s.table.map((p, i) => (
                 <div
                   key={i}
                   data-pair={i}
@@ -482,7 +488,7 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
                     </div>
                   )}
                 </div>
-                ))}
+              ))}
           </div>
         </div>
 

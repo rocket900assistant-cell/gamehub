@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Chess } from 'chess.js'
 import { Chessboard } from 'react-chessboard'
-import type { PieceDropHandlerArgs, SquareHandlerArgs } from 'react-chessboard'
+import type {
+  PieceDropHandlerArgs,
+  PieceRenderObject,
+  SquareHandlerArgs,
+} from 'react-chessboard'
+import { boardStyleFor, equippedBoard, equippedPieceDir } from '../lib/skins'
 import {
   ChevronDown,
   ChevronLeft,
@@ -51,6 +56,24 @@ function kingSquare(chess: Chess, color: Side): string | null {
     }
   }
   return null
+}
+
+const PIECE_CODES = ['wK', 'wQ', 'wR', 'wB', 'wN', 'wP', 'bK', 'bQ', 'bR', 'bB', 'bN', 'bP']
+
+// Render a custom piece set from static SVGs under /public/piece/<dir>/.
+function buildPieces(dir: string): PieceRenderObject {
+  const obj: PieceRenderObject = {}
+  for (const code of PIECE_CODES) {
+    obj[code] = () => (
+      <img
+        src={`/piece/${dir}/${code}.svg`}
+        alt=""
+        draggable={false}
+        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+      />
+    )
+  }
+  return obj
 }
 
 interface ChessMatchProps {
@@ -387,6 +410,13 @@ export function ChessMatch({ user, match, onMinimize, onExit }: ChessMatchProps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, lastMove, fen, reviewing])
 
+  // Equipped cosmetic skins (chosen in the shop, read once per match).
+  const skinBoard = useMemo(() => boardStyleFor(equippedBoard()), [])
+  const skinPieces = useMemo(() => {
+    const dir = equippedPieceDir()
+    return dir ? buildPieces(dir) : undefined
+  }, [])
+
   const boardOptions = {
     id: 'chess-match',
     position: boardFen,
@@ -395,12 +425,9 @@ export function ChessMatch({ user, match, onMinimize, onExit }: ChessMatchProps)
     boardOrientation: (myColor === 'b' ? 'black' : 'white') as 'white' | 'black',
     allowDragging: !result && !reviewing,
     animationDurationInMs: 180,
-    darkSquareStyle: { backgroundColor: '#769656' },
-    lightSquareStyle: { backgroundColor: '#EEEED2' },
+    ...skinBoard,
     squareStyles,
-    darkSquareNotationStyle: { color: '#EEEED2' },
-    lightSquareNotationStyle: { color: '#769656' },
-    boardStyle: { borderRadius: '10px', overflow: 'hidden' },
+    ...(skinPieces ? { pieces: skinPieces } : {}),
   }
 
   const oppName =

@@ -46,8 +46,48 @@ export async function initDb() {
       stake      NUMERIC(20,2) NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS friendships (
+      a          BIGINT NOT NULL,
+      b          BIGINT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (a, b)
+    );
   `)
   console.log('[db] ready')
+}
+
+// In-memory fallback so friends work in local dev without a database.
+const memFriends = new Map() // tgId -> Set(tgId)
+
+/** Record a mutual friendship (both directions). */
+export async function addFriendship(a, b) {
+  a = Number(a)
+  b = Number(b)
+  if (!a || !b || a === b) return
+  if (!pool) {
+    if (!memFriends.has(a)) memFriends.set(a, new Set())
+    if (!memFriends.has(b)) memFriends.set(b, new Set())
+    memFriends.get(a).add(b)
+    memFriends.get(b).add(a)
+    return
+  }
+  await pool.query(
+    `INSERT INTO friendships (a, b) VALUES ($1,$2),($2,$1) ON CONFLICT DO NOTHING`,
+    [a, b],
+  )
+}
+
+/** Friend user rows for a player (joined with their profile). */
+export async function getFriends(tgId) {
+  tgId = Number(tgId)
+  if (!tgId) return []
+  if (!pool) return [...(memFriends.get(tgId) ?? [])].map((id) => ({ tg_id: id }))
+  const { rows } = await pool.query(
+    `SELECT u.* FROM friendships f JOIN users u ON u.tg_id = f.b
+       WHERE f.a = $1 ORDER BY u.name NULLS LAST`,
+    [tgId],
+  )
+  return rows
 }
 
 /** Create the player row if new, else refresh their profile fields. Returns the row. */

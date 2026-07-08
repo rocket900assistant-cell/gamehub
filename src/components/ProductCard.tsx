@@ -5,13 +5,6 @@ import { Card } from './ui/Card'
 import { AssetPlaceholder } from './ui/AssetPlaceholder'
 import { cn } from '../lib/cn'
 
-const tierStyles: Record<ShopItem['tier'], string> = {
-  common: 'bg-line text-muted',
-  rare: 'bg-success/15 text-success',
-  epic: 'bg-gold-light/50 text-gold',
-  legendary: 'bg-gold text-white',
-}
-
 interface ProductCardProps {
   item: ShopItem
   icon?: LucideIcon
@@ -32,14 +25,6 @@ export function ProductCard({ item, icon = Layers, onBuy }: ProductCardProps) {
             }
             className={cn('h-24 w-full rounded-none', isVip && 'text-gold')}
           />
-          <span
-            className={cn(
-              'absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold capitalize',
-              tierStyles[item.tier],
-            )}
-          >
-            {item.tier}
-          </span>
         </div>
         <div className="p-3">
           <p className="truncate text-sm font-bold">{item.name}</p>

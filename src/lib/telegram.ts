@@ -74,6 +74,21 @@ export function shareGameLink(gameId: string, text: string) {
   else window.open(shareUrl, '_blank')
 }
 
+/** Deep link that adds the sharer as a friend (mutual) when opened. */
+export function makeFriendLink(myId: number | string): string {
+  return `https://t.me/${BOT_USERNAME}?startapp=friend_${myId}`
+}
+
+/** Opens Telegram's share sheet with a "add me as a friend" link. */
+export function shareFriendLink(myId: number | string) {
+  const url = makeFriendLink(myId)
+  const text = 'Добавляйся ко мне в друзья в GameHub — сыграем в шахматы, дурак или нарды!'
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`
+  const wa = getWebApp()
+  if (wa?.openTelegramLink) wa.openTelegramLink(shareUrl)
+  else window.open(shareUrl, '_blank')
+}
+
 /** Opens Telegram's share sheet with a referral link to the whole app. */
 export function shareInvite(refCode: string) {
   const url = `https://t.me/${BOT_USERNAME}?startapp=ref_${refCode}`
