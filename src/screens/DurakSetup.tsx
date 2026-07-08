@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Gem, Lock, Minus, Play, Plus } from 'lucide-react'
+import { ArrowLeft, Bot, Gem, Lock, Minus, Plus, Swords } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { cn } from '../lib/cn'
@@ -175,9 +175,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 interface DurakSetupProps {
   onBack: () => void
   onCreate: (cfg: DurakConfig) => void
+  onQuickMatch: () => void
 }
 
-export function DurakSetup({ onBack, onCreate }: DurakSetupProps) {
+export function DurakSetup({ onBack, onCreate, onQuickMatch }: DurakSetupProps) {
   const [free, setFree] = useState(true)
   const [stakeText, setStakeText] = useState('0.1')
   const [players, setPlayers] = useState(2)
@@ -323,25 +324,31 @@ export function DurakSetup({ onBack, onCreate }: DurakSetupProps) {
         </div>
       </button>
 
-      <Button
-        size="lg"
-        className="w-full"
-        onClick={() =>
-          onCreate({
-            free,
-            stake: free ? 0 : Math.max(MIN_STAKE, num),
-            players,
-            deck,
-            fast,
-            transfer,
-            throwAll,
-            draw,
-            privateGame,
-          })
-        }
-      >
-        <Play size={18} /> Создать игру
-      </Button>
+      <div className="space-y-3">
+        <Button size="lg" className="w-full" onClick={onQuickMatch}>
+          <Swords size={18} /> Быстрая игра (онлайн)
+        </Button>
+        <Button
+          size="lg"
+          variant="secondary"
+          className="w-full"
+          onClick={() =>
+            onCreate({
+              free,
+              stake: free ? 0 : Math.max(MIN_STAKE, num),
+              players,
+              deck,
+              fast,
+              transfer,
+              throwAll,
+              draw,
+              privateGame,
+            })
+          }
+        >
+          <Bot size={18} /> Играть с ботом
+        </Button>
+      </div>
     </div>
   )
 }

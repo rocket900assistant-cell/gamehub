@@ -8,7 +8,7 @@ import { Profile } from './screens/Profile'
 import { Friends } from './screens/Friends'
 import { NewChessGame } from './screens/NewChessGame'
 import { ChessMatch, hasChessSave, readChessSave } from './screens/ChessMatch'
-import { DurakMatch, hasDurakSave } from './screens/DurakMatch'
+import { DurakMatch, hasDurakSave, type OnlineDurak } from './screens/DurakMatch'
 import { DurakSetup, type DurakConfig } from './screens/DurakSetup'
 import { NardyMatch, hasNardySave, type OnlineNardy } from './screens/NardyMatch'
 import { NardySetup, type NardyConfig } from './screens/NardySetup'
@@ -65,6 +65,7 @@ export default function App() {
     }
   })
   const [nardyOnline, setNardyOnline] = useState<OnlineNardy | null>(null)
+  const [durakOnline, setDurakOnline] = useState<OnlineDurak | null>(null)
 
   useEffect(() => {
     const u = initTelegram()
@@ -110,6 +111,7 @@ export default function App() {
       fen?: string
       clocks?: { w: number; b: number }
       nardy?: OnlineNardy['initial']
+      durak?: OnlineDurak['initial']
       deadline?: number
     }) => {
       setMatchmaking(null)
@@ -123,6 +125,17 @@ export default function App() {
           myElo: m.elo ?? 1200,
           initial: m.nardy,
           deadline: m.deadline ?? Date.now() + 120000,
+        })
+        return
+      }
+      if (m.game === 'durak' && m.durak) {
+        setDurakOnline({
+          roomId: m.roomId,
+          opponentName: m.opponent?.name ?? 'Соперник',
+          opponentElo: m.opponent?.elo ?? 1200,
+          myElo: m.elo ?? 1200,
+          initial: m.durak,
+          deadline: m.deadline ?? Date.now() + 60000,
         })
         return
       }
@@ -283,7 +296,7 @@ export default function App() {
       style={{ height: 'var(--app-h, 100dvh)' }}
     >
       {/* Match layer — kept mounted to preserve state; hidden when minimized */}
-      {match && !nardyOnline && (
+      {match && !nardyOnline && !durakOnline && (
         <div
           className={
             inMatchFull
@@ -316,8 +329,20 @@ export default function App() {
         </main>
       )}
 
+      {/* Online Durak — fullscreen while active */}
+      {durakOnline && (
+        <main className="flex flex-1 flex-col overflow-y-auto px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-6">
+          <DurakMatch
+            user={user}
+            config={null}
+            online={durakOnline}
+            onExit={() => setDurakOnline(null)}
+          />
+        </main>
+      )}
+
       {/* Normal app — hidden while a match is fullscreen */}
-      {!inMatchFull && !nardyOnline && (
+      {!inMatchFull && !nardyOnline && !durakOnline && (
         <>
           <main className="flex-1 overflow-y-auto px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-6">
             {invite && (
@@ -343,6 +368,15 @@ export default function App() {
                   setDurakCfg(cfg)
                   setDurakResume(false)
                   setSub('durak')
+                }}
+                onQuickMatch={() => {
+                  getSocket().emit('quickMatch', { game: 'durak', minutes: 36 })
+                  setMatchmaking({
+                    minutes: 36,
+                    label: 'Поиск соперника…',
+                    subtitle: 'Дурак · онлайн',
+                  })
+                  setSub(null)
                 }}
               />
             ) : sub === 'durak' ? (

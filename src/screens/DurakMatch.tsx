@@ -25,12 +25,23 @@ import {
 } from '../lib/durak'
 import type { TgUser } from '../lib/telegram'
 import { displayName } from '../lib/telegram'
+import { getSocket } from '../lib/socket'
 import { player } from '../data/mock'
+
+export interface OnlineDurak {
+  roomId: string
+  opponentName: string
+  opponentElo: number
+  myElo: number
+  initial: DurakState // the viewer's own view (viewer is always 'you')
+  deadline: number
+}
 
 interface DurakMatchProps {
   user: TgUser
   config: DurakConfig | null
   resume?: boolean
+  online?: OnlineDurak | null
   onExit: () => void
 }
 
@@ -66,17 +77,19 @@ const FELT: React.CSSProperties = {
   backgroundPosition: 'center',
 }
 
-export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
+export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchProps) {
+  const isOnline = !!online
   // resumed game restores its state + original config from storage
-  const saved = useRef(resume ? readDurakSave() : null).current
+  const saved = useRef(!isOnline && resume ? readDurakSave() : null).current
   const effConfig = config ?? saved?.config ?? null
   const deckSize = effConfig?.deck ?? 36
   const transfer = effConfig?.transfer ?? false
   const fast = effConfig?.fast ?? false
-  const moveMs = (fast ? 30 : 60) * 1000
+  const moveMs = isOnline ? 60000 : (fast ? 30 : 60) * 1000
   const bank = effConfig && !effConfig.free ? effConfig.stake * effConfig.players : 0
 
   const [s, setS] = useState<DurakState>(() => {
+    if (online) return online.initial
     if (saved?.s) {
       // time kept running while the app was closed → auto-lose if it ran out
       const elapsed = Date.now() - (saved.savedAt ?? Date.now())
@@ -114,17 +127,18 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
     const t = chatInput.trim()
     if (!t) return
     setMessages((m) => [...m, { mine: true, text: t }])
+    if (online) getSocket().emit('chat', { roomId: online.roomId, text: t })
     setChatInput('')
   }
 
   // ── ready gate (confirm before the deal; miss it → leave the table) ──
   const READY_MS = 20000
-  const [started, setStarted] = useState(!!saved) // resumed games skip the gate
+  const [started, setStarted] = useState(isOnline || !!saved) // online/resumed skip the gate
   const [readyDeadline] = useState(() => Date.now() + READY_MS)
 
-  // save/clear the game as it progresses
+  // save/clear the game as it progresses (local only)
   useEffect(() => {
-    if (!started) return
+    if (isOnline || !started) return
     if (s.result) clearDurakSave()
     else {
       try {
@@ -138,14 +152,17 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
     }
   }, [s, started, effConfig])
 
-  // ── move timer ──
-  const [deadline, setDeadline] = useState(() => Date.now() + moveMs)
+  // ── move timer ── (online: server-driven via durak:state deadline)
+  const [deadline, setDeadline] = useState(() =>
+    online ? online.deadline : Date.now() + moveMs,
+  )
   const [now, setNow] = useState(Date.now())
   const timedOut = useRef(false)
   useEffect(() => {
+    if (isOnline) return
     timedOut.current = false
     setDeadline(Date.now() + moveMs)
-  }, [s.turn, s.taking, s.table.length, s.result, moveMs, started])
+  }, [s.turn, s.taking, s.table.length, s.result, moveMs, started, isOnline])
   useEffect(() => {
     if (s.result) return
     const id = setInterval(() => setNow(Date.now()), 250)
@@ -160,20 +177,45 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
 
   const remaining = Math.max(0, deadline - now)
   useEffect(() => {
-    if (!started || s.result || remaining > 0 || timedOut.current) return
+    if (isOnline || !started || s.result || remaining > 0 || timedOut.current) return
     timedOut.current = true
     setS((cur) => (cur.result ? cur : resign(cur, cur.turn)))
-  }, [remaining, s.result, started])
+  }, [remaining, s.result, started, isOnline])
 
-  // Bot (opp) auto-plays.
+  // Bot (opp) auto-plays — local only.
   useEffect(() => {
-    if (!started || s.result || s.turn !== 'opp') return
+    if (isOnline || !started || s.result || s.turn !== 'opp') return
     const id = setTimeout(() => {
       const next = botStep(s)
       if (next !== s) setS(next)
     }, 750)
     return () => clearTimeout(id)
-  }, [s, started])
+  }, [s, started, isOnline])
+
+  // Online: authoritative state + game over + chat from the server.
+  useEffect(() => {
+    if (!isOnline) return
+    const sock = getSocket()
+    const onState = (p: { durak: DurakState; deadline: number }) => {
+      setS(p.durak)
+      setDeadline(p.deadline)
+    }
+    const onOver = () => {
+      /* result already comes in durak:state; game:over just closes */
+    }
+    const onChat = (m: { text: string }) => {
+      setMessages((prev) => [...prev, { mine: false, text: m.text }])
+      if (!chatOpenRef.current) setUnread((u) => u + 1)
+    }
+    sock.on('durak:state', onState)
+    sock.on('game:over', onOver)
+    sock.on('chat:msg', onChat)
+    return () => {
+      sock.off('durak:state', onState)
+      sock.off('game:over', onOver)
+      sock.off('chat:msg', onChat)
+    }
+  }, [isOnline])
 
   const youAttacker = s.attacker === 'you'
   const yourTurn = started && s.turn === 'you' && !s.result
@@ -181,28 +223,40 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
   // Drop a card at a screen point — the engine validates; illegal = snap back.
   function playAt(card: Card, x: number, y: number) {
     const el = document.elementFromPoint(x, y)
-    if (s.taking && youAttacker) {
-      if (el?.closest('[data-table]')) apply(playAttack(s, card))
-      return
-    }
     if (youAttacker) {
-      if (el?.closest('[data-table]')) apply(playAttack(s, card))
+      // attacking (first attack or throw-in while the defender takes)
+      if (el?.closest('[data-table]')) doAttack(card)
       return
     }
     // defending (or transferring)
     const canT = legalTransfers(s).some((c) => cardId(c) === cardId(card))
     const pairEl = el?.closest<HTMLElement>('[data-pair]')
     if (pairEl) {
-      let next = playDefend(s, card, Number(pairEl.dataset.pair))
-      if (next === s && canT) next = playTransfer(s, card)
-      apply(next)
+      const pair = Number(pairEl.dataset.pair)
+      if (playDefend(s, card, pair) !== s) doDefend(card, pair) // legal defend
+      else if (canT) doTransfer(card)
     } else if (el?.closest('[data-table]') && canT) {
-      apply(playTransfer(s, card))
+      doTransfer(card)
     }
   }
 
   const apply = (next: DurakState) => {
     if (next !== s) setS(next)
+  }
+  // Online sends the ACTION to the server (authoritative); local applies the engine.
+  const emitD = (event: string, payload: object = {}) =>
+    getSocket().emit(event, { roomId: online!.roomId, ...payload })
+  const doAttack = (card: Card) =>
+    isOnline ? emitD('durak:attack', { card }) : apply(playAttack(s, card))
+  const doDefend = (card: Card, pair: number) =>
+    isOnline ? emitD('durak:defend', { card, pair }) : apply(playDefend(s, card, pair))
+  const doTransfer = (card: Card) =>
+    isOnline ? emitD('durak:transfer', { card }) : apply(playTransfer(s, card))
+  const doTake = () => (isOnline ? emitD('durak:take') : apply(beginTake(s)))
+  const doDone = () => {
+    if (isOnline) return emitD('durak:done')
+    if (s.taking) apply(finishTake(s))
+    else if (canPass(s)) apply(endBout(s))
   }
 
   // Which hand card sits under a screen point (respects fan overlap order).
@@ -304,7 +358,7 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
             <Flag size={17} />
           </button>
           <span className="absolute left-1/2 -translate-x-1/2 text-sm font-bold tracking-wide text-white/90">
-            Дурак · с ботом
+            {isOnline ? 'Дурак · онлайн' : 'Дурак · с ботом'}
           </span>
           <span className="ml-auto flex h-9 items-center gap-1.5 rounded-xl bg-white/95 px-3 text-sm font-extrabold text-ink shadow">
             {bank > 0 ? (
@@ -324,7 +378,8 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
         {/* opponent */}
         <div className="mt-3 flex flex-col items-center">
           <PlayerTile
-            name="Бот"
+            name={isOnline ? online!.opponentName : 'Бот'}
+            elo={isOnline ? online!.opponentElo : undefined}
             active={s.turn === 'opp' && !s.result}
             progress={oppProgress}
           />
@@ -445,11 +500,11 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
               Готов
             </Button>
           ) : yourTurn && canFinishTake(s) ? (
-            <Button size="sm" className="w-full" onClick={() => apply(finishTake(s))}>
+            <Button size="sm" className="w-full" onClick={doDone}>
               Готово
             </Button>
           ) : yourTurn && canPass(s) ? (
-            <Button size="sm" className="w-full" onClick={() => apply(endBout(s))}>
+            <Button size="sm" className="w-full" onClick={doDone}>
               Бито
             </Button>
           ) : yourTurn && canTake(s) ? (
@@ -457,7 +512,7 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
               size="sm"
               variant="secondary"
               className="w-full"
-              onClick={() => apply(beginTake(s))}
+              onClick={doTake}
             >
               Взять
             </Button>
@@ -471,6 +526,7 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
         <div className="flex flex-1 justify-center">
           <PlayerTile
             name={displayName(user)}
+            elo={isOnline ? online!.myElo : undefined}
             active={started ? yourTurn : true}
             progress={youProgress}
             photo={user.photoUrl}
@@ -583,7 +639,8 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
           onCancel={() => setConfirmResign(false)}
           onConfirm={() => {
             setConfirmResign(false)
-            setS((cur) => resign(cur, 'you'))
+            if (online) getSocket().emit('resign', { roomId: online.roomId })
+            else setS((cur) => resign(cur, 'you'))
           }}
         />
       )}
@@ -592,6 +649,7 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
         <DurakOver
           loser={s.result.loser}
           money={bank > 0}
+          canRematch={!isOnline}
           onExit={onExit}
           onRematch={() => setS(createGame({ deck: deckSize, transfer }))}
         />
@@ -603,6 +661,7 @@ export function DurakMatch({ user, config, resume, onExit }: DurakMatchProps) {
 /** Square avatar tile with name label, card-count badge, turn glow + timer ring. */
 function PlayerTile({
   name,
+  elo,
   active,
   progress,
   photo,
@@ -610,6 +669,7 @@ function PlayerTile({
   onLight,
 }: {
   name: string
+  elo?: number
   active: boolean
   progress: number | null
   photo?: string
@@ -673,11 +733,20 @@ function PlayerTile({
         </div>
       </div>
       <span
-        className={`mt-1 max-w-[92px] truncate rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+        className={`mt-1 flex max-w-[120px] items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
           onLight ? 'text-ink' : 'bg-black/35 text-white backdrop-blur'
         }`}
       >
-        {name}
+        <span className="truncate">{name}</span>
+        {elo != null && (
+          <span
+            className={`shrink-0 rounded-full px-1 text-[10px] font-bold ${
+              onLight ? 'bg-gold-light text-gold-dark' : 'bg-white/15 text-gold-light'
+            }`}
+          >
+            {elo}
+          </span>
+        )}
       </span>
     </div>
   )
@@ -839,11 +908,13 @@ function ConfirmDialog({
 function DurakOver({
   loser,
   money,
+  canRematch,
   onExit,
   onRematch,
 }: {
   loser: Player | null
   money: boolean
+  canRematch: boolean
   onExit: () => void
   onRematch: () => void
 }) {
@@ -855,15 +926,17 @@ function DurakOver({
       <div className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
         <p className="text-2xl font-extrabold">{title}</p>
         <p className="mt-1 text-sm text-muted">
-          {money ? 'Игра на GRAM' : 'Игра с ботом · без рейтинга'}
+          {money ? 'Игра на GRAM' : canRematch ? 'Игра с ботом · без рейтинга' : 'Онлайн-партия'}
         </p>
         <div className="mt-6 flex gap-2">
           <Button variant="secondary" className="flex-1" onClick={onExit}>
             В меню
           </Button>
-          <Button className="flex-1" onClick={onRematch}>
-            <RotateCcw size={16} /> Ещё раз
-          </Button>
+          {canRematch && (
+            <Button className="flex-1" onClick={onRematch}>
+              <RotateCcw size={16} /> Ещё раз
+            </Button>
+          )}
         </div>
       </div>
     </div>
