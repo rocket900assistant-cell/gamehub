@@ -224,20 +224,16 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
   function playAt(card: Card, x: number, y: number) {
     const el = document.elementFromPoint(x, y)
     if (youAttacker) {
-      // attacking (first attack or throw-in while the defender takes)
-      if (el?.closest('[data-table]')) doAttack(card)
+      // a light flick up plays it — no need to drag all the way to the table
+      doAttack(card)
       return
     }
-    // defending (or transferring)
+    // defending: use the pair the card was dropped on, else the first undefended one
     const canT = legalTransfers(s).some((c) => cardId(c) === cardId(card))
     const pairEl = el?.closest<HTMLElement>('[data-pair]')
-    if (pairEl) {
-      const pair = Number(pairEl.dataset.pair)
-      if (playDefend(s, card, pair) !== s) doDefend(card, pair) // legal defend
-      else if (canT) doTransfer(card)
-    } else if (el?.closest('[data-table]') && canT) {
-      doTransfer(card)
-    }
+    const pair = pairEl ? Number(pairEl.dataset.pair) : s.table.findIndex((p) => !p.defend)
+    if (pair >= 0 && playDefend(s, card, pair) !== s) doDefend(card, pair)
+    else if (canT) doTransfer(card)
   }
 
   const apply = (next: DurakState) => {
@@ -279,8 +275,8 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
         setDrag((d) => (d ? { ...d, x: ev.clientX, y: ev.clientY } : d))
         return
       }
-      if (startY - ev.clientY > 32) {
-        // pulled up → pick the selected card up
+      if (startY - ev.clientY > 22) {
+        // a small upward nudge → pick the selected card up (light gesture)
         carrying = true
         const card = s.hands.you[sel]
         if (card) setDrag({ card, x: ev.clientX, y: ev.clientY })
