@@ -51,7 +51,7 @@ function eloDelta(myElo, oppElo, won) {
   return won ? win : -loss
 }
 
-function createRoom(game, minutes) {
+function createRoom(game, minutes, opts = {}) {
   const id = uid()
   const room = {
     id,
@@ -67,7 +67,8 @@ function createRoom(game, minutes) {
     room.moveMs = (minutes || 2) * 60000 // per-turn clock (default 2 min)
     room.deadline = 0
   } else if (game === 'durak') {
-    room.durak = durak.createGame({ deck: minutes || 36 }) // minutes reused as deck size
+    // minutes reused as deck size; transfer = переводной mode
+    room.durak = durak.createGame({ deck: minutes || 36, transfer: !!opts.transfer })
     room.moveMs = 60000 // per-action clock
     room.deadline = 0
   } else {
@@ -373,15 +374,16 @@ io.on('connection', (socket) => {
     }
   })
 
-  socket.on('quickMatch', ({ game, minutes }) => {
+  socket.on('quickMatch', ({ game, minutes, transfer }) => {
     const userId = socketUser.get(socket.id)
     if (!userId) return
-    const key = qkey(game, minutes)
+    // include durak options in the bucket so only same-config players match
+    const key = game === 'durak' ? `durak:${minutes}:${transfer ? 't' : 'c'}` : qkey(game, minutes)
     const q = (queues.get(key) ?? []).filter((id) => id !== userId)
     if (q.length > 0) {
       const oppId = q.shift()
       queues.set(key, q)
-      const room = rooms.get(createRoom(game, minutes))
+      const room = rooms.get(createRoom(game, minutes, { transfer }))
       addPlayer(room, oppId)
       addPlayer(room, userId)
       startRoom(room)
@@ -397,8 +399,8 @@ io.on('connection', (socket) => {
     for (const [k, q] of queues) queues.set(k, q.filter((id) => id !== userId))
   })
 
-  socket.on('createRoom', ({ game, minutes }, cb) => {
-    const roomId = createRoom(game, minutes)
+  socket.on('createRoom', ({ game, minutes, transfer }, cb) => {
+    const roomId = createRoom(game, minutes, { transfer })
     addPlayer(rooms.get(roomId), socketUser.get(socket.id))
     cb?.(roomId)
   })

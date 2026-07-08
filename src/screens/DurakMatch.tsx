@@ -200,8 +200,18 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
       setS(p.durak)
       setDeadline(p.deadline)
     }
-    const onOver = () => {
-      /* result already comes in durak:state; game:over just closes */
+    const onOver = (g: { youWon: boolean | null }) => {
+      // resign / timeout / opponent-left end via game:over (no durak:state)
+      setS((cur) =>
+        cur.result
+          ? cur
+          : {
+              ...cur,
+              result: {
+                loser: g.youWon === true ? 'opp' : g.youWon === false ? 'you' : null,
+              },
+            },
+      )
     }
     const onChat = (m: { text: string }) => {
       setMessages((prev) => [...prev, { mine: false, text: m.text }])

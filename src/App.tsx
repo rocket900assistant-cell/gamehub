@@ -200,13 +200,21 @@ export default function App() {
     setMatchmaking(null)
   }
   // Create a private room and share a Telegram link so a friend can join the lobby.
-  function startFriendGame(game: 'chess' | 'durak' | 'nardy', minutes: number) {
-    getSocket().emit('createRoom', { game, minutes }, (roomId: string) => {
-      shareJoinLink(roomId, 'Заходи сыграть со мной в GameHub!')
-      const label = game === 'chess' ? 'Шахматы' : game === 'durak' ? 'Дурак' : 'Нарды'
-      setMatchmaking({ minutes, label: 'Ждём друга…', subtitle: `${label} · по приглашению` })
-      setSub(null)
-    })
+  function startFriendGame(
+    game: 'chess' | 'durak' | 'nardy',
+    minutes: number,
+    opts: { transfer?: boolean } = {},
+  ) {
+    getSocket().emit(
+      'createRoom',
+      { game, minutes, transfer: opts.transfer },
+      (roomId: string) => {
+        shareJoinLink(roomId, 'Заходи сыграть со мной в GameHub!')
+        const label = game === 'chess' ? 'Шахматы' : game === 'durak' ? 'Дурак' : 'Нарды'
+        setMatchmaking({ minutes, label: 'Ждём друга…', subtitle: `${label} · по приглашению` })
+        setSub(null)
+      },
+    )
   }
 
   const inMatchFull = match && !minimized
@@ -404,16 +412,16 @@ export default function App() {
                   setDurakResume(false)
                   setSub('durak')
                 }}
-                onQuickMatch={() => {
-                  getSocket().emit('quickMatch', { game: 'durak', minutes: 36 })
+                onQuickMatch={(deck, transfer) => {
+                  getSocket().emit('quickMatch', { game: 'durak', minutes: deck, transfer })
                   setMatchmaking({
-                    minutes: 36,
+                    minutes: deck,
                     label: 'Поиск соперника…',
-                    subtitle: 'Дурак · онлайн',
+                    subtitle: `Дурак · ${deck} карт${transfer ? ' · переводной' : ''}`,
                   })
                   setSub(null)
                 }}
-                onInvite={() => startFriendGame('durak', 36)}
+                onInvite={(deck, transfer) => startFriendGame('durak', deck, { transfer })}
               />
             ) : sub === 'durak' ? (
               <DurakMatch

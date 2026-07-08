@@ -175,8 +175,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 interface DurakSetupProps {
   onBack: () => void
   onCreate: (cfg: DurakConfig) => void
-  onQuickMatch: () => void
-  onInvite: () => void
+  onQuickMatch: (deck: number, transfer: boolean) => void
+  onInvite: (deck: number, transfer: boolean) => void
 }
 
 export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite }: DurakSetupProps) {
@@ -326,10 +326,15 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite }: DurakSe
       </button>
 
       <div className="space-y-3">
-        <Button size="lg" className="w-full" onClick={onQuickMatch}>
+        <Button size="lg" className="w-full" onClick={() => onQuickMatch(deck, transfer)}>
           <Swords size={18} /> Быстрая игра (онлайн)
         </Button>
-        <Button size="lg" variant="secondary" className="w-full" onClick={onInvite}>
+        <Button
+          size="lg"
+          variant="secondary"
+          className="w-full"
+          onClick={() => onInvite(deck, transfer)}
+        >
           <UserPlus size={18} /> Играть с другом
         </Button>
         <Button
