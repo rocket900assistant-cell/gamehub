@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Bot, Gem, Lock, Minus, Plus, Swords } from 'lucide-react'
+import { ArrowLeft, Bot, Gem, Lock, Minus, Plus, Swords, UserPlus } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { cn } from '../lib/cn'
@@ -176,9 +176,10 @@ interface DurakSetupProps {
   onBack: () => void
   onCreate: (cfg: DurakConfig) => void
   onQuickMatch: () => void
+  onInvite: () => void
 }
 
-export function DurakSetup({ onBack, onCreate, onQuickMatch }: DurakSetupProps) {
+export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite }: DurakSetupProps) {
   const [free, setFree] = useState(true)
   const [stakeText, setStakeText] = useState('0.1')
   const [players, setPlayers] = useState(2)
@@ -328,9 +329,12 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch }: DurakSetupProps) 
         <Button size="lg" className="w-full" onClick={onQuickMatch}>
           <Swords size={18} /> Быстрая игра (онлайн)
         </Button>
+        <Button size="lg" variant="secondary" className="w-full" onClick={onInvite}>
+          <UserPlus size={18} /> Играть с другом
+        </Button>
         <Button
           size="lg"
-          variant="secondary"
+          variant="ghost"
           className="w-full"
           onClick={() =>
             onCreate({

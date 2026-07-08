@@ -51,6 +51,20 @@ export function makeGameLink(gameId: string): string {
   return `https://t.me/${BOT_USERNAME}/app?startapp=${gameId}`
 }
 
+/** Deep link that drops a friend straight into a specific game room (lobby). */
+export function makeJoinLink(roomId: string): string {
+  return `https://t.me/${BOT_USERNAME}/app?startapp=join_${roomId}`
+}
+
+/** Opens Telegram's share sheet with a room-join link. */
+export function shareJoinLink(roomId: string, text: string) {
+  const url = makeJoinLink(roomId)
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`
+  const wa = getWebApp()
+  if (wa?.openTelegramLink) wa.openTelegramLink(shareUrl)
+  else window.open(shareUrl, '_blank')
+}
+
 /** Opens Telegram's native share sheet for a game invite link. */
 export function shareGameLink(gameId: string, text: string) {
   const url = makeGameLink(gameId)

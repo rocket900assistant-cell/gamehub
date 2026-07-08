@@ -4,7 +4,7 @@ import type { LucideIcon } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Avatar } from '../components/ui/Avatar'
-import { makeGameLink, shareGameLink } from '../lib/telegram'
+import { makeJoinLink, shareJoinLink } from '../lib/telegram'
 import { getSocket } from '../lib/socket'
 import { GameTypeToggle, StakeStepper } from '../components/StakePicker'
 import { getFriends } from '../lib/friends'
@@ -55,7 +55,7 @@ export function NewChessGame({
     return () => clearTimeout(t)
   }, [friend, minutes, free, stake])
 
-  const link = roomId ? makeGameLink(roomId) : ''
+  const link = roomId ? makeJoinLink(roomId) : ''
   const visibleFriends = showAllFriends ? friends : friends.slice(0, 3)
 
   function invite(id: string) {
@@ -217,7 +217,7 @@ export function NewChessGame({
                 disabled={!roomId}
                 onClick={() =>
                   roomId &&
-                  shareGameLink(roomId, 'Партия в шахматы в GameHub — заходи!')
+                  shareJoinLink(roomId, 'Партия в шахматы в GameHub — заходи!')
                 }
               >
                 <Send size={16} /> Поделиться ссылкой

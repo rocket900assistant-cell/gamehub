@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Bot, Swords } from 'lucide-react'
+import { ArrowLeft, Bot, Swords, UserPlus } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { GameTypeToggle, StakeStepper, MIN_STAKE } from '../components/StakePicker'
 
@@ -12,9 +12,10 @@ interface NardySetupProps {
   onBack: () => void
   onCreate: (cfg: NardyConfig) => void
   onQuickMatch: () => void
+  onInvite: () => void
 }
 
-export function NardySetup({ onBack, onCreate, onQuickMatch }: NardySetupProps) {
+export function NardySetup({ onBack, onCreate, onQuickMatch, onInvite }: NardySetupProps) {
   const [free, setFree] = useState(true)
   const [stakeText, setStakeText] = useState('0.1')
   const num = parseFloat(stakeText) || 0
@@ -41,9 +42,12 @@ export function NardySetup({ onBack, onCreate, onQuickMatch }: NardySetupProps) 
         <Button size="lg" className="w-full" onClick={onQuickMatch}>
           <Swords size={18} /> Быстрая игра (онлайн)
         </Button>
+        <Button size="lg" variant="secondary" className="w-full" onClick={onInvite}>
+          <UserPlus size={18} /> Играть с другом
+        </Button>
         <Button
           size="lg"
-          variant="secondary"
+          variant="ghost"
           className="w-full"
           onClick={() => onCreate({ free, stake: free ? 0 : Math.max(MIN_STAKE, num) })}
         >

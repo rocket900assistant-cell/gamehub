@@ -17,6 +17,8 @@ import {
   initTelegram,
   displayName,
   getInitData,
+  getStartParam,
+  shareJoinLink,
   type TgUser,
 } from './lib/telegram'
 import {
@@ -66,6 +68,7 @@ export default function App() {
   })
   const [nardyOnline, setNardyOnline] = useState<OnlineNardy | null>(null)
   const [durakOnline, setDurakOnline] = useState<OnlineDurak | null>(null)
+  const [joinError, setJoinError] = useState<string | null>(null)
 
   useEffect(() => {
     const u = initTelegram()
@@ -151,13 +154,27 @@ export default function App() {
       setMinimized(false)
     }
     const onInvite = (inv: IncomingInvite) => setInvite(inv)
+    const onNotFound = () => {
+      setMatchmaking(null)
+      setJoinError('Партия не найдена или уже началась')
+    }
     s.on('match:found', onFound)
     s.on('invite:incoming', onInvite)
+    s.on('room:notfound', onNotFound)
+
+    // Opened via a friend's invite link → join their room straight away.
+    const sp = getStartParam()
+    if (sp && sp.startsWith('join_')) {
+      s.emit('joinRoom', { roomId: sp.slice(5) })
+      setMatchmaking({ minutes: 0, label: 'Заходим в игру…', subtitle: 'Подключение к сопернику' })
+    }
+
     return () => {
       s.off('connect', doRegister)
       s.off('profile', onProfile)
       s.off('match:found', onFound)
       s.off('invite:incoming', onInvite)
+      s.off('room:notfound', onNotFound)
     }
   }, [])
 
@@ -181,6 +198,15 @@ export default function App() {
   function cancelMatchmaking() {
     getSocket().emit('cancelQuick')
     setMatchmaking(null)
+  }
+  // Create a private room and share a Telegram link so a friend can join the lobby.
+  function startFriendGame(game: 'chess' | 'durak' | 'nardy', minutes: number) {
+    getSocket().emit('createRoom', { game, minutes }, (roomId: string) => {
+      shareJoinLink(roomId, 'Заходи сыграть со мной в GameHub!')
+      const label = game === 'chess' ? 'Шахматы' : game === 'durak' ? 'Дурак' : 'Нарды'
+      setMatchmaking({ minutes, label: 'Ждём друга…', subtitle: `${label} · по приглашению` })
+      setSub(null)
+    })
   }
 
   const inMatchFull = match && !minimized
@@ -295,6 +321,15 @@ export default function App() {
       className="mx-auto flex max-w-md flex-col bg-bg"
       style={{ height: 'var(--app-h, 100dvh)' }}
     >
+      {joinError && (
+        <button
+          onClick={() => setJoinError(null)}
+          className="fixed left-1/2 top-3 z-[60] -translate-x-1/2 rounded-2xl bg-danger px-4 py-2 text-sm font-bold text-white shadow-lg"
+        >
+          {joinError}
+        </button>
+      )}
+
       {/* Match layer — kept mounted to preserve state; hidden when minimized */}
       {match && !nardyOnline && !durakOnline && (
         <div
@@ -378,6 +413,7 @@ export default function App() {
                   })
                   setSub(null)
                 }}
+                onInvite={() => startFriendGame('durak', 36)}
               />
             ) : sub === 'durak' ? (
               <DurakMatch
@@ -407,6 +443,7 @@ export default function App() {
                   })
                   setSub(null)
                 }}
+                onInvite={() => startFriendGame('nardy', 2)}
               />
             ) : sub === 'nardy' ? (
               <NardyMatch
