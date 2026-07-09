@@ -66,6 +66,7 @@ const D: Record<string, Entry> = {
   'profile.darkTheme': { ru: 'Тёмная тема', en: 'Dark theme' },
   'profile.language': { ru: 'Язык', en: 'Language' },
   'profile.history': { ru: 'История матчей', en: 'Match history' },
+  'profile.eloHint': { ru: 'Сыграй онлайн-партии — здесь появится график рейтинга', en: 'Play online matches — your rating chart will appear here' },
   'profile.renameTitle': { ru: 'Сменить имя', en: 'Change name' },
   'profile.namePlaceholder': { ru: 'Ваше имя', en: 'Your name' },
   // header + promo
@@ -82,7 +83,7 @@ const D: Record<string, Entry> = {
   'home.soon': { ru: 'Скоро', en: 'Soon' },
   'home.inviteFriend': { ru: 'Позови друга', en: 'Invite a friend' },
   'home.yourElo': { ru: 'Твой Elo', en: 'Your Elo' },
-  'home.inviteHint': { ru: 'Вы оба получите бонус GRAM на баланс', en: 'You both get a GRAM bonus' },
+  'home.inviteHint': { ru: 'Приглашай друзей. Играйте вместе и получайте бонусы', en: 'Invite friends. Play together and earn bonuses' },
   'home.inviteBtn': { ru: 'Пригласить', en: 'Invite' },
   // games
   'game.chess': { ru: 'Шахматы', en: 'Chess' },

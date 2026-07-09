@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend } from './db.js'
 import { verifyInitData } from './telegram.js'
 import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther } from './nardy.js'
 import * as durak from './durak.js'
@@ -504,6 +504,23 @@ io.on('connection', (socket) => {
     await removeFriendship(myTg, friendTg)
     pushFriends(myTg).catch(() => {})
     pushFriends(friendTg).catch(() => {})
+  })
+
+  // Elo trend (sparkline) for the profile: the game with the highest current Elo.
+  socket.on('elo:get', async () => {
+    const userId = socketUser.get(socket.id)
+    const myTg = userTg.get(userId)
+    if (!myTg || !dbEnabled) return socket.emit('elo:trend', { game: null, trend: [], delta: 0 })
+    const elos = users.get(userId)?.elos ?? { chess: 1200, durak: 1200, nardy: 1200 }
+    const game = ['chess', 'durak', 'nardy'].reduce((b, g) => (elos[g] > elos[b] ? g : b), 'chess')
+    try {
+      const trend = await getEloTrend(myTg, game, 12)
+      const delta = trend.length >= 2 ? trend[trend.length - 1] - trend[trend.length - 2] : 0
+      socket.emit('elo:trend', { game, trend, delta })
+    } catch (e) {
+      console.error('[db] eloTrend failed:', e.message)
+      socket.emit('elo:trend', { game: null, trend: [], delta: 0 })
+    }
   })
 
   // Last 10 matches for the match-history screen.

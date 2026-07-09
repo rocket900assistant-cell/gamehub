@@ -30,12 +30,14 @@ import {
   addFriend,
   requestFriends,
   requestHistory,
+  requestEloTrend,
   inviteFriend as emitInviteFriend,
   type IncomingInvite,
   type MatchConfig,
   type Profile as PlayerProfile,
   type ServerFriend,
   type HistoryEntry,
+  type EloTrend,
 } from './lib/socket'
 
 type SubScreen =
@@ -89,6 +91,7 @@ export default function App() {
   const [joinError, setJoinError] = useState<string | null>(null)
   const [friends, setFriends] = useState<ServerFriend[]>([])
   const [history, setHistory] = useState<HistoryEntry[]>([])
+  const [eloTrend, setEloTrend] = useState<EloTrend | null>(null)
   const [pendingInvite, setPendingInvite] = useState<PendingInvite | null>(null)
   const [, forceLang] = useState(0)
   useEffect(() => onLangChange(() => forceLang((x) => x + 1)), [])
@@ -115,6 +118,7 @@ export default function App() {
         vip: isVip(),
       })
       requestFriends()
+      requestEloTrend()
     }
     doRegister()
 
@@ -124,6 +128,7 @@ export default function App() {
     const onProfile = (p: PlayerProfile) => {
       setProfile(p)
       syncVip(!!p.vip)
+      requestEloTrend() // refresh the sparkline after a rated game
       try {
         localStorage.setItem('gh_profile', JSON.stringify(p))
       } catch {
@@ -189,6 +194,7 @@ export default function App() {
     }
     const onFriends = (list: ServerFriend[]) => setFriends(list)
     const onHistory = (list: HistoryEntry[]) => setHistory(list)
+    const onEloTrend = (e: EloTrend) => setEloTrend(e)
     const onInviteOffline = () => {
       setMatchmaking(null)
       setJoinError(t('invite.offline'))
@@ -198,6 +204,7 @@ export default function App() {
     s.on('room:notfound', onNotFound)
     s.on('friends', onFriends)
     s.on('history', onHistory)
+    s.on('elo:trend', onEloTrend)
     s.on('invite:offline', onInviteOffline)
 
     // Opened via a deep link.
@@ -219,6 +226,7 @@ export default function App() {
       s.off('room:notfound', onNotFound)
       s.off('friends', onFriends)
       s.off('history', onHistory)
+      s.off('elo:trend', onEloTrend)
       s.off('invite:offline', onInviteOffline)
     }
   }, [])
@@ -567,6 +575,7 @@ export default function App() {
                     <Profile
                       user={user}
                       profile={profile}
+                      eloTrend={eloTrend}
                       friendsCount={friends.length}
                       onOpenFriends={() => setSub('friends')}
                       onOpenHistory={() => {

@@ -71,6 +71,18 @@ export function requestHistory() {
   getSocket().emit('history:get')
 }
 
+/** Elo sparkline data for the profile (game with the highest current Elo). */
+export interface EloTrend {
+  game: string | null
+  trend: number[]
+  delta: number
+}
+
+/** Ask the server for the Elo trend (replies with 'elo:trend'). */
+export function requestEloTrend() {
+  getSocket().emit('elo:get')
+}
+
 /** Invite a friend (by telegram id) into a private room for a game. */
 export function inviteFriend(
   toTg: number,

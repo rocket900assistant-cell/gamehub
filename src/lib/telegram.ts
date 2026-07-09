@@ -95,7 +95,7 @@ export function shareFriendLink(myId: number | string) {
 export function shareInvite(refCode: string) {
   const url = `https://t.me/${BOT_USERNAME}?startapp=ref_${refCode}`
   const text =
-    'Играй со мной в GameHub — шахматы, дурак и нарды. Заходи, и мы оба получим бонус GRAM 🎁'
+    'Играй со мной в GameHub — шахматы, дурак и нарды. Приглашай друзей, играйте вместе и получайте бонусы! 🎁'
   const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`
   const wa = getWebApp()
   if (wa?.openTelegramLink) wa.openTelegramLink(shareUrl)

@@ -53,6 +53,14 @@ export async function initDb() {
       PRIMARY KEY (a, b)
     );
     ALTER TABLE users ADD COLUMN IF NOT EXISTS vip BOOLEAN NOT NULL DEFAULT false;
+    CREATE TABLE IF NOT EXISTS elo_history (
+      id         BIGSERIAL PRIMARY KEY,
+      tg_id      BIGINT NOT NULL,
+      game       TEXT NOT NULL,
+      elo        INT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS elo_history_user ON elo_history (tg_id, game, id);
   `)
   console.log('[db] ready')
 }
@@ -147,6 +155,17 @@ export async function getUser(tgId) {
   return rows[0] ?? null
 }
 
+/** Recent Elo values for a player's game (oldest → newest). */
+export async function getEloTrend(tgId, game, limit = 12) {
+  tgId = Number(tgId)
+  if (!pool || !tgId) return []
+  const { rows } = await pool.query(
+    `SELECT elo FROM elo_history WHERE tg_id = $1 AND game = $2 ORDER BY id DESC LIMIT $3`,
+    [tgId, game, limit],
+  )
+  return rows.map((r) => r.elo).reverse()
+}
+
 /** Last N games for a player (most recent first). */
 export async function getHistory(tgId, limit = 10) {
   tgId = Number(tgId)
@@ -164,16 +183,22 @@ export async function recordResult({ game, winner, loser, winnerDelta, loserDelt
   if (!pool) return
   const col = ELO_COL[game] ?? 'elo_chess'
   try {
-    if (winner)
-      await pool.query(
-        `UPDATE users SET ${col} = GREATEST(100, ${col} + $2), games = games + 1, wins = wins + 1 WHERE tg_id = $1`,
+    if (winner) {
+      const { rows } = await pool.query(
+        `UPDATE users SET ${col} = GREATEST(100, ${col} + $2), games = games + 1, wins = wins + 1 WHERE tg_id = $1 RETURNING ${col} AS elo`,
         [winner, winnerDelta ?? 0],
       )
-    if (loser)
-      await pool.query(
-        `UPDATE users SET ${col} = GREATEST(100, ${col} + $2), games = games + 1, losses = losses + 1 WHERE tg_id = $1`,
+      if (rows[0])
+        await pool.query('INSERT INTO elo_history (tg_id, game, elo) VALUES ($1,$2,$3)', [winner, game, rows[0].elo])
+    }
+    if (loser) {
+      const { rows } = await pool.query(
+        `UPDATE users SET ${col} = GREATEST(100, ${col} + $2), games = games + 1, losses = losses + 1 WHERE tg_id = $1 RETURNING ${col} AS elo`,
         [loser, loserDelta ?? 0],
       )
+      if (rows[0])
+        await pool.query('INSERT INTO elo_history (tg_id, game, elo) VALUES ($1,$2,$3)', [loser, game, rows[0].elo])
+    }
     await pool.query(
       'INSERT INTO game_history (game, p1, p2, winner, reason, stake) VALUES ($1,$2,$3,$4,$5,$6)',
       [game, winner ?? null, loser ?? null, winner ?? null, reason ?? null, stake],

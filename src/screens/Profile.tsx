@@ -9,7 +9,6 @@ import {
   Moon,
   Pencil,
   Spade,
-  TrendingUp,
   Users,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -18,17 +17,12 @@ import { Card } from '../components/ui/Card'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { StarBalance } from '../components/ui/StarBalance'
 import { EloChart } from '../components/EloChart'
-import {
-  eloTrend,
-  favoriteGames,
-  profile as profileMock,
-  profileStats,
-} from '../data/mock'
+import { favoriteGames, profile as profileMock, profileStats } from '../data/mock'
 import type { FavGame } from '../data/mock'
 import type { TgUser } from '../lib/telegram'
 import { displayName } from '../lib/telegram'
 import { setName } from '../lib/socket'
-import type { Profile as PlayerProfile } from '../lib/socket'
+import type { EloTrend, Profile as PlayerProfile } from '../lib/socket'
 import { isVip } from '../lib/skins'
 import { getTheme, setTheme } from '../lib/theme'
 import { getLang, setLang, t } from '../lib/i18n'
@@ -42,12 +36,13 @@ const gameIcons: Record<string, LucideIcon> = {
 interface ProfileProps {
   user: TgUser
   profile: PlayerProfile | null
+  eloTrend: EloTrend | null
   friendsCount: number
   onOpenFriends: () => void
   onOpenHistory: () => void
 }
 
-export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHistory }: ProfileProps) {
+export function Profile({ user, profile, eloTrend, friendsCount, onOpenFriends, onOpenHistory }: ProfileProps) {
   const vip = isVip()
   const name = profile?.name ?? displayName(user)
   const [renameOpen, setRenameOpen] = useState(false)
@@ -76,6 +71,8 @@ export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHist
   const wins = profile?.wins ?? 0
   const losses = profile?.losses ?? 0
   const winrate = games ? Math.round((wins / games) * 100) : 0
+  const trendPoints = eloTrend?.trend && eloTrend.trend.length >= 2 ? eloTrend.trend : null
+  const realDelta = eloTrend?.delta ?? 0
 
   const stats = profile
     ? [
@@ -137,21 +134,23 @@ export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHist
               <span className="text-3xl font-extrabold leading-none">
                 {eloMain}
               </span>
-              {!profile && (
-                <span className="text-sm font-bold text-success">
-                  +{profileMock.eloDelta}
+              {realDelta !== 0 && (
+                <span
+                  className={`text-sm font-bold ${realDelta > 0 ? 'text-success' : 'text-danger'}`}
+                >
+                  {realDelta > 0 ? '+' : '−'}
+                  {Math.abs(realDelta)}
                 </span>
               )}
             </div>
           </div>
-          {!profile && (
-            <span className="flex items-center gap-1 text-xs text-muted">
-              <TrendingUp size={13} /> Топ {profileMock.topPercent}%
-            </span>
-          )}
         </div>
 
-        <EloChart points={eloTrend} className="mt-3 h-16 w-full" />
+        {trendPoints ? (
+          <EloChart points={trendPoints} className="mt-3 h-16 w-full" />
+        ) : (
+          <p className="mt-4 text-center text-xs text-muted">{t('profile.eloHint')}</p>
+        )}
 
         <div className="mt-4 grid grid-cols-4 divide-x divide-line/70 border-t border-line/70 pt-4">
           {stats.map((s) => (
