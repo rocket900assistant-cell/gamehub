@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, dbEnabled, addFriendship, getFriends } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, dbEnabled, addFriendship, getFriends, setUserName } from './db.js'
 import { verifyInitData } from './telegram.js'
 import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther } from './nardy.js'
 import * as durak from './durak.js'
@@ -488,6 +488,28 @@ io.on('connection', (socket) => {
   socket.on('friend:list', async () => {
     const myTg = userTg.get(socketUser.get(socket.id))
     socket.emit('friends', await friendListFor(myTg))
+  })
+
+  // Change display nickname.
+  socket.on('set:name', async ({ name }) => {
+    const userId = socketUser.get(socket.id)
+    const myTg = userTg.get(userId)
+    const clean = String(name ?? '').trim().slice(0, 24)
+    if (!clean) return
+    users.set(userId, { ...users.get(userId), name: clean })
+    if (myTg) tgInfo.set(myTg, { ...(tgInfo.get(myTg) ?? {}), name: clean })
+    if (myTg && dbEnabled) {
+      try {
+        const row = await setUserName(myTg, clean)
+        if (row) socket.emit('profile', dbProfile(row))
+      } catch (e) {
+        console.error('[db] setName failed:', e.message)
+      }
+    }
+    if (myTg) {
+      pushFriends(myTg).catch(() => {})
+      for (const f of await friendListFor(myTg)) pushFriends(f.id).catch(() => {})
+    }
   })
 
   socket.on('move', ({ roomId, from, to }) => {

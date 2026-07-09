@@ -93,17 +93,28 @@ export async function getFriends(tgId) {
 /** Create the player row if new, else refresh their profile fields. Returns the row. */
 export async function upsertUser({ tgId, username, name, photoUrl, referredBy }) {
   if (!pool || !tgId) return null
+  // NOTE: `name` is only set on first insert — never overwritten on reconnect,
+  // so a custom nickname (set via setUserName) survives future logins.
   const { rows } = await pool.query(
     `INSERT INTO users (tg_id, username, name, photo_url, referred_by)
        VALUES ($1,$2,$3,$4,$5)
      ON CONFLICT (tg_id) DO UPDATE
        SET username = EXCLUDED.username,
-           name     = EXCLUDED.name,
            photo_url = EXCLUDED.photo_url
      RETURNING *`,
     [tgId, username ?? null, name ?? null, photoUrl ?? null, referredBy ?? null],
   )
   return rows[0]
+}
+
+/** Set the player's custom display name. Returns the updated row. */
+export async function setUserName(tgId, name) {
+  if (!pool || !tgId) return null
+  const { rows } = await pool.query(
+    'UPDATE users SET name = $2 WHERE tg_id = $1 RETURNING *',
+    [tgId, name],
+  )
+  return rows[0] ?? null
 }
 
 export async function getUser(tgId) {

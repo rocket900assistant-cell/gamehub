@@ -43,6 +43,11 @@ export function requestFriends() {
   getSocket().emit('friend:list')
 }
 
+/** Change the player's display nickname (server persists + pushes fresh profile). */
+export function setName(name: string) {
+  getSocket().emit('set:name', { name })
+}
+
 /** Invite a friend (by telegram id) into a private room for a game. */
 export function inviteFriend(
   toTg: number,

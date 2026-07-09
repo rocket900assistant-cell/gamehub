@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import {
   ChevronRight,
   ClipboardList,
   Copy,
   Crown,
   Gamepad2,
+  Pencil,
   Spade,
   TrendingUp,
   Users,
@@ -24,8 +26,10 @@ import {
 import type { FavGame } from '../data/mock'
 import type { TgUser } from '../lib/telegram'
 import { displayName } from '../lib/telegram'
+import { setName } from '../lib/socket'
 import type { Profile as PlayerProfile } from '../lib/socket'
 import { isVip } from '../lib/skins'
+import { Button } from '../components/ui/Button'
 
 const gameIcons: Record<string, LucideIcon> = {
   chess: Crown,
@@ -41,6 +45,18 @@ interface ProfileProps {
 
 export function Profile({ user, profile, friendsCount, onOpenFriends }: ProfileProps) {
   const vip = isVip()
+  const name = profile?.name ?? displayName(user)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [draft, setDraft] = useState(name)
+  function openRename() {
+    setDraft(name)
+    setRenameOpen(true)
+  }
+  function saveName() {
+    const clean = draft.trim().slice(0, 24)
+    if (clean) setName(clean)
+    setRenameOpen(false)
+  }
   const balance = profile?.balance ?? player.balance
   const eloMain = profile
     ? Math.max(profile.elo.chess, profile.elo.durak, profile.elo.nardy)
@@ -77,10 +93,10 @@ export function Profile({ user, profile, friendsCount, onOpenFriends }: ProfileP
       {/* Identity card */}
       <Card className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 gap-3">
-          <Avatar name={displayName(user)} src={user.photoUrl} size={56} vip={vip} />
+          <Avatar name={name} src={user.photoUrl} size={56} vip={vip} />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <p className="truncate text-lg font-bold">{displayName(user)}</p>
+              <p className="truncate text-lg font-bold">{name}</p>
               {vip && (
                 <span className="rounded-full bg-gradient-to-b from-gold to-gold-dark px-2 py-0.5 text-[10px] font-bold text-white">
                   VIP
@@ -174,6 +190,14 @@ export function Profile({ user, profile, friendsCount, onOpenFriends }: ProfileP
       {/* Menu */}
       <Card className="divide-y divide-line/70 p-0">
         <button
+          onClick={openRename}
+          className="flex w-full items-center gap-3 p-4 text-left transition active:bg-bg"
+        >
+          <Pencil size={20} className="text-muted" />
+          <span className="flex-1 font-medium">Сменить имя</span>
+          <ChevronRight size={18} className="text-muted" />
+        </button>
+        <button
           onClick={onOpenFriends}
           className="flex w-full items-center gap-3 p-4 text-left transition active:bg-bg"
         >
@@ -188,6 +212,38 @@ export function Profile({ user, profile, friendsCount, onOpenFriends }: ProfileP
           <ChevronRight size={18} className="text-muted" />
         </button>
       </Card>
+
+      {/* Rename dialog */}
+      {renameOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-6"
+          onClick={() => setRenameOpen(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 shadow-[var(--shadow-soft)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-lg font-extrabold">Сменить имя</p>
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && saveName()}
+              maxLength={24}
+              autoFocus
+              placeholder="Ваше имя"
+              className="mt-3 h-11 w-full rounded-[var(--radius-input)] border border-line bg-bg px-3 text-[15px] outline-none focus:border-gold"
+            />
+            <div className="mt-5 flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setRenameOpen(false)}>
+                Отмена
+              </Button>
+              <Button className="flex-1" disabled={!draft.trim()} onClick={saveName}>
+                Сохранить
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

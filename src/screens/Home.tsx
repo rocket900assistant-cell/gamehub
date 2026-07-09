@@ -52,9 +52,9 @@ export function Home({ user, profile, onOpenProfile, onPlay, resumeBanner }: Hom
           onClick={onOpenProfile}
           className="flex items-center gap-3 text-left"
         >
-          <Avatar name={displayName(user)} src={user.photoUrl} size={44} />
+          <Avatar name={profile?.name ?? displayName(user)} src={user.photoUrl} size={44} />
           <div>
-            <p className="font-bold leading-tight">{displayName(user)}</p>
+            <p className="font-bold leading-tight">{profile?.name ?? displayName(user)}</p>
             <p className="flex items-center gap-0.5 text-xs text-muted">
               Профиль <ChevronRight size={13} />
             </p>
