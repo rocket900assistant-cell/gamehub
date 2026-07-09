@@ -11,6 +11,7 @@ import { History } from './screens/History'
 import { NewChessGame } from './screens/NewChessGame'
 import { ChessMatch, hasChessSave, readChessSave } from './screens/ChessMatch'
 import { DurakMatch, hasDurakSave, type OnlineDurak } from './screens/DurakMatch'
+import { DurakMatchN } from './screens/DurakMatchN'
 import { DurakSetup, type DurakConfig } from './screens/DurakSetup'
 import { NardyMatch, hasNardySave, type OnlineNardy } from './screens/NardyMatch'
 import { NardySetup, type NardyConfig } from './screens/NardySetup'
@@ -47,6 +48,7 @@ type SubScreen =
   | 'durak'
   | 'nardy-setup'
   | 'nardy'
+  | 'durakN'
   | 'invite'
   | 'history'
   | null
@@ -62,6 +64,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('games')
   const [sub, setSub] = useState<SubScreen>(null)
   const [durakCfg, setDurakCfg] = useState<DurakConfig | null>(null)
+  const [durakNCfg, setDurakNCfg] = useState<{ players: number; deck: number } | null>(null)
   const [nardyCfg, setNardyCfg] = useState<NardyConfig | null>(null)
   const [durakResume, setDurakResume] = useState(false)
   const [durakSaved, setDurakSaved] = useState(() => hasDurakSave())
@@ -468,9 +471,15 @@ export default function App() {
               <DurakSetup
                 onBack={() => setSub(null)}
                 onCreate={(cfg) => {
-                  setDurakCfg(cfg)
-                  setDurakResume(false)
-                  setSub('durak')
+                  if (cfg.players > 2) {
+                    // 3–5 players vs bots → the N-player table
+                    setDurakNCfg({ players: cfg.players, deck: cfg.deck })
+                    setSub('durakN')
+                  } else {
+                    setDurakCfg(cfg)
+                    setDurakResume(false)
+                    setSub('durak')
+                  }
                 }}
                 onQuickMatch={(deck, transfer) => {
                   getSocket().emit('quickMatch', { game: 'durak', minutes: deck, transfer })
@@ -502,6 +511,14 @@ export default function App() {
                   setDurakResume(false)
                   setDurakSaved(hasDurakSave())
                 }}
+              />
+            ) : sub === 'durakN' && durakNCfg ? (
+              <DurakMatchN
+                user={user}
+                players={durakNCfg.players}
+                deck={durakNCfg.deck}
+                myName={myName}
+                onExit={() => setSub(null)}
               />
             ) : sub === 'nardy-setup' ? (
               <NardySetup
