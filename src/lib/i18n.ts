@@ -83,6 +83,29 @@ const D: Record<string, Entry> = {
   'game.chess': { ru: 'Шахматы', en: 'Chess' },
   'game.durak': { ru: 'Дурак', en: 'Durak' },
   'game.nardy': { ru: 'Нарды', en: 'Backgammon' },
+  'game.poker': { ru: 'Покер', en: 'Poker' },
+  'game.checkers': { ru: 'Шашки', en: 'Checkers' },
+  'game.tictactoe': { ru: 'Крестики', en: 'Tic-tac-toe' },
+  // resume banners
+  'resume.title': { ru: 'Вернуться в партию', en: 'Back to the game' },
+  'resume.inProgress': { ru: 'идёт игра', en: 'in progress' },
+  // skin names
+  'skin.default': { ru: 'Классика', en: 'Classic' },
+  'skin.green': { ru: 'Классик зелёный', en: 'Classic green' },
+  'skin.grey': { ru: 'Серый', en: 'Grey' },
+  'skin.pink': { ru: 'Розовый', en: 'Pink' },
+  'skin.marble': { ru: 'Мрамор', en: 'Marble' },
+  'skin.blue-marble': { ru: 'Синий мрамор', en: 'Blue marble' },
+  'skin.back-default': { ru: 'Классика', en: 'Classic' },
+  'skin.back-emerald': { ru: 'Изумруд', en: 'Emerald' },
+  'skin.back-royal': { ru: 'Королевская', en: 'Royal' },
+  'skin.felt-default': { ru: 'Синяя кожа', en: 'Blue leather' },
+  'skin.felt-cream': { ru: 'Кремовое', en: 'Cream' },
+  'skin.felt-green': { ru: 'Зелёное сукно', en: 'Green cloth' },
+  'skin.felt-burgundy': { ru: 'Бордовый бархат', en: 'Burgundy velvet' },
+  'skin.checker-default': { ru: 'Классика', en: 'Classic' },
+  'skin.checker-emerald': { ru: 'Изумруд', en: 'Emerald' },
+  'skin.checker-royal': { ru: 'Оникс-Роял', en: 'Onyx Royal' },
   // friends
   'friends.title': { ru: 'Друзья', en: 'Friends' },
   'friends.online': { ru: 'в сети', en: 'online' },
@@ -115,18 +138,73 @@ const D: Record<string, Entry> = {
   'store.purchase': { ru: 'Покупка', en: 'Purchase' },
   'store.payWithStars': { ru: 'Оплата звёздами Telegram', en: 'Pay with Telegram Stars' },
   'store.buyFor': { ru: 'Купить за', en: 'Buy for' },
+  // setup screens
+  'setup.quickOnline': { ru: 'Быстрая игра (онлайн)', en: 'Quick game (online)' },
+  'setup.quick': { ru: 'Быстрая игра', en: 'Quick game' },
+  'setup.withFriend': { ru: 'Играть с другом', en: 'Play with a friend' },
+  'setup.withBot': { ru: 'Играть с ботом', en: 'Play vs bot' },
+  'setup.free': { ru: 'Бесплатно', en: 'Free' },
+  'setup.onGram': { ru: 'На GRAM', en: 'For GRAM' },
+  'setup.yourStake': { ru: 'Ваша ставка', en: 'Your stake' },
+  'setup.timeControl': { ru: 'Контроль времени', en: 'Time control' },
+  'setup.createGame': { ru: 'Создать игру', en: 'Create game' },
+  'nardy.title': { ru: 'Нарды', en: 'Backgammon' },
+  'nardy.desc': { ru: 'Длинные нарды. 2 минуты на ход.', en: 'Long backgammon. 2 minutes per move.' },
+  'chess.title': { ru: 'Шахматы', en: 'Chess' },
+  'chess.blitz': { ru: 'Блиц', en: 'Blitz' },
+  'chess.rapid': { ru: 'Рапид', en: 'Rapid' },
+  'durak.title': { ru: 'Создать игру', en: 'Create game' },
+  'durak.players': { ru: 'Игроки', en: 'Players' },
+  'durak.deck': { ru: 'Колода', en: 'Deck' },
+  'durak.speed': { ru: 'Скорость', en: 'Speed' },
+  'durak.speedNormal': { ru: 'Обычная', en: 'Normal' },
+  'durak.speedFast': { ru: 'Быстрая', en: 'Fast' },
+  'durak.modes': { ru: 'Режимы', en: 'Modes' },
+  'durak.privateGame': { ru: 'Приватная игра', en: 'Private game' },
+  'durak.privateHint': { ru: 'Только по ссылке-приглашению', en: 'Invite link only' },
+  'durak.mode.podkidnoy': { ru: 'Подкидной', en: 'Classic' },
+  'durak.mode.perevodnoy': { ru: 'Переводной', en: 'Transfer' },
+  'durak.mode.sosedi': { ru: 'Соседи', en: 'Neighbours' },
+  'durak.mode.vse': { ru: 'Все', en: 'All' },
+  'durak.mode.klassika': { ru: 'Классика', en: 'Classic' },
+  'durak.mode.nichya': { ru: 'Ничья', en: 'Draw' },
   // matchmaking
   'mm.searching': { ru: 'Поиск соперника…', en: 'Finding an opponent…' },
   'mm.waitingFriend': { ru: 'Ждём друга…', en: 'Waiting for a friend…' },
   'mm.joining': { ru: 'Заходим в игру…', en: 'Joining the game…' },
+  'mm.byInvite': { ru: 'по приглашению', en: 'by invite' },
+  'mm.cancel': { ru: 'Отменить', en: 'Cancel' },
+  'mm.connecting': { ru: 'Подключение к сопернику', en: 'Connecting to opponent' },
+  'common.opponent': { ru: 'Соперник', en: 'Opponent' },
+  'mode.transfer': { ru: 'переводной', en: 'transfer' },
+  'mode.podkidnoy': { ru: 'подкидной', en: 'classic' },
   // invite banner
   'invite.calls': { ru: 'зовёт в партию', en: 'invites you to a game' },
   'invite.join': { ru: 'Зайти', en: 'Join' },
   'invite.offline': { ru: 'Друг сейчас не в сети', en: 'Your friend is offline' },
   'invite.notFound': { ru: 'Партия не найдена или уже началась', en: 'Match not found or already started' },
+  'invite.playWithFriend': { ru: 'Игра с другом', en: 'Play with a friend' },
+  'invite.shareText': { ru: 'Заходи сыграть со мной в GameHub!', en: 'Come play with me on GameHub!' },
+  'invite.fromFriends': { ru: 'Пригласить из друзей', en: 'Invite a friend' },
+  'invite.orByLink': { ru: 'Или по ссылке', en: 'Or by link' },
+  'invite.invite': { ru: 'Пригласить', en: 'Invite' },
+  'invite.invited': { ru: 'Приглашён', en: 'Invited' },
+  'invite.noFriends': {
+    ru: 'Пока нет друзей. Пригласи их по ссылке ниже — как добавят, появятся здесь.',
+    en: 'No friends yet. Invite them with the link below — they’ll appear here once added.',
+  },
+  'invite.creatingLink': { ru: 'Создаём ссылку…', en: 'Creating link…' },
+  'invite.showAll': { ru: 'Показать всех', en: 'Show all' },
+  'invite.collapse': { ru: 'Свернуть', en: 'Collapse' },
 }
 
 export function t(key: string): string {
   const e = D[key]
   return e ? e[lang] : key
+}
+
+/** Like t(), but returns `fallback` when the key isn't in the dictionary. */
+export function tf(key: string, fallback: string): string {
+  const e = D[key]
+  return e ? e[lang] : fallback
 }

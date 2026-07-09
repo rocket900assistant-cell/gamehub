@@ -3,6 +3,7 @@ import { ArrowLeft, Bot, Gem, Lock, Minus, Plus, Swords, UserPlus } from 'lucide
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { cn } from '../lib/cn'
+import { t } from '../lib/i18n'
 
 export const MIN_STAKE = 0.1
 
@@ -203,7 +204,7 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite }: DurakSe
         >
           <ArrowLeft size={18} />
         </button>
-        <h1 className="text-2xl font-extrabold">Создать игру</h1>
+        <h1 className="text-2xl font-extrabold">{t('durak.title')}</h1>
       </div>
 
       {/* free vs stake */}
@@ -211,15 +212,15 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite }: DurakSe
         value={free}
         onChange={setFree}
         options={[
-          { label: 'Бесплатно', value: true },
-          { label: 'На GRAM', value: false },
+          { label: t('setup.free'), value: true },
+          { label: t('setup.onGram'), value: false },
         ]}
       />
 
       {/* stake stepper */}
       {!free && (
       <Card>
-        <p className="text-sm font-bold text-muted">Ваша ставка</p>
+        <p className="text-sm font-bold text-muted">{t('setup.yourStake')}</p>
         <div className="mt-3 flex items-center gap-3">
           <button
             onClick={() => setNum(num - stepFor(num - 0.001))}
@@ -267,7 +268,7 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite }: DurakSe
       </Card>
       )}
 
-      <Section title="Игроки">
+      <Section title={t('durak.players')}>
         <Seg
           value={players}
           onChange={setPlayers}
@@ -276,34 +277,34 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite }: DurakSe
       </Section>
 
       <div className="grid grid-cols-2 gap-3">
-        <Section title="Колода">
+        <Section title={t('durak.deck')}>
           <Seg
             value={deck}
             onChange={setDeck}
             options={[24, 36, 52].map((n) => ({ label: String(n), value: n }))}
           />
         </Section>
-        <Section title="Скорость">
+        <Section title={t('durak.speed')}>
           <Seg
             value={fast}
             onChange={setFast}
             options={[
-              { label: 'Обычная', value: false },
-              { label: 'Быстрая', value: true },
+              { label: t('durak.speedNormal'), value: false },
+              { label: t('durak.speedFast'), value: true },
             ]}
           />
         </Section>
       </div>
 
-      <Section title="Режимы">
+      <Section title={t('durak.modes')}>
         {/* 3 columns = 3 pairs; top row = option A, bottom row = option B */}
         <div className="grid grid-cols-3 gap-2">
-          <ModeTile type="podkidnoy" label="Подкидной" selected={!transfer} onClick={() => setTransfer(false)} />
-          <ModeTile type="sosedi" label="Соседи" selected={!throwAll} onClick={() => setThrowAll(false)} />
-          <ModeTile type="klassika" label="Классика" selected={!draw} onClick={() => setDraw(false)} />
-          <ModeTile type="perevodnoy" label="Переводной" selected={transfer} onClick={() => setTransfer(true)} />
-          <ModeTile type="vse" label="Все" selected={throwAll} onClick={() => setThrowAll(true)} />
-          <ModeTile type="nichya" label="Ничья" selected={draw} onClick={() => setDraw(true)} />
+          <ModeTile type="podkidnoy" label={t('durak.mode.podkidnoy')} selected={!transfer} onClick={() => setTransfer(false)} />
+          <ModeTile type="sosedi" label={t('durak.mode.sosedi')} selected={!throwAll} onClick={() => setThrowAll(false)} />
+          <ModeTile type="klassika" label={t('durak.mode.klassika')} selected={!draw} onClick={() => setDraw(false)} />
+          <ModeTile type="perevodnoy" label={t('durak.mode.perevodnoy')} selected={transfer} onClick={() => setTransfer(true)} />
+          <ModeTile type="vse" label={t('durak.mode.vse')} selected={throwAll} onClick={() => setThrowAll(true)} />
+          <ModeTile type="nichya" label={t('durak.mode.nichya')} selected={draw} onClick={() => setDraw(true)} />
         </div>
       </Section>
 
@@ -320,14 +321,14 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite }: DurakSe
           {privateGame && <Lock size={13} />}
         </span>
         <div className="flex-1">
-          <p className="font-bold leading-tight">Приватная игра</p>
-          <p className="text-xs text-muted">Только по ссылке-приглашению</p>
+          <p className="font-bold leading-tight">{t('durak.privateGame')}</p>
+          <p className="text-xs text-muted">{t('durak.privateHint')}</p>
         </div>
       </button>
 
       <div className="space-y-3">
         <Button size="lg" className="w-full" onClick={() => onQuickMatch(deck, transfer)}>
-          <Swords size={18} /> Быстрая игра (онлайн)
+          <Swords size={18} /> {t('setup.quickOnline')}
         </Button>
         <Button
           size="lg"
@@ -335,7 +336,7 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite }: DurakSe
           className="w-full"
           onClick={() => onInvite(deck, transfer)}
         >
-          <UserPlus size={18} /> Играть с другом
+          <UserPlus size={18} /> {t('setup.withFriend')}
         </Button>
         <Button
           size="lg"
@@ -355,7 +356,7 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite }: DurakSe
             })
           }
         >
-          <Bot size={18} /> Играть с ботом
+          <Bot size={18} /> {t('setup.withBot')}
         </Button>
       </div>
     </div>

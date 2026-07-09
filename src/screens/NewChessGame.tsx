@@ -8,11 +8,12 @@ import { makeJoinLink, shareJoinLink } from '../lib/telegram'
 import { getSocket, type ServerFriend } from '../lib/socket'
 import { GameTypeToggle, StakeStepper } from '../components/StakePicker'
 import { cn } from '../lib/cn'
+import { t } from '../lib/i18n'
 
-const timeControls: { m: number; label: string; icon: LucideIcon }[] = [
-  { m: 3, label: 'Блиц', icon: Zap },
-  { m: 5, label: 'Блиц', icon: Bolt },
-  { m: 10, label: 'Рапид', icon: Swords },
+const timeControls: { m: number; key: string; icon: LucideIcon }[] = [
+  { m: 3, key: 'chess.blitz', icon: Zap },
+  { m: 5, key: 'chess.blitz', icon: Bolt },
+  { m: 10, key: 'chess.rapid', icon: Swords },
 ]
 
 interface NewChessGameProps {
@@ -82,7 +83,7 @@ export function NewChessGame({
           <ArrowLeft size={18} />
         </button>
         <h1 className="text-2xl font-extrabold">
-          {friend ? 'Игра с другом' : 'Шахматы'}
+          {friend ? t('invite.playWithFriend') : t('chess.title')}
         </h1>
       </div>
 
@@ -92,15 +93,15 @@ export function NewChessGame({
 
       {/* time control */}
       <section>
-        <p className="mb-3 text-sm font-bold">Контроль времени</p>
+        <p className="mb-3 text-sm font-bold">{t('setup.timeControl')}</p>
         <div className="grid grid-cols-3 gap-2.5">
-          {timeControls.map((t) => {
-            const on = t.m === minutes
-            const Icon = t.icon
+          {timeControls.map((tc) => {
+            const on = tc.m === minutes
+            const Icon = tc.icon
             return (
               <button
-                key={t.m}
-                onClick={() => setMinutes(t.m)}
+                key={tc.m}
+                onClick={() => setMinutes(tc.m)}
                 className={cn(
                   'flex flex-col items-center gap-1 rounded-2xl border py-4 transition',
                   on
@@ -112,9 +113,9 @@ export function NewChessGame({
                   size={20}
                   className={on ? 'text-gold-dark' : 'text-muted'}
                 />
-                <span className="text-lg font-extrabold leading-none">{t.m}</span>
+                <span className="text-lg font-extrabold leading-none">{tc.m}</span>
                 <span className="text-[11px] text-muted">
-                  мин · {t.label}
+                  {t('unit.min')} · {t(tc.key)}
                 </span>
               </button>
             )
@@ -130,7 +131,7 @@ export function NewChessGame({
             size="lg"
             onClick={() => onQuickMatch(minutes)}
           >
-            <Swords size={18} /> Быстрая игра
+            <Swords size={18} /> {t('setup.quick')}
           </Button>
           <Button
             className="w-full"
@@ -138,7 +139,7 @@ export function NewChessGame({
             variant="secondary"
             onClick={() => setFriend(true)}
           >
-            Играть с другом
+            {t('setup.withFriend')}
           </Button>
           <Button
             className="w-full"
@@ -146,14 +147,14 @@ export function NewChessGame({
             variant="ghost"
             onClick={() => onBot(minutes)}
           >
-            <Bot size={18} /> Играть с ботом
+            <Bot size={18} /> {t('setup.withBot')}
           </Button>
         </div>
       ) : (
         <div className="space-y-4">
           {/* invite existing friends directly */}
           <section>
-            <p className="mb-2 text-sm font-bold">Пригласить из друзей</p>
+            <p className="mb-2 text-sm font-bold">{t('invite.fromFriends')}</p>
             <Card className="divide-y divide-line/70 p-0">
               {friends.length === 0 && (
                 <p className="p-4 text-center text-sm text-muted">
@@ -173,7 +174,7 @@ export function NewChessGame({
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-bold leading-tight">{f.name}</p>
                       <p className="text-xs text-muted">
-                        {f.online ? 'в сети' : 'не в сети'}
+                        {f.online ? t('common.online') : t('common.offline')}
                       </p>
                     </div>
                     <Button
@@ -184,10 +185,10 @@ export function NewChessGame({
                     >
                       {isInvited ? (
                         <>
-                          <Check size={15} /> Приглашён
+                          <Check size={15} /> {t('invite.invited')}
                         </>
                       ) : (
-                        'Пригласить'
+                        t('invite.invite')
                       )}
                     </Button>
                   </div>
@@ -199,8 +200,8 @@ export function NewChessGame({
                   className="w-full py-3 text-sm font-bold text-gold-dark"
                 >
                   {showAllFriends
-                    ? 'Свернуть'
-                    : `Показать всех (${friends.length})`}
+                    ? t('invite.collapse')
+                    : `${t('invite.showAll')} (${friends.length})`}
                 </button>
               )}
             </Card>
@@ -208,11 +209,11 @@ export function NewChessGame({
 
           {/* or invite by link */}
           <section>
-            <p className="mb-2 text-sm font-bold">Или по ссылке</p>
+            <p className="mb-2 text-sm font-bold">{t('invite.orByLink')}</p>
             <Card className="space-y-3">
               <div className="flex items-center gap-2 rounded-[var(--radius-input)] border border-line bg-bg px-3 py-2.5">
                 <span className="flex-1 truncate text-xs text-muted">
-                  {link || 'Создаём ссылку…'}
+                  {link || t('invite.creatingLink')}
                 </span>
                 <button onClick={copyLink} className="text-gold-dark">
                   {copied ? <Check size={16} /> : <Copy size={16} />}
@@ -224,7 +225,7 @@ export function NewChessGame({
                 disabled={!roomId}
                 onClick={() =>
                   roomId &&
-                  shareJoinLink(roomId, 'Партия в шахматы в GameHub — заходи!')
+                  shareJoinLink(roomId, t('invite.shareText'))
                 }
               >
                 <Send size={16} /> Поделиться ссылкой

@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button'
 import { Avatar } from '../components/ui/Avatar'
 import { getSocket, type ServerFriend } from '../lib/socket'
 import { makeJoinLink, shareJoinLink } from '../lib/telegram'
+import { t } from '../lib/i18n'
 
 interface FriendInviteProps {
   title: string
@@ -72,11 +73,11 @@ export function FriendInvite({
       </div>
 
       <section>
-        <p className="mb-2 text-sm font-bold">Пригласить из друзей</p>
+        <p className="mb-2 text-sm font-bold">{t('invite.fromFriends')}</p>
         <Card className="divide-y divide-line/70 p-0">
           {sorted.length === 0 && (
             <p className="p-4 text-center text-sm text-muted">
-              Пока нет друзей. Пригласи их по ссылке ниже — как добавят, появятся здесь.
+              {t('invite.noFriends')}
             </p>
           )}
           {visible.map((f) => {
@@ -91,7 +92,7 @@ export function FriendInvite({
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-bold leading-tight">{f.name}</p>
-                  <p className="text-xs text-muted">{f.online ? 'в сети' : 'не в сети'}</p>
+                  <p className="text-xs text-muted">{f.online ? t('common.online') : t('common.offline')}</p>
                 </div>
                 <Button
                   size="sm"
@@ -101,10 +102,10 @@ export function FriendInvite({
                 >
                   {isInvited ? (
                     <>
-                      <Check size={15} /> Приглашён
+                      <Check size={15} /> {t('invite.invited')}
                     </>
                   ) : (
-                    'Пригласить'
+                    t('invite.invite')
                   )}
                 </Button>
               </div>
@@ -115,18 +116,18 @@ export function FriendInvite({
               onClick={() => setShowAll((v) => !v)}
               className="w-full py-3 text-sm font-bold text-gold-dark"
             >
-              {showAll ? 'Свернуть' : `Показать всех (${sorted.length})`}
+              {showAll ? t('invite.collapse') : `${t('invite.showAll')} (${sorted.length})`}
             </button>
           )}
         </Card>
       </section>
 
       <section>
-        <p className="mb-2 text-sm font-bold">Или по ссылке</p>
+        <p className="mb-2 text-sm font-bold">{t('invite.orByLink')}</p>
         <Card className="space-y-3">
           <div className="flex items-center gap-2 rounded-[var(--radius-input)] border border-line bg-bg px-3 py-2.5">
             <span className="flex-1 truncate text-xs text-muted">
-              {link || 'Создаём ссылку…'}
+              {link || t('invite.creatingLink')}
             </span>
             <button onClick={copyLink} className="text-gold-dark">
               {copied ? <Check size={16} /> : <Copy size={16} />}
@@ -138,7 +139,7 @@ export function FriendInvite({
             disabled={!roomId}
             onClick={() => roomId && shareJoinLink(roomId, shareText)}
           >
-            <Send size={16} /> Поделиться ссылкой
+            <Send size={16} /> {t('friends.shareLink')}
           </Button>
         </Card>
       </section>

@@ -4,7 +4,7 @@ import { StarBalance } from '../components/ui/StarBalance'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { Button } from '../components/ui/Button'
 import { setVip } from '../lib/socket'
-import { t } from '../lib/i18n'
+import { t, tf } from '../lib/i18n'
 import {
   BOARD_SKINS,
   DURAK_BACKS,
@@ -244,7 +244,7 @@ export function Store({ balance }: { balance: number }) {
           {PIECE_SKINS.map((skin) => (
             <SkinCard
               key={skin.id}
-              name={skin.name}
+              name={tf(`skin.${skin.id}`, skin.name)}
               price={skin.price}
               owned={isOwned(skin.id)}
               equipped={equippedPiece === skin.id}
@@ -270,7 +270,7 @@ export function Store({ balance }: { balance: number }) {
           {BOARD_SKINS.map((skin) => (
             <SkinCard
               key={skin.id}
-              name={skin.name}
+              name={tf(`skin.${skin.id}`, skin.name)}
               price={skin.price}
               owned={isOwned(skin.id)}
               equipped={equippedBoardId === skin.id}
@@ -296,7 +296,7 @@ export function Store({ balance }: { balance: number }) {
           {DURAK_BACKS.map((skin) => (
             <SkinCard
               key={skin.id}
-              name={skin.name}
+              name={tf(`skin.${skin.id}`, skin.name)}
               price={skin.price}
               owned={isOwned(skin.id)}
               equipped={equippedBack === skin.id}
@@ -322,7 +322,7 @@ export function Store({ balance }: { balance: number }) {
           {DURAK_FELTS.map((skin) => (
             <SkinCard
               key={skin.id}
-              name={skin.name}
+              name={tf(`skin.${skin.id}`, skin.name)}
               price={skin.price}
               owned={isOwned(skin.id)}
               equipped={equippedFelt === skin.id}
@@ -348,7 +348,7 @@ export function Store({ balance }: { balance: number }) {
           {NARDY_CHECKERS.map((skin) => (
             <SkinCard
               key={skin.id}
-              name={skin.name}
+              name={tf(`skin.${skin.id}`, skin.name)}
               price={skin.price}
               owned={isOwned(skin.id)}
               equipped={equippedChecker === skin.id}

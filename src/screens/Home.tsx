@@ -26,6 +26,9 @@ const GKEY: Record<string, string> = {
   durak: 'game.durak',
   backgammon: 'game.nardy',
   nardy: 'game.nardy',
+  poker: 'game.poker',
+  checkers: 'game.checkers',
+  tictactoe: 'game.tictactoe',
 }
 const gname = (id: string, fallback: string) => (GKEY[id] ? t(GKEY[id]) : fallback)
 

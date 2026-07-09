@@ -150,7 +150,7 @@ export default function App() {
         setNardyOnline({
           roomId: m.roomId,
           color: m.color,
-          opponentName: m.opponent?.name ?? 'Соперник',
+          opponentName: m.opponent?.name ?? t('common.opponent'),
           opponentElo: m.opponent?.elo ?? 1200,
           opponentVip: m.opponent?.vip,
           myElo: m.elo ?? 1200,
@@ -162,7 +162,7 @@ export default function App() {
       if (m.game === 'durak' && m.durak) {
         setDurakOnline({
           roomId: m.roomId,
-          opponentName: m.opponent?.name ?? 'Соперник',
+          opponentName: m.opponent?.name ?? t('common.opponent'),
           opponentElo: m.opponent?.elo ?? 1200,
           opponentVip: m.opponent?.vip,
           myElo: m.elo ?? 1200,
@@ -205,7 +205,7 @@ export default function App() {
     if (sp && sp.startsWith('join_')) {
       // friend's game-invite link → join their room straight away.
       s.emit('joinRoom', { roomId: sp.slice(5) })
-      setMatchmaking({ minutes: 0, label: 'Заходим в игру…', subtitle: 'Подключение к сопернику' })
+      setMatchmaking({ minutes: 0, label: t('mm.joining'), subtitle: t('mm.connecting') })
     } else if (sp && sp.startsWith('friend_')) {
       // friend-add link → become mutual friends (after register is sent).
       addFriend(sp.slice(7))
@@ -238,8 +238,8 @@ export default function App() {
     transfer?: boolean,
   ) {
     emitInviteFriend(toTg, game, minutes, transfer)
-    const label = game === 'chess' ? 'Шахматы' : game === 'durak' ? 'Дурак' : 'Нарды'
-    setMatchmaking({ minutes, label: 'Ждём друга…', subtitle: `${label} · по приглашению` })
+    const label = game === 'chess' ? t('game.chess') : game === 'durak' ? t('game.durak') : t('game.nardy')
+    setMatchmaking({ minutes, label: t('mm.waitingFriend'), subtitle: `${label} · ${t('mm.byInvite')}` })
     setSub(null)
   }
   function acceptInvite() {
@@ -263,8 +263,8 @@ export default function App() {
           <Swords size={20} />
         </div>
         <div className="flex-1">
-          <p className="font-bold leading-tight">Вернуться в партию</p>
-          <p className="text-xs text-muted">Шахматы · идёт игра</p>
+          <p className="font-bold leading-tight">{t('resume.title')}</p>
+          <p className="text-xs text-muted">{t('game.chess')} · {t('resume.inProgress')}</p>
         </div>
         <ChevronRight size={18} className="text-muted" />
       </button>
@@ -283,8 +283,8 @@ export default function App() {
           <Swords size={20} />
         </div>
         <div className="flex-1">
-          <p className="font-bold leading-tight">Вернуться в партию</p>
-          <p className="text-xs text-muted">Дурак · идёт игра</p>
+          <p className="font-bold leading-tight">{t('resume.title')}</p>
+          <p className="text-xs text-muted">{t('game.durak')} · {t('resume.inProgress')}</p>
         </div>
         <ChevronRight size={18} className="text-muted" />
       </button>
@@ -322,8 +322,8 @@ export default function App() {
           <Swords size={20} />
         </div>
         <div className="flex-1">
-          <p className="font-bold leading-tight">Вернуться в партию</p>
-          <p className="text-xs text-muted">Шахматы · идёт игра</p>
+          <p className="font-bold leading-tight">{t('resume.title')}</p>
+          <p className="text-xs text-muted">{t('game.chess')} · {t('resume.inProgress')}</p>
         </div>
         <ChevronRight size={18} className="text-muted" />
       </button>
@@ -342,8 +342,8 @@ export default function App() {
           <Swords size={20} />
         </div>
         <div className="flex-1">
-          <p className="font-bold leading-tight">Вернуться в партию</p>
-          <p className="text-xs text-muted">Нарды · идёт игра</p>
+          <p className="font-bold leading-tight">{t('resume.title')}</p>
+          <p className="text-xs text-muted">{t('game.nardy')} · {t('resume.inProgress')}</p>
         </div>
         <ChevronRight size={18} className="text-muted" />
       </button>
@@ -444,13 +444,13 @@ export default function App() {
               <History list={history} onBack={() => setSub(null)} />
             ) : sub === 'invite' && pendingInvite ? (
               <FriendInvite
-                title="Игра с другом"
+                title={t('invite.playWithFriend')}
                 subtitle={pendingInvite.label}
                 game={pendingInvite.game}
                 minutes={pendingInvite.minutes}
                 transfer={pendingInvite.transfer}
                 friends={friends}
-                shareText="Заходи сыграть со мной в GameHub!"
+                shareText={t('invite.shareText')}
                 onBack={() => setSub(pendingInvite.game === 'durak' ? 'durak-setup' : 'nardy-setup')}
                 onInviteFriend={(tg) =>
                   inviteFriend(tg, pendingInvite.game, pendingInvite.minutes, pendingInvite.transfer)
@@ -468,8 +468,8 @@ export default function App() {
                   getSocket().emit('quickMatch', { game: 'durak', minutes: deck, transfer })
                   setMatchmaking({
                     minutes: deck,
-                    label: 'Поиск соперника…',
-                    subtitle: `Дурак · ${deck} карт${transfer ? ' · переводной' : ''}`,
+                    label: t('mm.searching'),
+                    subtitle: `${t('game.durak')} · ${deck} ${t('unit.cards')}${transfer ? ` · ${t('mode.transfer')}` : ''}`,
                   })
                   setSub(null)
                 }}
@@ -478,7 +478,7 @@ export default function App() {
                     game: 'durak',
                     minutes: deck,
                     transfer,
-                    label: `Дурак · ${deck} карт${transfer ? ' · переводной' : ''}`,
+                    label: `${t('game.durak')} · ${deck} ${t('unit.cards')}${transfer ? ` · ${t('mode.transfer')}` : ''}`,
                   })
                   setSub('invite')
                 }}
@@ -507,13 +507,13 @@ export default function App() {
                   getSocket().emit('quickMatch', { game: 'nardy', minutes: 2 })
                   setMatchmaking({
                     minutes: 2,
-                    label: 'Поиск соперника…',
-                    subtitle: 'Нарды · 2 мин',
+                    label: t('mm.searching'),
+                    subtitle: `${t('game.nardy')} · 2 ${t('unit.min')}`,
                   })
                   setSub(null)
                 }}
                 onInvite={() => {
-                  setPendingInvite({ game: 'nardy', minutes: 2, label: 'Нарды · 2 мин' })
+                  setPendingInvite({ game: 'nardy', minutes: 2, label: `${t('game.nardy')} · 2 ${t('unit.min')}` })
                   setSub('invite')
                 }}
               />

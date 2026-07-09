@@ -1,5 +1,6 @@
 import { Loader2 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
+import { t } from '../lib/i18n'
 
 interface MatchmakingProps {
   minutes: number
@@ -18,11 +19,13 @@ export function Matchmaking({ minutes, label, subtitle, onCancel }: MatchmakingP
         </div>
       </div>
       <div>
-        <p className="text-xl font-extrabold">{label ?? 'Ищем соперника…'}</p>
-        <p className="mt-1 text-sm text-muted">{subtitle ?? `Шахматы · ${minutes} мин`}</p>
+        <p className="text-xl font-extrabold">{label ?? t('mm.searching')}</p>
+        <p className="mt-1 text-sm text-muted">
+          {subtitle ?? `${t('game.chess')} · ${minutes} ${t('unit.min')}`}
+        </p>
       </div>
       <Button variant="secondary" onClick={onCancel}>
-        Отменить
+        {t('mm.cancel')}
       </Button>
     </div>
   )

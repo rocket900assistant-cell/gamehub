@@ -1,4 +1,5 @@
 import { Gem, Minus, Plus } from 'lucide-react'
+import { t } from '../lib/i18n'
 import { Card } from './ui/Card'
 import { cn } from '../lib/cn'
 
@@ -18,8 +19,8 @@ export function GameTypeToggle({
   onChange: (free: boolean) => void
 }) {
   const options = [
-    { label: 'Бесплатно', value: true },
-    { label: 'На GRAM', value: false },
+    { label: t('setup.free'), value: true },
+    { label: t('setup.onGram'), value: false },
   ]
   return (
     <div className="flex gap-1 rounded-full border border-line bg-bg p-1">
@@ -53,7 +54,7 @@ export function StakeStepper({
   const setNum = (n: number) => onChange(fmtNum(Math.max(MIN_STAKE, n)))
   return (
     <Card>
-      <p className="text-sm font-bold text-muted">Ваша ставка</p>
+      <p className="text-sm font-bold text-muted">{t('setup.yourStake')}</p>
       <div className="mt-3 flex items-center gap-3">
         <button
           onClick={() => setNum(num - stepFor(num - 0.001))}
