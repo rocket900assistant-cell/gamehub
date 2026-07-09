@@ -1,13 +1,9 @@
 import {
-  BarChart3,
   ChevronRight,
   ClipboardList,
   Copy,
   Crown,
   Gamepad2,
-  LayoutGrid,
-  MoreHorizontal,
-  Settings,
   Spade,
   TrendingUp,
   Users,
@@ -23,7 +19,6 @@ import {
   favoriteGames,
   player,
   profile as profileMock,
-  profileMenu,
   profileStats,
 } from '../data/mock'
 import type { FavGame } from '../data/mock'
@@ -37,20 +32,14 @@ const gameIcons: Record<string, LucideIcon> = {
   durak: Spade,
 }
 
-const menuIcons: Record<string, LucideIcon> = {
-  friends: Users,
-  collection: LayoutGrid,
-  history: ClipboardList,
-  stats: BarChart3,
-}
-
 interface ProfileProps {
   user: TgUser
   profile: PlayerProfile | null
+  friendsCount: number
   onOpenFriends: () => void
 }
 
-export function Profile({ user, profile, onOpenFriends }: ProfileProps) {
+export function Profile({ user, profile, friendsCount, onOpenFriends }: ProfileProps) {
   const vip = isVip()
   const balance = profile?.balance ?? player.balance
   const eloMain = profile
@@ -81,18 +70,8 @@ export function Profile({ user, profile, onOpenFriends }: ProfileProps) {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center">
         <h1 className="text-2xl font-extrabold">Профиль</h1>
-        <div className="flex items-center gap-2">
-          {[Settings, MoreHorizontal].map((Icon, i) => (
-            <button
-              key={i}
-              className="grid h-9 w-9 place-items-center rounded-xl border border-line bg-surface text-ink"
-            >
-              <Icon size={17} />
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Identity card */}
@@ -162,7 +141,7 @@ export function Profile({ user, profile, onOpenFriends }: ProfileProps) {
 
       {/* Favorite games */}
       <section>
-        <SectionHeader title="Любимые игры" actionLabel="Смотреть все" />
+        <SectionHeader title="Любимые игры" />
         <Card className="divide-y divide-line/70 p-0">
           {favGames.map((g) => {
             const Icon = gameIcons[g.id] ?? Gamepad2
@@ -194,21 +173,20 @@ export function Profile({ user, profile, onOpenFriends }: ProfileProps) {
 
       {/* Menu */}
       <Card className="divide-y divide-line/70 p-0">
-        {profileMenu.map((m) => {
-          const Icon = menuIcons[m.id] ?? ChevronRight
-          return (
-            <button
-              key={m.id}
-              onClick={m.id === 'friends' ? onOpenFriends : undefined}
-              className="flex w-full items-center gap-3 p-4 text-left transition active:bg-bg"
-            >
-              <Icon size={20} className="text-muted" />
-              <span className="flex-1 font-medium">{m.label}</span>
-              {m.value && <span className="text-sm text-muted">{m.value}</span>}
-              <ChevronRight size={18} className="text-muted" />
-            </button>
-          )
-        })}
+        <button
+          onClick={onOpenFriends}
+          className="flex w-full items-center gap-3 p-4 text-left transition active:bg-bg"
+        >
+          <Users size={20} className="text-muted" />
+          <span className="flex-1 font-medium">Друзья</span>
+          <span className="text-sm text-muted">{friendsCount}</span>
+          <ChevronRight size={18} className="text-muted" />
+        </button>
+        <button className="flex w-full items-center gap-3 p-4 text-left transition active:bg-bg">
+          <ClipboardList size={20} className="text-muted" />
+          <span className="flex-1 font-medium">История матчей</span>
+          <ChevronRight size={18} className="text-muted" />
+        </button>
       </Card>
     </div>
   )

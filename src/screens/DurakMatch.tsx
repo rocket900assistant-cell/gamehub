@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, Flag, Gem, MessageCircle, RotateCcw, Send, X } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { PlayingCard } from '../components/PlayingCard'
-import { equippedDurakFeltSrc } from '../lib/skins'
+import { Confetti } from '../components/Confetti'
+import { equippedDurakFeltSrc, isVip } from '../lib/skins'
 import type { DurakConfig } from './DurakSetup'
 import {
   createGame,
@@ -33,6 +34,7 @@ export interface OnlineDurak {
   roomId: string
   opponentName: string
   opponentElo: number
+  opponentVip?: boolean
   myElo: number
   initial: DurakState // the viewer's own view (viewer is always 'you')
   deadline: number
@@ -84,6 +86,9 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
     () => ({ ...FELT_BASE, backgroundImage: `url('${equippedDurakFeltSrc()}')` }),
     [],
   )
+  // Elo change from the server (online rated games).
+  const [eloDelta, setEloDelta] = useState<number | null>(null)
+  const vipMe = isVip()
   // resumed game restores its state + original config from storage
   const saved = useRef(!isOnline && resume ? readDurakSave() : null).current
   const effConfig = config ?? saved?.config ?? null
@@ -205,8 +210,9 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
       setS(p.durak)
       setDeadline(p.deadline)
     }
-    const onOver = (g: { youWon: boolean | null }) => {
+    const onOver = (g: { youWon: boolean | null; eloDelta?: number }) => {
       // resign / timeout / opponent-left end via game:over (no durak:state)
+      if (typeof g.eloDelta === 'number') setEloDelta(g.eloDelta)
       setS((cur) =>
         cur.result
           ? cur
@@ -343,7 +349,7 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
   return (
     <div
       className="relative -mx-4 -mb-6 -mt-[calc(1rem+env(safe-area-inset-top))] flex flex-col overflow-hidden"
-      style={{ ...felt, minHeight: 'var(--app-h, 100dvh)' }}
+      style={{ ...felt, height: 'var(--app-h, 100dvh)' }}
     >
       <div
         className="pointer-events-none absolute inset-0"
@@ -380,7 +386,7 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
               </>
             ) : (
               <span className="text-[12px] font-semibold text-muted">
-                тренировка
+                {isOnline ? 'рейтинг' : 'тренировка'}
               </span>
             )}
           </span>
@@ -393,12 +399,13 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
             elo={isOnline ? online!.opponentElo : undefined}
             active={s.turn === 'opp' && !s.result}
             progress={oppProgress}
+            vip={isOnline ? online!.opponentVip : false}
           />
           <CardFan count={s.hands.opp.length} />
         </div>
 
         {/* table (drop zone) — column: deck/бито row on top, pairs below */}
-        <div data-table className="relative flex flex-1 flex-col">
+        <div data-table className="relative flex min-h-0 flex-1 flex-col">
           {/* deck (left) + бито (right) — own top row, so pairs never cover it */}
           <div
             className="pointer-events-none flex shrink-0 items-start justify-between px-2 pt-2"
@@ -544,6 +551,7 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
             photo={user.photoUrl}
             you
             onLight
+            vip={vipMe}
           />
         </div>
 
@@ -657,11 +665,14 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
         />
       )}
 
+      {s.result?.loser === 'opp' && <Confetti />}
       {s.result && (
         <DurakOver
           loser={s.result.loser}
           money={bank > 0}
           canRematch={!isOnline}
+          rated={isOnline}
+          eloDelta={eloDelta}
           onExit={onExit}
           onRematch={() => setS(createGame({ deck: deckSize, transfer }))}
         />
@@ -679,6 +690,7 @@ function PlayerTile({
   photo,
   you,
   onLight,
+  vip,
 }: {
   name: string
   elo?: number
@@ -687,6 +699,7 @@ function PlayerTile({
   photo?: string
   you?: boolean
   onLight?: boolean
+  vip?: boolean
 }) {
   const initial = name.charAt(0).toUpperCase()
   const RW = 52
@@ -750,6 +763,11 @@ function PlayerTile({
         }`}
       >
         <span className="truncate">{name}</span>
+        {vip && (
+          <span className="shrink-0 rounded-full bg-gradient-to-b from-gold to-gold-dark px-1 text-[9px] font-bold text-white">
+            VIP
+          </span>
+        )}
         {elo != null && (
           <span
             className={`shrink-0 rounded-full px-1 text-[10px] font-bold ${
@@ -921,18 +939,23 @@ function DurakOver({
   loser,
   money,
   canRematch,
+  rated,
+  eloDelta,
   onExit,
   onRematch,
 }: {
   loser: Player | null
   money: boolean
   canRematch: boolean
+  rated: boolean
+  eloDelta: number | null
   onExit: () => void
   onRematch: () => void
 }) {
   const draw = loser === null
   const youWon = loser === 'opp'
   const title = draw ? 'Ничья' : youWon ? 'Вы выиграли!' : 'Вы проиграли'
+  const showElo = rated && !draw && eloDelta != null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6">
       <div className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
@@ -940,6 +963,14 @@ function DurakOver({
         <p className="mt-1 text-sm text-muted">
           {money ? 'Игра на GRAM' : canRematch ? 'Игра с ботом · без рейтинга' : 'Онлайн-партия'}
         </p>
+        {showElo && (
+          <p
+            className={`mt-3 text-3xl font-extrabold ${eloDelta >= 0 ? 'text-success' : 'text-danger'}`}
+          >
+            {eloDelta >= 0 ? '+' : '−'}
+            {Math.abs(eloDelta)} Elo
+          </p>
+        )}
         <div className="mt-6 flex gap-2">
           <Button variant="secondary" className="flex-1" onClick={onExit}>
             В меню

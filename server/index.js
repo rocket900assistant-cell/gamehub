@@ -91,6 +91,7 @@ function addPlayer(room, userId) {
     tgId: userTg.get(userId) ?? null,
     name: u?.name ?? 'Игрок',
     elo: u?.elos?.[room.game] ?? u?.elo ?? 1200,
+    vip: !!u?.vip,
     color: room.players.length === 0 ? 'w' : 'b',
   })
 }
@@ -194,7 +195,7 @@ function startRoom(room) {
         seat: durakSeat(room, p.userId),
         minutes: room.minutes,
         elo: p.elo,
-        opponent: { name: opp.name, elo: opp.elo },
+        opponent: { name: opp.name, elo: opp.elo, vip: opp.vip },
         durak: durak.viewFor(room.durak, durakSeat(room, p.userId)),
         deadline: room.deadline,
       })
@@ -205,7 +206,7 @@ function startRoom(room) {
         color: p.color,
         minutes: room.minutes,
         elo: p.elo,
-        opponent: { name: opp.name, elo: opp.elo },
+        opponent: { name: opp.name, elo: opp.elo, vip: opp.vip },
         nardy: room.nardy,
         deadline: room.deadline,
       })
@@ -214,7 +215,7 @@ function startRoom(room) {
         roomId: room.id,
         color: p.color,
         minutes: room.minutes,
-        opponent: { name: opp.name, elo: opp.elo },
+        opponent: { name: opp.name, elo: opp.elo, vip: opp.vip },
         fen: room.chess.fen(),
         clocks: room.clocks,
       })
@@ -299,9 +300,9 @@ function endGame(room, winnerColor, reason) {
 }
 
 io.on('connection', (socket) => {
-  socket.on('register', async ({ userId, name, elo, initData, username, photoUrl }) => {
+  socket.on('register', async ({ userId, name, elo, initData, username, photoUrl, vip }) => {
     socketUser.set(socket.id, userId)
-    users.set(userId, { socketId: socket.id, name, elo })
+    users.set(userId, { ...users.get(userId), socketId: socket.id, name, elo, vip: !!vip })
 
     // Resolve a trusted telegram id: verify initData if we have a bot token,
     // otherwise fall back to the id embedded in the composite userId.
@@ -342,7 +343,7 @@ io.on('connection', (socket) => {
           color: me.color,
           minutes: room.minutes,
           elo: me.elo,
-          opponent: { name: opp?.name, elo: opp?.elo },
+          opponent: { name: opp?.name, elo: opp?.elo, vip: opp?.vip },
           nardy: room.nardy,
           deadline: room.deadline,
         })
@@ -356,7 +357,7 @@ io.on('connection', (socket) => {
           seat,
           minutes: room.minutes,
           elo: me.elo,
-          opponent: { name: opp?.name, elo: opp?.elo },
+          opponent: { name: opp?.name, elo: opp?.elo, vip: opp?.vip },
           durak: durak.viewFor(room.durak, seat),
           deadline: room.deadline,
         })
@@ -369,7 +370,7 @@ io.on('connection', (socket) => {
           roomId: room.id,
           color: me.color,
           minutes: room.minutes,
-          opponent: { name: opp?.name, elo: opp?.elo },
+          opponent: { name: opp?.name, elo: opp?.elo, vip: opp?.vip },
           fen: room.chess.fen(),
           clocks: room.clocks,
         })

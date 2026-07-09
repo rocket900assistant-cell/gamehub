@@ -18,6 +18,7 @@ export function registerUser(u: {
   initData?: string
   username?: string
   photoUrl?: string
+  vip?: boolean
 }) {
   getSocket().emit('register', u)
 }
@@ -68,6 +69,7 @@ export interface Profile {
 export interface Opponent {
   name: string
   elo: number
+  vip?: boolean
 }
 
 export type MatchConfig =

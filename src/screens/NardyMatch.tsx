@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { equippedCheckerSrcs } from '../lib/skins'
+import { Confetti } from '../components/Confetti'
+import { equippedCheckerSrcs, isVip } from '../lib/skins'
 import {
   ChevronLeft,
   Flag,
@@ -34,6 +35,7 @@ export interface OnlineNardy {
   color: NPlayer
   opponentName: string
   opponentElo: number
+  opponentVip?: boolean
   myElo: number
   initial: NardyState
   deadline: number
@@ -162,6 +164,8 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
     return createNardy()
   })
   const [sel, setSel] = useState<number | null>(null)
+  const [eloDelta, setEloDelta] = useState<number | null>(null)
+  const vipMe = isVip()
   const [confirmResign, setConfirmResign] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [chatInput, setChatInput] = useState('')
@@ -288,7 +292,8 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
       deadline.current = p.deadline
       setSel(null)
     }
-    const onOver = (g: { youWon: boolean | null }) => {
+    const onOver = (g: { youWon: boolean | null; eloDelta?: number }) => {
+      if (typeof g.eloDelta === 'number') setEloDelta(g.eloDelta)
       setS((c) => (c.result ? c : { ...c, result: g.youWon ? myColor : other(myColor) }))
     }
     sock.on('nardy:state', onState)
@@ -422,7 +427,9 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
                 {bank}
               </>
             ) : (
-              <span className="text-[12px] font-semibold text-muted">тренировка</span>
+              <span className="text-[12px] font-semibold text-muted">
+                {isOnline ? 'рейтинг' : 'тренировка'}
+              </span>
             )}
           </span>
         </div>
@@ -435,6 +442,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
             active={s.turn === other(myColor) && !s.result}
             off={s.off[other(myColor)]}
             elo={isOnline ? online!.opponentElo : undefined}
+            vip={isOnline ? online!.opponentVip : false}
           />
           <div className="flex items-center gap-2">
             <DiceRow s={s} />
@@ -491,6 +499,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
             active={yourTurn}
             off={s.off[myColor]}
             elo={isOnline ? online!.myElo : undefined}
+            vip={vipMe}
           />
         </div>
 
@@ -594,6 +603,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
         </div>
       )}
 
+      {s.result === myColor && <Confetti />}
       {s.result && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6">
           <div className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
@@ -603,6 +613,14 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
             <p className="mt-1 text-sm text-muted">
               {isOnline ? 'Онлайн-партия' : 'Игра с ботом · без рейтинга'}
             </p>
+            {isOnline && eloDelta != null && (
+              <p
+                className={`mt-3 text-3xl font-extrabold ${eloDelta >= 0 ? 'text-success' : 'text-danger'}`}
+              >
+                {eloDelta >= 0 ? '+' : '−'}
+                {Math.abs(eloDelta)} Elo
+              </p>
+            )}
             <div className="mt-6 flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={onExit}>
                 В меню
@@ -634,12 +652,14 @@ function PlayerChip({
   active,
   off,
   elo,
+  vip,
 }: {
   name: string
   color: NPlayer
   active: boolean
   off: number
   elo?: number
+  vip?: boolean
 }) {
   return (
     <div
@@ -652,6 +672,11 @@ function PlayerChip({
         style={{ background: color === 'w' ? '#f2ead9' : '#26262a' }}
       />
       <span className="text-xs font-bold text-white">{name}</span>
+      {vip && (
+        <span className="rounded-full bg-gradient-to-b from-gold to-gold-dark px-1 text-[9px] font-bold text-white">
+          VIP
+        </span>
+      )}
       {elo != null && (
         <span className="rounded-full bg-white/15 px-1.5 text-[10px] font-bold text-gold-light">
           {elo}

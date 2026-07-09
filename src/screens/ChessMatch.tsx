@@ -7,7 +7,7 @@ import type {
   PieceRenderObject,
   SquareHandlerArgs,
 } from 'react-chessboard'
-import { boardStyleFor, equippedBoard, equippedPieceDir } from '../lib/skins'
+import { boardStyleFor, equippedBoard, equippedPieceDir, isVip } from '../lib/skins'
 import {
   ChevronDown,
   ChevronLeft,
@@ -410,6 +410,7 @@ export function ChessMatch({ user, match, onMinimize, onExit }: ChessMatchProps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, lastMove, fen, reviewing])
 
+  const vipMe = isVip()
   // Equipped cosmetic skins (chosen in the shop, read once per match).
   const skinBoard = useMemo(() => boardStyleFor(equippedBoard()), [])
   const skinPieces = useMemo(() => {
@@ -470,7 +471,13 @@ export function ChessMatch({ user, match, onMinimize, onExit }: ChessMatchProps)
         </span>
       </div>
 
-      <PlayerBar name={oppName} elo={oppElo} clock={fmt(oppClock)} active={oppActive} />
+      <PlayerBar
+        name={oppName}
+        elo={oppElo}
+        clock={fmt(oppClock)}
+        active={oppActive}
+        vip={match.mode === 'online' ? match.opponent.vip : false}
+      />
 
       <div className="my-2 w-full">
         <Chessboard options={boardOptions} />
@@ -483,6 +490,7 @@ export function ChessMatch({ user, match, onMinimize, onExit }: ChessMatchProps)
         clock={fmt(myClock)}
         active={myActive}
         you
+        vip={vipMe}
       />
 
       {/* move list (toggled) */}
@@ -722,6 +730,7 @@ function PlayerBar({
   clock,
   active,
   you,
+  vip,
 }: {
   name: string
   src?: string
@@ -729,12 +738,20 @@ function PlayerBar({
   clock: string
   active: boolean
   you?: boolean
+  vip?: boolean
 }) {
   return (
     <div className="flex items-center gap-3 py-1">
-      <Avatar name={name} src={src} size={40} vip={you} />
+      <Avatar name={name} src={src} size={40} vip={vip} />
       <div className="flex-1">
-        <p className="font-bold leading-tight">{name}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="font-bold leading-tight">{name}</p>
+          {vip && (
+            <span className="rounded-full bg-gradient-to-b from-gold to-gold-dark px-1.5 py-0.5 text-[9px] font-bold leading-none text-white">
+              VIP
+            </span>
+          )}
+        </div>
         {elo > 0 && <p className="text-xs text-muted">Elo {elo}</p>}
       </div>
       <div

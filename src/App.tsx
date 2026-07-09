@@ -14,6 +14,7 @@ import { DurakSetup, type DurakConfig } from './screens/DurakSetup'
 import { NardyMatch, hasNardySave, type OnlineNardy } from './screens/NardyMatch'
 import { NardySetup, type NardyConfig } from './screens/NardySetup'
 import { Matchmaking } from './screens/Matchmaking'
+import { isVip } from './lib/skins'
 import {
   initTelegram,
   displayName,
@@ -103,6 +104,7 @@ export default function App() {
         initData: getInitData(),
         username: u.username,
         photoUrl: u.photoUrl,
+        vip: isVip(),
       })
       requestFriends()
     }
@@ -124,7 +126,7 @@ export default function App() {
       roomId: string
       color: 'w' | 'b'
       minutes: number
-      opponent: { name: string; elo: number }
+      opponent: { name: string; elo: number; vip?: boolean }
       game?: string
       elo?: number
       fen?: string
@@ -141,6 +143,7 @@ export default function App() {
           color: m.color,
           opponentName: m.opponent?.name ?? 'Соперник',
           opponentElo: m.opponent?.elo ?? 1200,
+          opponentVip: m.opponent?.vip,
           myElo: m.elo ?? 1200,
           initial: m.nardy,
           deadline: m.deadline ?? Date.now() + 120000,
@@ -152,6 +155,7 @@ export default function App() {
           roomId: m.roomId,
           opponentName: m.opponent?.name ?? 'Соперник',
           opponentElo: m.opponent?.elo ?? 1200,
+          opponentVip: m.opponent?.vip,
           myElo: m.elo ?? 1200,
           initial: m.durak,
           deadline: m.deadline ?? Date.now() + 60000,
@@ -545,6 +549,7 @@ export default function App() {
                     <Profile
                       user={user}
                       profile={profile}
+                      friendsCount={friends.length}
                       onOpenFriends={() => setSub('friends')}
                     />
                   </>
