@@ -3,6 +3,8 @@
  * Falls back to a mock user when opened outside Telegram (local dev / preview).
  */
 
+import { applyTheme } from './theme'
+
 export interface TgUser {
   id: number
   firstName: string
@@ -142,8 +144,7 @@ export function initTelegram(): TgUser {
     wa.ready()
     wa.expand()
     try {
-      wa.setBackgroundColor?.('#f8f5f0')
-      wa.setHeaderColor?.('#f8f5f0')
+      applyTheme() // sets Telegram bg/header to match light/dark
       wa.disableVerticalSwipes?.()
     } catch {
       // older Telegram clients — ignore

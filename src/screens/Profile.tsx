@@ -5,6 +5,7 @@ import {
   Copy,
   Crown,
   Gamepad2,
+  Moon,
   Pencil,
   Spade,
   TrendingUp,
@@ -28,6 +29,7 @@ import { displayName } from '../lib/telegram'
 import { setName } from '../lib/socket'
 import type { Profile as PlayerProfile } from '../lib/socket'
 import { isVip } from '../lib/skins'
+import { getTheme, setTheme } from '../lib/theme'
 import { Button } from '../components/ui/Button'
 
 const gameIcons: Record<string, LucideIcon> = {
@@ -56,6 +58,12 @@ export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHist
     const clean = draft.trim().slice(0, 24)
     if (clean) setName(clean)
     setRenameOpen(false)
+  }
+  const [dark, setDark] = useState(getTheme() === 'dark')
+  function toggleTheme() {
+    const next = dark ? 'light' : 'dark'
+    setTheme(next)
+    setDark(!dark)
   }
   const balance = profile?.balance ?? 0
   const eloMain = profile
@@ -190,6 +198,15 @@ export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHist
       {/* Menu */}
       <Card className="divide-y divide-line/70 p-0">
         <button
+          onClick={onOpenFriends}
+          className="flex w-full items-center gap-3 p-4 text-left transition active:bg-bg"
+        >
+          <Users size={20} className="text-muted" />
+          <span className="flex-1 font-medium">Друзья</span>
+          <span className="text-sm text-muted">{friendsCount}</span>
+          <ChevronRight size={18} className="text-muted" />
+        </button>
+        <button
           onClick={openRename}
           className="flex w-full items-center gap-3 p-4 text-left transition active:bg-bg"
         >
@@ -198,13 +215,20 @@ export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHist
           <ChevronRight size={18} className="text-muted" />
         </button>
         <button
-          onClick={onOpenFriends}
+          onClick={toggleTheme}
           className="flex w-full items-center gap-3 p-4 text-left transition active:bg-bg"
         >
-          <Users size={20} className="text-muted" />
-          <span className="flex-1 font-medium">Друзья</span>
-          <span className="text-sm text-muted">{friendsCount}</span>
-          <ChevronRight size={18} className="text-muted" />
+          <Moon size={20} className="text-muted" />
+          <span className="flex-1 font-medium">Тёмная тема</span>
+          <span
+            className={`relative h-6 w-11 rounded-full transition ${dark ? 'bg-gold' : 'bg-line'}`}
+          >
+            <span
+              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                dark ? 'left-[22px]' : 'left-0.5'
+              }`}
+            />
+          </span>
         </button>
         <button
           onClick={onOpenHistory}
