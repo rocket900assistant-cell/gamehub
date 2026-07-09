@@ -221,6 +221,7 @@ export default function App() {
   }, [])
 
   if (!user) return null
+  const myName = profile?.name ?? displayName(user)
 
   function startQuick(minutes: number) {
     getSocket().emit('quickMatch', { game: 'chess', minutes })
@@ -380,6 +381,7 @@ export default function App() {
           <ChessMatch
             user={user}
             match={match}
+            myName={myName}
             onMinimize={() => setMinimized(true)}
             onExit={() => {
               setMatch(null)
@@ -409,6 +411,7 @@ export default function App() {
             user={user}
             config={null}
             online={durakOnline}
+            myName={myName}
             onExit={() => setDurakOnline(null)}
           />
         </main>
@@ -482,6 +485,7 @@ export default function App() {
                 user={user}
                 config={durakCfg}
                 resume={durakResume}
+                myName={myName}
                 onExit={() => {
                   setSub(null)
                   setDurakResume(false)

@@ -45,6 +45,7 @@ interface DurakMatchProps {
   config: DurakConfig | null
   resume?: boolean
   online?: OnlineDurak | null
+  myName?: string
   onExit: () => void
 }
 
@@ -79,7 +80,7 @@ const FELT_BASE: React.CSSProperties = {
   backgroundPosition: 'center',
 }
 
-export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchProps) {
+export function DurakMatch({ user, config, resume, online, myName, onExit }: DurakMatchProps) {
   const isOnline = !!online
   // Equipped table felt (chosen in the shop, read once per match).
   const felt = useMemo(
@@ -374,8 +375,8 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
           >
             <Flag size={17} />
           </button>
-          <span className="absolute left-1/2 -translate-x-1/2 text-sm font-bold tracking-wide text-white/90">
-            {isOnline ? 'Дурак · онлайн' : 'Дурак · с ботом'}
+          <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-sm font-bold tracking-wide text-white/90">
+            {`Дурак · ${isOnline ? 'онлайн' : 'с ботом'} · ${s.transfer ? 'переводной' : 'подкидной'}`}
           </span>
           <span className="ml-auto flex h-9 items-center gap-1.5 rounded-xl bg-white/95 px-3 text-sm font-extrabold text-ink shadow">
             {bank > 0 ? (
@@ -400,6 +401,7 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
             active={s.turn === 'opp' && !s.result}
             progress={oppProgress}
             vip={isOnline ? online!.opponentVip : false}
+            labelTop
           />
           <CardFan count={s.hands.opp.length} />
         </div>
@@ -544,7 +546,7 @@ export function DurakMatch({ user, config, resume, online, onExit }: DurakMatchP
 
         <div className="flex flex-1 justify-center">
           <PlayerTile
-            name={displayName(user)}
+            name={myName ?? displayName(user)}
             elo={isOnline ? online!.myElo : undefined}
             active={started ? yourTurn : true}
             progress={youProgress}
@@ -691,6 +693,7 @@ function PlayerTile({
   you,
   onLight,
   vip,
+  labelTop,
 }: {
   name: string
   elo?: number
@@ -700,14 +703,39 @@ function PlayerTile({
   you?: boolean
   onLight?: boolean
   vip?: boolean
+  labelTop?: boolean
 }) {
   const initial = name.charAt(0).toUpperCase()
   const RW = 52
   const RR = 14
   const frac = progress == null ? 0 : Math.max(0, Math.min(1, progress))
   const low = progress != null && progress < 0.25
+  const label = (
+    <span
+      className={`flex max-w-[150px] items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+        labelTop ? 'mb-1' : 'mt-1'
+      } ${onLight ? 'text-ink' : 'bg-black/35 text-white backdrop-blur'}`}
+    >
+      <span className="truncate">{name}</span>
+      {vip && (
+        <span className="shrink-0 rounded-full bg-gradient-to-b from-gold to-gold-dark px-1 text-[9px] font-bold text-white">
+          VIP
+        </span>
+      )}
+      {elo != null && (
+        <span
+          className={`shrink-0 rounded-full px-1 text-[10px] font-bold ${
+            onLight ? 'bg-gold-light text-gold-dark' : 'bg-white/15 text-gold-light'
+          }`}
+        >
+          {elo}
+        </span>
+      )}
+    </span>
+  )
   return (
     <div className="flex flex-col items-center">
+      {labelTop && label}
       <div className="relative h-[62px] w-[62px]">
         {/* timer outline (follows the rounded-square avatar; pathLength=100 normalises the dash) */}
         {progress != null && (
@@ -757,27 +785,7 @@ function PlayerTile({
           )}
         </div>
       </div>
-      <span
-        className={`mt-1 flex max-w-[120px] items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-          onLight ? 'text-ink' : 'bg-black/35 text-white backdrop-blur'
-        }`}
-      >
-        <span className="truncate">{name}</span>
-        {vip && (
-          <span className="shrink-0 rounded-full bg-gradient-to-b from-gold to-gold-dark px-1 text-[9px] font-bold text-white">
-            VIP
-          </span>
-        )}
-        {elo != null && (
-          <span
-            className={`shrink-0 rounded-full px-1 text-[10px] font-bold ${
-              onLight ? 'bg-gold-light text-gold-dark' : 'bg-white/15 text-gold-light'
-            }`}
-          >
-            {elo}
-          </span>
-        )}
-      </span>
+      {!labelTop && label}
     </div>
   )
 }

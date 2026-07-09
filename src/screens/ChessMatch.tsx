@@ -79,6 +79,7 @@ function buildPieces(dir: string): PieceRenderObject {
 interface ChessMatchProps {
   user: TgUser
   match: MatchConfig
+  myName?: string
   onMinimize: () => void
   onExit: () => void
 }
@@ -112,7 +113,7 @@ export const clearChessSave = () => {
   }
 }
 
-export function ChessMatch({ user, match, onMinimize, onExit }: ChessMatchProps) {
+export function ChessMatch({ user, match, myName, onMinimize, onExit }: ChessMatchProps) {
   const online = match.mode === 'online'
   const isBot = match.mode === 'local' && !!match.bot
   const myColor: Side = match.mode === 'online' ? match.color : 'w'
@@ -484,7 +485,7 @@ export function ChessMatch({ user, match, onMinimize, onExit }: ChessMatchProps)
       </div>
 
       <PlayerBar
-        name={displayName(user)}
+        name={myName ?? displayName(user)}
         src={user.photoUrl}
         elo={match.mode === 'online' ? 0 : 2350}
         clock={fmt(myClock)}
