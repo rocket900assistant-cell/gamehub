@@ -489,7 +489,6 @@ export function ChessMatch({ user, match, onMinimize, onExit }: ChessMatchProps)
         elo={match.mode === 'online' ? 0 : 2350}
         clock={fmt(myClock)}
         active={myActive}
-        you
         vip={vipMe}
       />
 
@@ -729,7 +728,6 @@ function PlayerBar({
   elo,
   clock,
   active,
-  you,
   vip,
 }: {
   name: string
@@ -737,7 +735,6 @@ function PlayerBar({
   elo: number
   clock: string
   active: boolean
-  you?: boolean
   vip?: boolean
 }) {
   return (

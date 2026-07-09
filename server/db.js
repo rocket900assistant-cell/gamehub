@@ -52,6 +52,7 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       PRIMARY KEY (a, b)
     );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS vip BOOLEAN NOT NULL DEFAULT false;
   `)
   console.log('[db] ready')
 }
@@ -75,6 +76,19 @@ export async function addFriendship(a, b) {
     `INSERT INTO friendships (a, b) VALUES ($1,$2),($2,$1) ON CONFLICT DO NOTHING`,
     [a, b],
   )
+}
+
+/** Remove a mutual friendship (both directions). */
+export async function removeFriendship(a, b) {
+  a = Number(a)
+  b = Number(b)
+  if (!a || !b) return
+  if (!pool) {
+    memFriends.get(a)?.delete(b)
+    memFriends.get(b)?.delete(a)
+    return
+  }
+  await pool.query('DELETE FROM friendships WHERE (a=$1 AND b=$2) OR (a=$2 AND b=$1)', [a, b])
 }
 
 /** Friend user rows for a player (joined with their profile). */
@@ -117,10 +131,32 @@ export async function setUserName(tgId, name) {
   return rows[0] ?? null
 }
 
+/** Set the player's VIP flag. Returns the updated row. */
+export async function setUserVip(tgId, vip) {
+  if (!pool || !tgId) return null
+  const { rows } = await pool.query(
+    'UPDATE users SET vip = $2 WHERE tg_id = $1 RETURNING *',
+    [tgId, !!vip],
+  )
+  return rows[0] ?? null
+}
+
 export async function getUser(tgId) {
   if (!pool || !tgId) return null
   const { rows } = await pool.query('SELECT * FROM users WHERE tg_id = $1', [tgId])
   return rows[0] ?? null
+}
+
+/** Last N games for a player (most recent first). */
+export async function getHistory(tgId, limit = 10) {
+  tgId = Number(tgId)
+  if (!pool || !tgId) return []
+  const { rows } = await pool.query(
+    `SELECT game, winner, p1, p2, reason, created_at FROM game_history
+       WHERE p1 = $1 OR p2 = $1 ORDER BY created_at DESC LIMIT $2`,
+    [tgId, limit],
+  )
+  return rows
 }
 
 /** Apply an Elo change + win/loss counters and log the game. Best-effort. */

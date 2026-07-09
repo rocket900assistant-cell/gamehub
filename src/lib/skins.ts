@@ -140,6 +140,10 @@ export function isVip(): boolean {
 export function buyVip() {
   write(VIP_KEY, '1')
 }
+/** Reflect the server's VIP truth locally (so isVip() is consistent on this device). */
+export function syncVip(v: boolean) {
+  if (v) write(VIP_KEY, '1')
+}
 
 export function isOwned(id: string): boolean {
   if (FREE_IDS.has(id)) return true

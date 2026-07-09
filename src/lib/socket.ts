@@ -38,6 +38,11 @@ export function addFriend(code: string | number) {
   getSocket().emit('friend:add', { code })
 }
 
+/** Remove a friend (mutual). */
+export function removeFriend(code: string | number) {
+  getSocket().emit('friend:remove', { code })
+}
+
 /** Ask the server for the current friend list (also pushed automatically). */
 export function requestFriends() {
   getSocket().emit('friend:list')
@@ -46,6 +51,24 @@ export function requestFriends() {
 /** Change the player's display nickname (server persists + pushes fresh profile). */
 export function setName(name: string) {
   getSocket().emit('set:name', { name })
+}
+
+/** Tell the server the player is now VIP (persists to DB, account-wide). */
+export function setVip() {
+  getSocket().emit('set:vip')
+}
+
+/** A finished match for the history screen. */
+export interface HistoryEntry {
+  game: 'chess' | 'durak' | 'nardy' | string
+  result: 'win' | 'loss' | 'draw'
+  reason?: string
+  at: string
+}
+
+/** Ask the server for the last 10 matches (replies with 'history'). */
+export function requestHistory() {
+  getSocket().emit('history:get')
 }
 
 /** Invite a friend (by telegram id) into a private room for a game. */
@@ -69,6 +92,7 @@ export interface Profile {
   games: number
   wins: number
   losses: number
+  vip?: boolean
 }
 
 export interface Opponent {

@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, dbEnabled, addFriendship, getFriends, setUserName } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory } from './db.js'
 import { verifyInitData } from './telegram.js'
 import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther } from './nardy.js'
 import * as durak from './durak.js'
@@ -34,6 +34,7 @@ function dbProfile(r) {
     games: r.games,
     wins: r.wins,
     losses: r.losses,
+    vip: !!r.vip,
   }
 }
 
@@ -388,15 +389,21 @@ io.on('connection', (socket) => {
           photoUrl: verified?.photo_url ?? photoUrl,
         })
         if (row) {
-          const elos = { chess: row.elo_chess, durak: row.elo_durak, nardy: row.elo_nardy }
-          users.set(userId, { ...users.get(userId), name: row.name ?? name, elos })
+          let r = row
+          // migrate a locally-bought VIP into the DB the first time we see it
+          if (vip && !r.vip) {
+            const u = await setUserVip(tgId, true)
+            if (u) r = u
+          }
+          const elos = { chess: r.elo_chess, durak: r.elo_durak, nardy: r.elo_nardy }
+          users.set(userId, { ...users.get(userId), name: r.name ?? name, elos, vip: !!r.vip })
           tgInfo.set(tgId, {
-            name: row.name ?? name,
-            username: row.username ?? username,
-            photoUrl: row.photo_url ?? photoUrl,
+            name: r.name ?? name,
+            username: r.username ?? username,
+            photoUrl: r.photo_url ?? photoUrl,
             elos,
           })
-          socket.emit('profile', dbProfile(row))
+          socket.emit('profile', dbProfile(r))
         }
       } catch (e) {
         console.error('[db] upsert failed:', e.message)
@@ -488,6 +495,51 @@ io.on('connection', (socket) => {
   socket.on('friend:list', async () => {
     const myTg = userTg.get(socketUser.get(socket.id))
     socket.emit('friends', await friendListFor(myTg))
+  })
+
+  socket.on('friend:remove', async ({ code }) => {
+    const myTg = userTg.get(socketUser.get(socket.id))
+    const friendTg = Number(code)
+    if (!myTg || !friendTg) return
+    await removeFriendship(myTg, friendTg)
+    pushFriends(myTg).catch(() => {})
+    pushFriends(friendTg).catch(() => {})
+  })
+
+  // Last 10 matches for the match-history screen.
+  socket.on('history:get', async () => {
+    const myTg = userTg.get(socketUser.get(socket.id))
+    if (!myTg || !dbEnabled) return socket.emit('history', [])
+    try {
+      const rows = await getHistory(myTg, 10)
+      socket.emit(
+        'history',
+        rows.map((r) => ({
+          game: r.game,
+          result: r.winner == null ? 'draw' : Number(r.winner) === Number(myTg) ? 'win' : 'loss',
+          reason: r.reason,
+          at: r.created_at,
+        })),
+      )
+    } catch (e) {
+      console.error('[db] history failed:', e.message)
+      socket.emit('history', [])
+    }
+  })
+
+  // VIP purchased (persist to DB so it's account-wide + visible to opponents).
+  socket.on('set:vip', async () => {
+    const userId = socketUser.get(socket.id)
+    const myTg = userTg.get(userId)
+    users.set(userId, { ...users.get(userId), vip: true })
+    if (myTg && dbEnabled) {
+      try {
+        const row = await setUserVip(myTg, true)
+        if (row) socket.emit('profile', dbProfile(row))
+      } catch (e) {
+        console.error('[db] setVip failed:', e.message)
+      }
+    }
   })
 
   // Change display nickname.

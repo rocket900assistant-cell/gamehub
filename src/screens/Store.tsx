@@ -3,7 +3,7 @@ import { Check, Star } from 'lucide-react'
 import { StarBalance } from '../components/ui/StarBalance'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { Button } from '../components/ui/Button'
-import { player } from '../data/mock'
+import { setVip } from '../lib/socket'
 import {
   BOARD_SKINS,
   DURAK_BACKS,
@@ -188,7 +188,7 @@ function SkinCard({
   )
 }
 
-export function Store() {
+export function Store({ balance }: { balance: number }) {
   const [, setRev] = useState(0)
   const refresh = () => setRev((v) => v + 1)
   // Purchase window: item awaiting confirmation (paid in Telegram Stars).
@@ -211,13 +211,18 @@ export function Store() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-extrabold">Магазин</h1>
-        <StarBalance amount={player.balance} />
+        <StarBalance amount={balance} />
       </div>
 
       {/* Premium VIP — whole banner is the buy button (opens the purchase window) */}
       <button
         disabled={vip}
-        onClick={() => buyFlow('VIP статус', VIP_PRICE_STARS, buyVip)}
+        onClick={() =>
+          buyFlow('VIP статус', VIP_PRICE_STARS, () => {
+            buyVip()
+            setVip()
+          })
+        }
         className="relative block w-full overflow-hidden rounded-[var(--radius-card)] shadow-[var(--shadow-soft)] transition active:scale-[0.99] disabled:active:scale-100"
       >
         <img

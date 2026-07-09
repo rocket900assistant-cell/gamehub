@@ -7,6 +7,7 @@ import { Store } from './screens/Store'
 import { Profile } from './screens/Profile'
 import { Friends } from './screens/Friends'
 import { FriendInvite } from './screens/FriendInvite'
+import { History } from './screens/History'
 import { NewChessGame } from './screens/NewChessGame'
 import { ChessMatch, hasChessSave, readChessSave } from './screens/ChessMatch'
 import { DurakMatch, hasDurakSave, type OnlineDurak } from './screens/DurakMatch'
@@ -14,7 +15,7 @@ import { DurakSetup, type DurakConfig } from './screens/DurakSetup'
 import { NardyMatch, hasNardySave, type OnlineNardy } from './screens/NardyMatch'
 import { NardySetup, type NardyConfig } from './screens/NardySetup'
 import { Matchmaking } from './screens/Matchmaking'
-import { isVip } from './lib/skins'
+import { isVip, syncVip } from './lib/skins'
 import {
   initTelegram,
   displayName,
@@ -27,11 +28,13 @@ import {
   registerUser,
   addFriend,
   requestFriends,
+  requestHistory,
   inviteFriend as emitInviteFriend,
   type IncomingInvite,
   type MatchConfig,
   type Profile as PlayerProfile,
   type ServerFriend,
+  type HistoryEntry,
 } from './lib/socket'
 
 type SubScreen =
@@ -42,6 +45,7 @@ type SubScreen =
   | 'nardy-setup'
   | 'nardy'
   | 'invite'
+  | 'history'
   | null
 
 interface PendingInvite {
@@ -83,6 +87,7 @@ export default function App() {
   const [durakOnline, setDurakOnline] = useState<OnlineDurak | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
   const [friends, setFriends] = useState<ServerFriend[]>([])
+  const [history, setHistory] = useState<HistoryEntry[]>([])
   const [pendingInvite, setPendingInvite] = useState<PendingInvite | null>(null)
 
   useEffect(() => {
@@ -115,6 +120,7 @@ export default function App() {
     s.on('connect', doRegister)
     const onProfile = (p: PlayerProfile) => {
       setProfile(p)
+      syncVip(!!p.vip)
       try {
         localStorage.setItem('gh_profile', JSON.stringify(p))
       } catch {
@@ -179,6 +185,7 @@ export default function App() {
       setJoinError('Партия не найдена или уже началась')
     }
     const onFriends = (list: ServerFriend[]) => setFriends(list)
+    const onHistory = (list: HistoryEntry[]) => setHistory(list)
     const onInviteOffline = () => {
       setMatchmaking(null)
       setJoinError('Друг сейчас не в сети')
@@ -187,6 +194,7 @@ export default function App() {
     s.on('invite:incoming', onInvite)
     s.on('room:notfound', onNotFound)
     s.on('friends', onFriends)
+    s.on('history', onHistory)
     s.on('invite:offline', onInviteOffline)
 
     // Opened via a deep link.
@@ -207,6 +215,7 @@ export default function App() {
       s.off('invite:incoming', onInvite)
       s.off('room:notfound', onNotFound)
       s.off('friends', onFriends)
+      s.off('history', onHistory)
       s.off('invite:offline', onInviteOffline)
     }
   }, [])
@@ -425,6 +434,8 @@ export default function App() {
               />
             ) : sub === 'friends' ? (
               <Friends friends={friends} myId={user.id} onBack={() => setSub(null)} />
+            ) : sub === 'history' ? (
+              <History list={history} onBack={() => setSub(null)} />
             ) : sub === 'invite' && pendingInvite ? (
               <FriendInvite
                 title="Игра с другом"
@@ -540,7 +551,7 @@ export default function App() {
                 {tab === 'store' && (
                   <>
                     {banners}
-                    <Store />
+                    <Store balance={profile?.balance ?? 0} />
                   </>
                 )}
                 {tab === 'profile' && (
@@ -551,6 +562,10 @@ export default function App() {
                       profile={profile}
                       friendsCount={friends.length}
                       onOpenFriends={() => setSub('friends')}
+                      onOpenHistory={() => {
+                        requestHistory()
+                        setSub('history')
+                      }}
                     />
                   </>
                 )}

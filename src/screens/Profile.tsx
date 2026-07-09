@@ -19,7 +19,6 @@ import { EloChart } from '../components/EloChart'
 import {
   eloTrend,
   favoriteGames,
-  player,
   profile as profileMock,
   profileStats,
 } from '../data/mock'
@@ -41,9 +40,10 @@ interface ProfileProps {
   profile: PlayerProfile | null
   friendsCount: number
   onOpenFriends: () => void
+  onOpenHistory: () => void
 }
 
-export function Profile({ user, profile, friendsCount, onOpenFriends }: ProfileProps) {
+export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHistory }: ProfileProps) {
   const vip = isVip()
   const name = profile?.name ?? displayName(user)
   const [renameOpen, setRenameOpen] = useState(false)
@@ -57,7 +57,7 @@ export function Profile({ user, profile, friendsCount, onOpenFriends }: ProfileP
     if (clean) setName(clean)
     setRenameOpen(false)
   }
-  const balance = profile?.balance ?? player.balance
+  const balance = profile?.balance ?? 0
   const eloMain = profile
     ? Math.max(profile.elo.chess, profile.elo.durak, profile.elo.nardy)
     : profileMock.elo
@@ -206,7 +206,10 @@ export function Profile({ user, profile, friendsCount, onOpenFriends }: ProfileP
           <span className="text-sm text-muted">{friendsCount}</span>
           <ChevronRight size={18} className="text-muted" />
         </button>
-        <button className="flex w-full items-center gap-3 p-4 text-left transition active:bg-bg">
+        <button
+          onClick={onOpenHistory}
+          className="flex w-full items-center gap-3 p-4 text-left transition active:bg-bg"
+        >
           <ClipboardList size={20} className="text-muted" />
           <span className="flex-1 font-medium">История матчей</span>
           <ChevronRight size={18} className="text-muted" />

@@ -7,7 +7,7 @@ import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { StarBalance } from '../components/ui/StarBalance'
-import { comingGames, player, popularGames, resumeGames } from '../data/mock'
+import { comingGames, popularGames, resumeGames } from '../data/mock'
 import type { TgUser } from '../lib/telegram'
 import { displayName, shareInvite } from '../lib/telegram'
 import type { Profile as PlayerProfile } from '../lib/socket'
@@ -60,7 +60,7 @@ export function Home({ user, profile, onOpenProfile, onPlay, resumeBanner }: Hom
             </p>
           </div>
         </button>
-        <StarBalance amount={profile?.balance ?? player.balance} />
+        <StarBalance amount={profile?.balance ?? 0} />
       </div>
 
       <StarPromoBanner />

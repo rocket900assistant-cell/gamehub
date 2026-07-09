@@ -1,9 +1,10 @@
-import { ArrowLeft, Send, UserPlus, Users } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowLeft, Send, Trash2, UserPlus, Users } from 'lucide-react'
 import { Avatar } from '../components/ui/Avatar'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { shareFriendLink } from '../lib/telegram'
-import type { ServerFriend } from '../lib/socket'
+import { removeFriend, type ServerFriend } from '../lib/socket'
 
 interface FriendsProps {
   friends: ServerFriend[]
@@ -12,6 +13,7 @@ interface FriendsProps {
 }
 
 export function Friends({ friends, myId, onBack }: FriendsProps) {
+  const [confirm, setConfirm] = useState<ServerFriend | null>(null)
   const sorted = [...friends].sort(
     (a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name),
   )
@@ -84,9 +86,46 @@ export function Friends({ friends, myId, onBack }: FriendsProps) {
                   {f.online ? 'в сети' : 'не в сети'}
                 </p>
               </div>
+              <button
+                onClick={() => setConfirm(f)}
+                aria-label="Удалить"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-muted transition active:bg-bg"
+              >
+                <Trash2 size={18} />
+              </button>
             </div>
           ))}
         </Card>
+      )}
+
+      {/* remove-friend confirmation */}
+      {confirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-6"
+          onClick={() => setConfirm(null)}
+        >
+          <div
+            className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-lg font-extrabold">Удалить из друзей?</p>
+            <p className="mt-1 text-sm text-muted">{confirm.name}</p>
+            <div className="mt-6 flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setConfirm(null)}>
+                Отмена
+              </Button>
+              <button
+                onClick={() => {
+                  removeFriend(confirm.id)
+                  setConfirm(null)
+                }}
+                className="h-11 flex-1 rounded-[var(--radius-btn)] bg-danger px-5 font-semibold text-white transition active:scale-[0.98]"
+              >
+                Удалить
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
