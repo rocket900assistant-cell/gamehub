@@ -29,6 +29,7 @@ import { Confetti } from '../components/Confetti'
 import { getSocket, type MatchConfig } from '../lib/socket'
 import type { TgUser } from '../lib/telegram'
 import { displayName } from '../lib/telegram'
+import { t } from '../lib/i18n'
 
 type Side = 'w' | 'b'
 interface Result {
@@ -433,7 +434,7 @@ export function ChessMatch({ user, match, myName, onMinimize, onExit }: ChessMat
   }
 
   const oppName =
-    match.mode === 'online' ? match.opponent.name : isBot ? 'Бот' : 'Соперник'
+    match.mode === 'online' ? match.opponent.name : isBot ? t('match.bot') : t('common.opponent')
   const oppElo = match.mode === 'online' ? match.opponent.elo : isBot ? 800 : 2280
   const oppClock = myColor === 'w' ? clocks.b : clocks.w
   const myClock = myColor === 'w' ? clocks.w : clocks.b
@@ -497,7 +498,7 @@ export function ChessMatch({ user, match, myName, onMinimize, onExit }: ChessMat
       {showMoves && (
         <div className="mt-3 max-h-24 overflow-y-auto rounded-2xl border border-line bg-surface p-3">
           {sans.length === 0 ? (
-            <p className="text-xs text-muted">Ходов пока нет</p>
+            <p className="text-xs text-muted">{t('match.noMoves')}</p>
           ) : (
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
               {sans.map((san, i) => (
@@ -537,13 +538,13 @@ export function ChessMatch({ user, match, myName, onMinimize, onExit }: ChessMat
       <div className="mt-3 flex items-stretch gap-1 rounded-2xl border border-line bg-surface p-1.5 shadow-[var(--shadow-soft)]">
         <ToolBtn
           icon={List}
-          label="Ходы"
+          label={t('match.moves')}
           active={showMoves}
           onClick={() => setShowMoves((v) => !v)}
         />
         <ToolBtn
           icon={MessageCircle}
-          label="Чат"
+          label={t('match.chat')}
           badge={unread}
           onClick={openChat}
         />
@@ -569,8 +570,8 @@ export function ChessMatch({ user, match, myName, onMinimize, onExit }: ChessMat
             </button>
           )}
         </div>
-        <ToolBtn icon={ChevronLeft} label="Назад" onClick={stepPrev} />
-        <ToolBtn icon={ChevronRight} label="Вперёд" onClick={stepNext} />
+        <ToolBtn icon={ChevronLeft} label={t('match.back')} onClick={stepPrev} />
+        <ToolBtn icon={ChevronRight} label={t('match.forward')} onClick={stepNext} />
       </div>
 
       {/* mate / win animation before the modal */}
@@ -582,7 +583,7 @@ export function ChessMatch({ user, match, myName, onMinimize, onExit }: ChessMat
               className="rounded-full bg-ink/85 px-6 py-3 text-lg font-extrabold text-white"
               style={{ animation: 'gh-pop 0.4s ease-out' }}
             >
-              {result.reason === 'mate' ? 'Шах и мат!' : 'Победа!'}
+              {result.reason === 'mate' ? t('match.checkmate') : t('match.victory')}
             </div>
           </div>
         </>
@@ -609,7 +610,7 @@ export function ChessMatch({ user, match, myName, onMinimize, onExit }: ChessMat
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-line p-4">
-              <p className="font-bold">Чат</p>
+              <p className="font-bold">{t('match.chat')}</p>
               <button onClick={() => setChatOpen(false)} aria-label="Закрыть">
                 <X size={20} className="text-muted" />
               </button>
@@ -643,7 +644,7 @@ export function ChessMatch({ user, match, myName, onMinimize, onExit }: ChessMat
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && sendChat()}
-                placeholder="Сообщение…"
+                placeholder={t('match.messagePlaceholder')}
                 className="h-11 flex-1 rounded-[var(--radius-input)] border border-line bg-bg px-3 text-[15px] outline-none placeholder:text-muted"
               />
               <button
@@ -665,8 +666,8 @@ export function ChessMatch({ user, match, myName, onMinimize, onExit }: ChessMat
             <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-danger/10 text-danger">
               <Flag size={26} />
             </div>
-            <p className="mt-3 text-lg font-extrabold">Сдаться?</p>
-            <p className="mt-1 text-sm text-muted">Засчитается как поражение</p>
+            <p className="mt-3 text-lg font-extrabold">{t('match.resignQ')}</p>
+            <p className="mt-1 text-sm text-muted">{t('match.resignWarn')}</p>
             <div className="mt-6 flex gap-2">
               <Button
                 variant="secondary"
@@ -785,16 +786,16 @@ function GameOver({
     result.youWon ?? (draw || aborted ? null : result.winner === (youWhite ? 'w' : 'b'))
 
   const title = aborted
-    ? 'Партия отменена'
+    ? t('match.aborted')
     : draw
-      ? 'Ничья'
+      ? t('match.draw')
       : youWon
-        ? 'Вы выиграли!'
-        : 'Поражение'
+        ? t('match.youWon')
+        : t('match.defeat')
   const reasonText =
     aborted
-      ? 'Без штрафа'
-      : { mate: 'Объявлен мат', time: 'По времени', resign: 'Сдача', draw: 'Ничья', abandon: 'Соперник вышел' }[
+      ? t('match.noPenalty')
+      : { mate: t('reason.mate'), time: t('reason.time'), resign: t('reason.resign'), draw: t('reason.draw'), abandon: t('reason.abandon') }[
           result.reason
         ] ?? result.reason
   const delta =
@@ -835,17 +836,17 @@ function GameOver({
           )}
           {!aborted && !rated && (
             <p className="mt-4 text-sm font-medium text-muted">
-              Игра с ботом · без рейтинга
+              {t('match.botUnrated')}
             </p>
           )}
         </div>
         <div className="flex gap-2 p-6">
           <Button variant="secondary" className="flex-1" onClick={onExit}>
-            В меню
+            {t('match.toMenu')}
           </Button>
           {!aborted && (
             <Button className="flex-1" onClick={onRematch}>
-              <RotateCcw size={16} /> Реванш
+              <RotateCcw size={16} /> {t('match.rematch')}
             </Button>
           )}
         </div>

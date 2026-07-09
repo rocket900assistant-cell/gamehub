@@ -25,7 +25,7 @@ export function InviteBanner({ invite, onAccept, onDecline }: InviteBannerProps)
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-bold leading-tight">
-          {invite.from.name ?? 'Друг'} {t('invite.calls')}
+          {invite.from.name ?? t('common.friend')} {t('invite.calls')}
         </p>
         <p className="text-xs text-muted">{label} · {detail}</p>
       </div>

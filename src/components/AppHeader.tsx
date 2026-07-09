@@ -1,4 +1,5 @@
 import { Star } from 'lucide-react'
+import { t } from '../lib/i18n'
 
 /** Brand header shown at the top of the home tab. */
 export function AppHeader() {
@@ -10,7 +11,7 @@ export function AppHeader() {
         </h1>
         <Star size={16} className="fill-gold text-gold" />
       </div>
-      <p className="mt-0.5 text-sm text-muted">Играй. Побеждай. Соревнуйся</p>
+      <p className="mt-0.5 text-sm text-muted">{t('header.tagline')}</p>
     </header>
   )
 }

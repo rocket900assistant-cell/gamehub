@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Confetti } from '../components/Confetti'
 import { equippedCheckerSrcs, isVip } from '../lib/skins'
+import { t } from '../lib/i18n'
 import {
   ChevronLeft,
   Flag,
@@ -418,17 +419,17 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
             <Flag size={17} />
           </button>
           <span className="absolute left-1/2 -translate-x-1/2 text-sm font-bold tracking-wide text-white/90">
-            {isOnline ? 'Нарды · онлайн' : 'Нарды · с ботом'}
+            {`${t('game.nardy')} · ${isOnline ? t('match.onlineWord') : t('match.vsBot')}`}
           </span>
           <span className="ml-auto flex h-9 items-center gap-1.5 rounded-xl bg-white/95 px-3 text-sm font-extrabold text-[#1c1c1c] shadow">
             {bank > 0 ? (
               <>
-                <span className="text-[11px] font-semibold text-[#8a8a8a]">банк</span>
+                <span className="text-[11px] font-semibold text-[#8a8a8a]">{t('match.bank')}</span>
                 {bank}
               </>
             ) : (
               <span className="text-[12px] font-semibold text-[#8a8a8a]">
-                {isOnline ? 'рейтинг' : 'тренировка'}
+                {isOnline ? t('match.rated') : t('match.training')}
               </span>
             )}
           </span>
@@ -437,7 +438,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
         {/* opponent bar */}
         <div className="mt-3 flex min-h-[44px] items-center justify-between text-white/90">
           <PlayerChip
-            name={isOnline ? online!.opponentName : 'Бот'}
+            name={isOnline ? online!.opponentName : t('match.bot')}
             color={other(myColor)}
             active={s.turn === other(myColor) && !s.result}
             off={s.off[other(myColor)]}
@@ -481,11 +482,11 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
             className="mb-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl text-base font-extrabold text-[#4a2f00] shadow-[0_6px_18px_rgba(0,0,0,0.45)] active:scale-[0.98]"
             style={{ background: 'linear-gradient(180deg,#f6dc9f,#d9b25e)' }}
           >
-            <span className="text-xl leading-none">🎲</span> Бросить кубики
+            <span className="text-xl leading-none">🎲</span> {t('match.rollDice')}
           </button>
         ) : !s.result && !yourTurn ? (
           <div className="mb-2 flex h-[52px] w-full items-center justify-center rounded-2xl bg-black/25 text-base font-bold text-white/80">
-            Ход соперника
+            {t('match.opponentMove')}
           </div>
         ) : (
           <div className="mb-2 h-[52px]" />
@@ -494,7 +495,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
         {/* your bar */}
         <div className="flex items-center justify-between">
           <PlayerChip
-            name="Вы"
+            name={t('nardy.you')}
             color={myColor}
             active={yourTurn}
             off={s.off[myColor]}
@@ -507,11 +508,11 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
         <div className="mt-2 flex items-stretch gap-1.5 rounded-2xl border border-line bg-surface p-1.5 shadow-[var(--shadow-soft)]">
           <ToolBtn
             icon={MessageCircle}
-            label="Чат"
+            label={t('match.chat')}
             badge={unread}
             onClick={openChat}
           />
-          <ToolBtn icon={UserPlus} label="Пригласить" onClick={invite} />
+          <ToolBtn icon={UserPlus} label={t('nardy.invite')} onClick={invite} />
         </div>
       </div>
 
@@ -560,7 +561,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && sendChat()}
-                placeholder="Сообщение…"
+                placeholder={t('match.messagePlaceholder')}
                 className="h-11 flex-1 rounded-[var(--radius-input)] border border-line bg-bg px-3 text-[15px] outline-none placeholder:text-muted"
               />
               <button
@@ -578,15 +579,15 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
       {confirmResign && !s.result && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6">
           <div className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
-            <p className="text-lg font-extrabold">Сдаться?</p>
+            <p className="text-lg font-extrabold">{t('match.resignQ')}</p>
             <p className="mt-1 text-sm text-muted">
               {bank > 0
-                ? 'Засчитается поражение — ставка уйдёт сопернику.'
-                : 'Засчитается поражение — потеряете рейтинг.'}
+                ? t('match.resignWarnStake')
+                : t('match.resignWarnRating')}
             </p>
             <div className="mt-6 flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setConfirmResign(false)}>
-                Отмена
+                {t('common.cancel')}
               </Button>
               <Button
                 className="flex-1"
@@ -596,7 +597,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
                   else setS((c) => ({ ...c, result: other(myColor) }))
                 }}
               >
-                Сдаться
+                {t('match.resign')}
               </Button>
             </div>
           </div>
@@ -608,10 +609,10 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6">
           <div className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
             <p className="text-2xl font-extrabold">
-              {s.result === myColor ? 'Вы выиграли!' : 'Вы проиграли'}
+              {s.result === myColor ? t('match.youWon') : t('match.youLost')}
             </p>
             <p className="mt-1 text-sm text-muted">
-              {isOnline ? 'Онлайн-партия' : 'Игра с ботом · без рейтинга'}
+              {isOnline ? t('match.onlineGame') : t('match.botUnrated')}
             </p>
             {isOnline && eloDelta != null && (
               <p
@@ -682,7 +683,7 @@ function PlayerChip({
           {elo}
         </span>
       )}
-      {off > 0 && <span className="text-[11px] font-semibold text-white/70">вышло {off}</span>}
+      {off > 0 && <span className="text-[11px] font-semibold text-white/70">{t('nardy.off')} {off}</span>}
     </div>
   )
 }

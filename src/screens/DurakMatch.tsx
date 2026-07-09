@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button'
 import { PlayingCard } from '../components/PlayingCard'
 import { Confetti } from '../components/Confetti'
 import { equippedDurakFeltSrc, isVip } from '../lib/skins'
+import { t } from '../lib/i18n'
 import type { DurakConfig } from './DurakSetup'
 import {
   createGame,
@@ -327,17 +328,17 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
     ? ''
     : !yourTurn
       ? s.taking
-        ? 'Соперник забирает…'
-        : 'Ход соперника…'
+        ? t('durak.oppTaking')
+        : t('durak.oppTurn')
       : s.taking
-        ? 'Можно подкинуть, затем «Готово»'
+        ? t('durak.canThrowIn')
         : youAttacker
           ? canPass(s)
-            ? 'Подкиньте карту или «Бито»'
-            : 'Ваш ход — атакуйте'
+            ? t('durak.throwOrBeat')
+            : t('durak.attack')
           : canTransfer(s)
-            ? 'Отбейтесь, переведите или берите'
-            : 'Отбивайтесь или берите'
+            ? t('durak.defendTransferTake')
+            : t('durak.defendOrTake')
 
   const oppProgress =
     started && s.turn === 'opp' && !s.result ? remaining / moveMs : null
@@ -376,18 +377,18 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
             <Flag size={17} />
           </button>
           <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-sm font-bold tracking-wide text-white/90">
-            {`Дурак · ${isOnline ? 'онлайн' : 'с ботом'} · ${s.transfer ? 'переводной' : 'подкидной'}`}
+            {`${t('game.durak')} · ${isOnline ? t('match.onlineWord') : t('match.vsBot')} · ${s.transfer ? t('mode.transfer') : t('mode.podkidnoy')}`}
           </span>
           <span className="ml-auto flex h-9 items-center gap-1.5 rounded-xl bg-white/95 px-3 text-sm font-extrabold text-[#1c1c1c] shadow">
             {bank > 0 ? (
               <>
-                <span className="text-[11px] font-semibold text-[#8a8a8a]">банк</span>
+                <span className="text-[11px] font-semibold text-[#8a8a8a]">{t('match.bank')}</span>
                 {bank}
                 <Gem size={13} className="text-gold" />
               </>
             ) : (
               <span className="text-[12px] font-semibold text-[#8a8a8a]">
-                {isOnline ? 'рейтинг' : 'тренировка'}
+                {isOnline ? t('match.rated') : t('match.training')}
               </span>
             )}
           </span>
@@ -396,7 +397,7 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
         {/* opponent */}
         <div className="mt-3 flex flex-col items-center">
           <PlayerTile
-            name={isOnline ? online!.opponentName : 'Бот'}
+            name={isOnline ? online!.opponentName : t('match.bot')}
             elo={isOnline ? online!.opponentElo : undefined}
             active={s.turn === 'opp' && !s.result}
             progress={oppProgress}
@@ -466,7 +467,7 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
           <div className="mx-auto flex w-full max-w-[340px] flex-1 flex-wrap content-center items-center justify-center gap-x-2 gap-y-3 pb-2">
             {!started && (
               <span className="rounded-full bg-black/30 px-6 py-3 text-lg font-bold text-white/90 backdrop-blur">
-                Нажмите «Готов»
+                {t('match.readyPrompt')}
               </span>
             )}
             {started &&
@@ -518,15 +519,15 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
         <div className="w-24 shrink-0">
           {!started ? (
             <Button size="sm" className="w-full" onClick={() => setStarted(true)}>
-              Готов
+              {t('match.ready')}
             </Button>
           ) : yourTurn && canFinishTake(s) ? (
             <Button size="sm" className="w-full" onClick={doDone}>
-              Готово
+              {t('match.done')}
             </Button>
           ) : yourTurn && canPass(s) ? (
             <Button size="sm" className="w-full" onClick={doDone}>
-              Бито
+              {t('match.beat')}
             </Button>
           ) : yourTurn && canTake(s) ? (
             <Button
@@ -535,7 +536,7 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
               className="w-full"
               onClick={doTake}
             >
-              Взять
+              {t('match.take')}
             </Button>
           ) : (
             <span className="block text-center text-[11px] font-medium leading-tight text-muted">
@@ -606,7 +607,7 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-line p-4">
-              <p className="font-bold">Чат</p>
+              <p className="font-bold">{t('match.chat')}</p>
               <button onClick={() => setChatOpen(false)} aria-label="Закрыть">
                 <X size={20} className="text-muted" />
               </button>
@@ -640,7 +641,7 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && sendChat()}
-                placeholder="Сообщение…"
+                placeholder={t('match.messagePlaceholder')}
                 className="h-11 flex-1 rounded-[var(--radius-input)] border border-line bg-bg px-3 text-[15px] outline-none placeholder:text-muted"
               />
               <button
@@ -924,11 +925,11 @@ function ConfirmDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6">
       <div className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
-        <p className="text-lg font-extrabold">Сдаться?</p>
+        <p className="text-lg font-extrabold">{t('match.resignQ')}</p>
         <p className="mt-1 text-sm text-muted">
           {money
-            ? 'Засчитается поражение — ставка уйдёт сопернику.'
-            : 'Засчитается поражение — потеряете рейтинг.'}
+            ? t('match.resignWarnStake')
+            : t('match.resignWarnRating')}
         </p>
         <div className="mt-6 flex gap-2">
           <Button variant="secondary" className="flex-1" onClick={onCancel}>
@@ -962,14 +963,14 @@ function DurakOver({
 }) {
   const draw = loser === null
   const youWon = loser === 'opp'
-  const title = draw ? 'Ничья' : youWon ? 'Вы выиграли!' : 'Вы проиграли'
+  const title = draw ? t('match.draw') : youWon ? t('match.youWon') : t('match.youLost')
   const showElo = rated && !draw && eloDelta != null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6">
       <div className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
         <p className="text-2xl font-extrabold">{title}</p>
         <p className="mt-1 text-sm text-muted">
-          {money ? 'Игра на GRAM' : canRematch ? 'Игра с ботом · без рейтинга' : 'Онлайн-партия'}
+          {money ? t('match.onGram') : canRematch ? t('match.botUnrated') : t('match.onlineGame')}
         </p>
         {showElo && (
           <p
