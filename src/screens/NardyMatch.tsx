@@ -420,14 +420,14 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
           <span className="absolute left-1/2 -translate-x-1/2 text-sm font-bold tracking-wide text-white/90">
             {isOnline ? 'Нарды · онлайн' : 'Нарды · с ботом'}
           </span>
-          <span className="ml-auto flex h-9 items-center gap-1.5 rounded-xl bg-white/95 px-3 text-sm font-extrabold text-ink shadow">
+          <span className="ml-auto flex h-9 items-center gap-1.5 rounded-xl bg-white/95 px-3 text-sm font-extrabold text-[#1c1c1c] shadow">
             {bank > 0 ? (
               <>
-                <span className="text-[11px] font-semibold text-muted">банк</span>
+                <span className="text-[11px] font-semibold text-[#8a8a8a]">банк</span>
                 {bank}
               </>
             ) : (
-              <span className="text-[12px] font-semibold text-muted">
+              <span className="text-[12px] font-semibold text-[#8a8a8a]">
                 {isOnline ? 'рейтинг' : 'тренировка'}
               </span>
             )}

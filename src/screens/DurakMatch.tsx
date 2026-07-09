@@ -378,15 +378,15 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
           <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-sm font-bold tracking-wide text-white/90">
             {`Дурак · ${isOnline ? 'онлайн' : 'с ботом'} · ${s.transfer ? 'переводной' : 'подкидной'}`}
           </span>
-          <span className="ml-auto flex h-9 items-center gap-1.5 rounded-xl bg-white/95 px-3 text-sm font-extrabold text-ink shadow">
+          <span className="ml-auto flex h-9 items-center gap-1.5 rounded-xl bg-white/95 px-3 text-sm font-extrabold text-[#1c1c1c] shadow">
             {bank > 0 ? (
               <>
-                <span className="text-[11px] font-semibold text-muted">банк</span>
+                <span className="text-[11px] font-semibold text-[#8a8a8a]">банк</span>
                 {bank}
                 <Gem size={13} className="text-gold" />
               </>
             ) : (
-              <span className="text-[12px] font-semibold text-muted">
+              <span className="text-[12px] font-semibold text-[#8a8a8a]">
                 {isOnline ? 'рейтинг' : 'тренировка'}
               </span>
             )}
@@ -434,7 +434,7 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
                 <PlayingCard faceDown size="md" style={{ position: 'absolute', left: 4, top: 8, zIndex: 1 }} />
                 <PlayingCard faceDown size="md" style={{ position: 'absolute', left: 2, top: 6, zIndex: 2 }} />
                 <PlayingCard faceDown size="md" style={{ position: 'absolute', left: 0, top: 4, zIndex: 3 }} />
-                <span className="absolute left-[-8px] top-1 z-10 grid h-6 min-w-6 place-items-center rounded-full bg-ink px-1 text-xs font-extrabold text-white shadow">
+                <span className="absolute left-[-8px] top-1 z-10 grid h-6 min-w-6 place-items-center rounded-full bg-[#1c1c1c] px-1 text-xs font-extrabold text-white shadow">
                   {s.deck.length}
                 </span>
               </div>
