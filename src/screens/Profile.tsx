@@ -5,6 +5,7 @@ import {
   Copy,
   Crown,
   Gamepad2,
+  Languages,
   Moon,
   Pencil,
   Spade,
@@ -30,6 +31,7 @@ import { setName } from '../lib/socket'
 import type { Profile as PlayerProfile } from '../lib/socket'
 import { isVip } from '../lib/skins'
 import { getTheme, setTheme } from '../lib/theme'
+import { getLang, setLang, t } from '../lib/i18n'
 import { Button } from '../components/ui/Button'
 
 const gameIcons: Record<string, LucideIcon> = {
@@ -60,6 +62,7 @@ export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHist
     setRenameOpen(false)
   }
   const [dark, setDark] = useState(getTheme() === 'dark')
+  const [lang, setLangState] = useState(getLang())
   function toggleTheme() {
     const next = dark ? 'light' : 'dark'
     setTheme(next)
@@ -76,18 +79,18 @@ export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHist
 
   const stats = profile
     ? [
-        { label: 'Партий', value: String(games), sub: undefined },
-        { label: 'Побед', value: String(wins), sub: undefined },
-        { label: 'Поражений', value: String(losses), sub: undefined },
-        { label: 'Винрейт', value: `${winrate}%`, sub: undefined },
+        { label: t('profile.games'), value: String(games), sub: undefined },
+        { label: t('profile.wins'), value: String(wins), sub: undefined },
+        { label: t('profile.losses'), value: String(losses), sub: undefined },
+        { label: t('profile.winrate'), value: `${winrate}%`, sub: undefined },
       ]
     : profileStats
 
   const favGames = profile
     ? [
-        { id: 'chess', name: 'Шахматы', elo: profile.elo.chess, played: null as number | null, progress: Math.min(1, profile.elo.chess / 2500) },
-        { id: 'durak', name: 'Дурак', elo: profile.elo.durak, played: null, progress: Math.min(1, profile.elo.durak / 2500) },
-        { id: 'nardy', name: 'Нарды', elo: profile.elo.nardy, played: null, progress: Math.min(1, profile.elo.nardy / 2500) },
+        { id: 'chess', name: t('game.chess'), elo: profile.elo.chess, played: null as number | null, progress: Math.min(1, profile.elo.chess / 2500) },
+        { id: 'durak', name: t('game.durak'), elo: profile.elo.durak, played: null, progress: Math.min(1, profile.elo.durak / 2500) },
+        { id: 'nardy', name: t('game.nardy'), elo: profile.elo.nardy, played: null, progress: Math.min(1, profile.elo.nardy / 2500) },
       ]
     : favoriteGames.map((g: FavGame) => ({ ...g, played: g.played as number | null }))
 
@@ -95,7 +98,7 @@ export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHist
     <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center">
-        <h1 className="text-2xl font-extrabold">Профиль</h1>
+        <h1 className="text-2xl font-extrabold">{t('profile.title')}</h1>
       </div>
 
       {/* Identity card */}
@@ -129,7 +132,7 @@ export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHist
       <Card>
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs text-muted">Elo рейтинг</p>
+            <p className="text-xs text-muted">{t('profile.elo')}</p>
             <div className="mt-1 flex items-end gap-2">
               <span className="text-3xl font-extrabold leading-none">
                 {eloMain}
@@ -165,7 +168,7 @@ export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHist
 
       {/* Favorite games */}
       <section>
-        <SectionHeader title="Любимые игры" />
+        <SectionHeader title={t('profile.favGames')} />
         <Card className="divide-y divide-line/70 p-0">
           {favGames.map((g) => {
             const Icon = gameIcons[g.id] ?? Gamepad2
@@ -202,7 +205,7 @@ export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHist
           className="flex w-full items-center gap-3 p-4 text-left transition active:bg-bg"
         >
           <Users size={20} className="text-muted" />
-          <span className="flex-1 font-medium">Друзья</span>
+          <span className="flex-1 font-medium">{t('profile.friends')}</span>
           <span className="text-sm text-muted">{friendsCount}</span>
           <ChevronRight size={18} className="text-muted" />
         </button>
@@ -211,7 +214,7 @@ export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHist
           className="flex w-full items-center gap-3 p-4 text-left transition active:bg-bg"
         >
           <Pencil size={20} className="text-muted" />
-          <span className="flex-1 font-medium">Сменить имя</span>
+          <span className="flex-1 font-medium">{t('profile.rename')}</span>
           <ChevronRight size={18} className="text-muted" />
         </button>
         <button
@@ -219,7 +222,7 @@ export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHist
           className="flex w-full items-center gap-3 p-4 text-left transition active:bg-bg"
         >
           <Moon size={20} className="text-muted" />
-          <span className="flex-1 font-medium">Тёмная тема</span>
+          <span className="flex-1 font-medium">{t('profile.darkTheme')}</span>
           <span
             className={`relative h-6 w-11 rounded-full transition ${dark ? 'bg-gold' : 'bg-line'}`}
           >
@@ -230,12 +233,32 @@ export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHist
             />
           </span>
         </button>
+        <div className="flex w-full items-center gap-3 p-4">
+          <Languages size={20} className="text-muted" />
+          <span className="flex-1 font-medium">{t('profile.language')}</span>
+          <div className="flex gap-1 rounded-full border border-line p-0.5">
+            {(['ru', 'en'] as const).map((l) => (
+              <button
+                key={l}
+                onClick={() => {
+                  setLang(l)
+                  setLangState(l)
+                }}
+                className={`rounded-full px-3 py-1 text-xs font-bold transition ${
+                  lang === l ? 'bg-gold text-white' : 'text-muted'
+                }`}
+              >
+                {l.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
         <button
           onClick={onOpenHistory}
           className="flex w-full items-center gap-3 p-4 text-left transition active:bg-bg"
         >
           <ClipboardList size={20} className="text-muted" />
-          <span className="flex-1 font-medium">История матчей</span>
+          <span className="flex-1 font-medium">{t('profile.history')}</span>
           <ChevronRight size={18} className="text-muted" />
         </button>
       </Card>
@@ -250,22 +273,22 @@ export function Profile({ user, profile, friendsCount, onOpenFriends, onOpenHist
             className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 shadow-[var(--shadow-soft)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-lg font-extrabold">Сменить имя</p>
+            <p className="text-lg font-extrabold">{t('profile.renameTitle')}</p>
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && saveName()}
               maxLength={24}
               autoFocus
-              placeholder="Ваше имя"
+              placeholder={t('profile.namePlaceholder')}
               className="mt-3 h-11 w-full rounded-[var(--radius-input)] border border-line bg-bg px-3 text-[15px] outline-none focus:border-gold"
             />
             <div className="mt-5 flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setRenameOpen(false)}>
-                Отмена
+                {t('common.cancel')}
               </Button>
               <Button className="flex-1" disabled={!draft.trim()} onClick={saveName}>
-                Сохранить
+                {t('common.save')}
               </Button>
             </div>
           </div>

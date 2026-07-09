@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { StarBalance } from '../components/ui/StarBalance'
 import { comingGames, popularGames, resumeGames } from '../data/mock'
+import { t } from '../lib/i18n'
 import type { TgUser } from '../lib/telegram'
 import { displayName, shareInvite } from '../lib/telegram'
 import type { Profile as PlayerProfile } from '../lib/socket'
@@ -18,6 +19,15 @@ const ELO_KEY: Record<string, 'chess' | 'durak' | 'nardy'> = {
   durak: 'durak',
   backgammon: 'nardy',
 }
+
+// Localised game name (keeps the mock name for games without a translation key).
+const GKEY: Record<string, string> = {
+  chess: 'game.chess',
+  durak: 'game.durak',
+  backgammon: 'game.nardy',
+  nardy: 'game.nardy',
+}
+const gname = (id: string, fallback: string) => (GKEY[id] ? t(GKEY[id]) : fallback)
 
 const V = '?v=4' // cache-bust when assets change
 const gameImg: Record<string, string> = {
@@ -56,7 +66,7 @@ export function Home({ user, profile, onOpenProfile, onPlay, resumeBanner }: Hom
           <div>
             <p className="font-bold leading-tight">{profile?.name ?? displayName(user)}</p>
             <p className="flex items-center gap-0.5 text-xs text-muted">
-              Профиль <ChevronRight size={13} />
+              {t('nav.profile')} <ChevronRight size={13} />
             </p>
           </div>
         </button>
@@ -69,7 +79,7 @@ export function Home({ user, profile, onOpenProfile, onPlay, resumeBanner }: Hom
 
       {/* Play games */}
       <section>
-        <SectionHeader title="Во что сыграем?" />
+        <SectionHeader title={t('home.playWhat')} />
         <div className="grid grid-cols-2 gap-3">
           {resumeGames.slice(0, 2).map((g) => (
             <button key={g.id} onClick={() => onPlay(g.id)} className="text-left">
@@ -82,8 +92,8 @@ export function Home({ user, profile, onOpenProfile, onPlay, resumeBanner }: Hom
                   />
                 </div>
                 <div className="p-3.5">
-                  <p className="font-bold leading-tight">{g.name}</p>
-                  <p className="mt-0.5 text-xs text-muted">Твой Elo {eloFor(g.id, g.elo)}</p>
+                  <p className="font-bold leading-tight">{gname(g.id, g.name)}</p>
+                  <p className="mt-0.5 text-xs text-muted">{t('home.yourElo')} {eloFor(g.id, g.elo)}</p>
                 </div>
               </Card>
             </button>
@@ -105,8 +115,8 @@ export function Home({ user, profile, onOpenProfile, onPlay, resumeBanner }: Hom
                 />
               </div>
               <div className="flex-1 px-4">
-                <p className="font-bold leading-tight">{g.name}</p>
-                <p className="mt-0.5 text-xs text-muted">Твой Elo {eloFor(g.id, g.elo)}</p>
+                <p className="font-bold leading-tight">{gname(g.id, g.name)}</p>
+                <p className="mt-0.5 text-xs text-muted">{t('home.yourElo')} {eloFor(g.id, g.elo)}</p>
               </div>
               <ChevronRight size={18} className="mr-4 text-muted" />
             </Card>
@@ -116,7 +126,7 @@ export function Home({ user, profile, onOpenProfile, onPlay, resumeBanner }: Hom
 
       {/* Popular games */}
       <section>
-        <SectionHeader title="Популярные игры" />
+        <SectionHeader title={t('home.popular')} />
         <Card className="divide-y divide-line/70 p-0">
           {popularGames.map((g) => (
             <button
@@ -130,10 +140,10 @@ export function Home({ user, profile, onOpenProfile, onPlay, resumeBanner }: Hom
                 className="h-12 w-12 shrink-0 rounded-xl object-cover"
               />
               <div className="flex-1">
-                <p className="font-bold leading-tight">{g.name}</p>
+                <p className="font-bold leading-tight">{gname(g.id, g.name)}</p>
                 <p className="mt-0.5 flex items-center gap-1 text-xs text-muted">
                   <Users size={12} />
-                  {g.playing.toLocaleString('ru-RU')} играют
+                  {g.playing.toLocaleString()} {t('home.playing')}
                 </p>
               </div>
               <ChevronRight size={18} className="text-muted" />
@@ -145,8 +155,8 @@ export function Home({ user, profile, onOpenProfile, onPlay, resumeBanner }: Hom
       {/* More games (coming soon) */}
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-bold">Больше игр</h2>
-          <span className="text-xs font-medium text-muted">Скоро в GameHub</span>
+          <h2 className="text-lg font-bold">{t('home.moreGames')}</h2>
+          <span className="text-xs font-medium text-muted">{t('home.comingSoon')}</span>
         </div>
         <Card className="grid grid-cols-3 gap-2 p-3">
           {comingGames.map((c) => (
@@ -160,8 +170,8 @@ export function Home({ user, profile, onOpenProfile, onPlay, resumeBanner }: Hom
                 className="h-14 w-14 rounded-xl object-cover"
               />
               <div>
-                <p className="text-[13px] font-bold leading-tight">{c.name}</p>
-                <p className="text-[11px] text-muted">Скоро</p>
+                <p className="text-[13px] font-bold leading-tight">{gname(c.id, c.name)}</p>
+                <p className="text-[11px] text-muted">{t('home.soon')}</p>
               </div>
             </div>
           ))}
@@ -186,13 +196,11 @@ export function Home({ user, profile, onOpenProfile, onPlay, resumeBanner }: Hom
           }}
         />
         <div className="min-w-0 flex-1">
-          <p className="font-bold leading-tight">Позови друга</p>
-          <p className="mt-0.5 text-xs leading-snug text-muted">
-            Вы оба получите бонус GRAM на баланс
-          </p>
+          <p className="font-bold leading-tight">{t('home.inviteFriend')}</p>
+          <p className="mt-0.5 text-xs leading-snug text-muted">{t('home.inviteHint')}</p>
         </div>
         <Button size="sm" onClick={() => shareInvite(String(user.id || user.username || 'guest'))}>
-          Пригласить
+          {t('home.inviteBtn')}
         </Button>
       </Card>
     </div>

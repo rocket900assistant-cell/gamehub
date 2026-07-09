@@ -2,17 +2,23 @@ import { ArrowLeft, ClipboardList, Crown, Dices, Gamepad2, Spade } from 'lucide-
 import type { LucideIcon } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import type { HistoryEntry } from '../lib/socket'
+import { t } from '../lib/i18n'
 
-const GAME: Record<string, { label: string; icon: LucideIcon }> = {
-  chess: { label: 'Шахматы', icon: Crown },
-  durak: { label: 'Дурак', icon: Spade },
-  nardy: { label: 'Нарды', icon: Dices },
+const GAME_ICON: Record<string, LucideIcon> = {
+  chess: Crown,
+  durak: Spade,
+  nardy: Dices,
 }
 
-const RESULT: Record<HistoryEntry['result'], { label: string; cls: string }> = {
-  win: { label: 'Победа', cls: 'text-success bg-success/12' },
-  loss: { label: 'Поражение', cls: 'text-danger bg-danger/12' },
-  draw: { label: 'Ничья', cls: 'text-muted bg-line' },
+const RESULT_CLS: Record<HistoryEntry['result'], string> = {
+  win: 'text-success bg-success/12',
+  loss: 'text-danger bg-danger/12',
+  draw: 'text-muted bg-line',
+}
+const RESULT_KEY: Record<HistoryEntry['result'], string> = {
+  win: 'history.win',
+  loss: 'history.loss',
+  draw: 'history.draw',
 }
 
 function fmt(at: string) {
@@ -37,7 +43,7 @@ export function History({ list, onBack }: { list: HistoryEntry[]; onBack: () => 
         >
           <ArrowLeft size={18} />
         </button>
-        <h1 className="text-2xl font-extrabold">История матчей</h1>
+        <h1 className="text-2xl font-extrabold">{t('history.title')}</h1>
       </div>
 
       {list.length === 0 ? (
@@ -46,27 +52,26 @@ export function History({ list, onBack }: { list: HistoryEntry[]; onBack: () => 
             <ClipboardList size={26} />
           </div>
           <div>
-            <p className="font-bold">Пока нет матчей</p>
-            <p className="mt-0.5 text-sm text-muted">Сыграй онлайн — партии появятся здесь</p>
+            <p className="font-bold">{t('history.emptyTitle')}</p>
+            <p className="mt-0.5 text-sm text-muted">{t('history.emptyHint')}</p>
           </div>
         </div>
       ) : (
         <Card className="divide-y divide-line/70 overflow-hidden p-0">
           {list.map((m, i) => {
-            const g = GAME[m.game] ?? { label: m.game, icon: Gamepad2 }
-            const r = RESULT[m.result]
-            const Icon = g.icon
+            const Icon = GAME_ICON[m.game] ?? Gamepad2
+            const label = GAME_ICON[m.game] ? t(`game.${m.game}`) : m.game
             return (
               <div key={i} className="flex items-center gap-3 p-3.5">
                 <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gold-light/40 text-gold-dark">
                   <Icon size={20} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-bold leading-tight">{g.label}</p>
+                  <p className="font-bold leading-tight">{label}</p>
                   <p className="text-xs text-muted">{fmt(m.at)}</p>
                 </div>
-                <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${r.cls}`}>
-                  {r.label}
+                <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${RESULT_CLS[m.result]}`}>
+                  {t(RESULT_KEY[m.result])}
                 </span>
               </div>
             )

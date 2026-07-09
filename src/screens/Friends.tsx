@@ -5,6 +5,7 @@ import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { shareFriendLink } from '../lib/telegram'
 import { removeFriend, type ServerFriend } from '../lib/socket'
+import { t } from '../lib/i18n'
 
 interface FriendsProps {
   friends: ServerFriend[]
@@ -30,10 +31,10 @@ export function Friends({ friends, myId, onBack }: FriendsProps) {
         >
           <ArrowLeft size={18} />
         </button>
-        <h1 className="text-2xl font-extrabold">Друзья</h1>
+        <h1 className="text-2xl font-extrabold">{t('friends.title')}</h1>
         {friends.length > 0 && (
           <span className="ml-auto rounded-full bg-surface px-3 py-1 text-xs font-bold text-muted">
-            {friends.length} · <span className="text-success">{onlineCount} в сети</span>
+            {friends.length} · <span className="text-success">{onlineCount} {t('friends.online')}</span>
           </span>
         )}
       </div>
@@ -45,14 +46,12 @@ export function Friends({ friends, myId, onBack }: FriendsProps) {
             <UserPlus size={20} />
           </div>
           <div>
-            <p className="font-bold leading-tight">Добавить друга</p>
-            <p className="text-xs text-muted">
-              Отправь ссылку. Друг откроет — и вы добавитесь друг к другу.
-            </p>
+            <p className="font-bold leading-tight">{t('friends.add')}</p>
+            <p className="text-xs text-muted">{t('friends.addHint')}</p>
           </div>
         </div>
         <Button className="w-full" onClick={() => shareFriendLink(myId)}>
-          <Send size={16} /> Поделиться ссылкой
+          <Send size={16} /> {t('friends.shareLink')}
         </Button>
       </Card>
 
@@ -63,10 +62,8 @@ export function Friends({ friends, myId, onBack }: FriendsProps) {
             <Users size={26} />
           </div>
           <div>
-            <p className="font-bold">Пока никого нет</p>
-            <p className="mt-0.5 text-sm text-muted">
-              Пригласи друга по ссылке выше
-            </p>
+            <p className="font-bold">{t('friends.emptyTitle')}</p>
+            <p className="mt-0.5 text-sm text-muted">{t('friends.emptyHint')}</p>
           </div>
         </div>
       ) : (
@@ -83,7 +80,7 @@ export function Friends({ friends, myId, onBack }: FriendsProps) {
                 <p className="truncate font-bold leading-tight">{f.name}</p>
                 <p className="truncate text-xs text-muted">
                   {f.username ? `@${f.username} · ` : ''}
-                  {f.online ? 'в сети' : 'не в сети'}
+                  {f.online ? t('common.online') : t('common.offline')}
                 </p>
               </div>
               <button
@@ -108,11 +105,11 @@ export function Friends({ friends, myId, onBack }: FriendsProps) {
             className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-lg font-extrabold">Удалить из друзей?</p>
+            <p className="text-lg font-extrabold">{t('friends.removeTitle')}</p>
             <p className="mt-1 text-sm text-muted">{confirm.name}</p>
             <div className="mt-6 flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setConfirm(null)}>
-                Отмена
+                {t('common.cancel')}
               </Button>
               <button
                 onClick={() => {
@@ -121,7 +118,7 @@ export function Friends({ friends, myId, onBack }: FriendsProps) {
                 }}
                 className="h-11 flex-1 rounded-[var(--radius-btn)] bg-danger px-5 font-semibold text-white transition active:scale-[0.98]"
               >
-                Удалить
+                {t('common.delete')}
               </button>
             </div>
           </div>

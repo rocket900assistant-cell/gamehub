@@ -4,6 +4,7 @@ import { StarBalance } from '../components/ui/StarBalance'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { Button } from '../components/ui/Button'
 import { setVip } from '../lib/socket'
+import { t } from '../lib/i18n'
 import {
   BOARD_SKINS,
   DURAK_BACKS,
@@ -172,11 +173,11 @@ function SkinCard({
         <p className="truncate text-center font-bold leading-tight">{name}</p>
         {equipped ? (
           <div className="flex h-9 items-center justify-center gap-1.5 rounded-[var(--radius-btn)] bg-gold-light/50 text-sm font-bold text-gold-dark">
-            <Check size={16} strokeWidth={2.5} /> Выбрано
+            <Check size={16} strokeWidth={2.5} /> {t('common.chosen')}
           </div>
         ) : owned ? (
           <Button size="sm" variant="secondary" className="w-full" onClick={onEquip}>
-            Выбрать
+            {t('common.choose')}
           </Button>
         ) : (
           <Button size="sm" className="w-full" onClick={onBuy}>
@@ -210,7 +211,7 @@ export function Store({ balance }: { balance: number }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-extrabold">Магазин</h1>
+        <h1 className="text-2xl font-extrabold">{t('store.title')}</h1>
         <StarBalance amount={balance} />
       </div>
 
@@ -218,7 +219,7 @@ export function Store({ balance }: { balance: number }) {
       <button
         disabled={vip}
         onClick={() =>
-          buyFlow('VIP статус', VIP_PRICE_STARS, () => {
+          buyFlow(t('store.vipTitle'), VIP_PRICE_STARS, () => {
             buyVip()
             setVip()
           })
@@ -232,13 +233,13 @@ export function Store({ balance }: { balance: number }) {
         />
         {vip && (
           <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-gradient-to-b from-gold to-gold-dark px-3 py-1 text-xs font-bold text-white shadow">
-            <Check size={13} strokeWidth={2.5} /> Вы VIP
+            <Check size={13} strokeWidth={2.5} /> {t('store.youVip')}
           </span>
         )}
       </button>
 
       <section>
-        <SectionHeader title="Фигуры · Шахматы" />
+        <SectionHeader title={t('store.piecesChess')} />
         <div className="grid grid-cols-2 gap-3">
           {PIECE_SKINS.map((skin) => (
             <SkinCard
@@ -264,7 +265,7 @@ export function Store({ balance }: { balance: number }) {
       </section>
 
       <section>
-        <SectionHeader title="Доски · Шахматы" />
+        <SectionHeader title={t('store.boardsChess')} />
         <div className="grid grid-cols-2 gap-3">
           {BOARD_SKINS.map((skin) => (
             <SkinCard
@@ -290,7 +291,7 @@ export function Store({ balance }: { balance: number }) {
       </section>
 
       <section>
-        <SectionHeader title="Рубашки · Дурак" />
+        <SectionHeader title={t('store.backsDurak')} />
         <div className="grid grid-cols-2 gap-3">
           {DURAK_BACKS.map((skin) => (
             <SkinCard
@@ -316,7 +317,7 @@ export function Store({ balance }: { balance: number }) {
       </section>
 
       <section>
-        <SectionHeader title="Полотна · Дурак" />
+        <SectionHeader title={t('store.feltsDurak')} />
         <div className="grid grid-cols-2 gap-3">
           {DURAK_FELTS.map((skin) => (
             <SkinCard
@@ -342,7 +343,7 @@ export function Store({ balance }: { balance: number }) {
       </section>
 
       <section>
-        <SectionHeader title="Фишки · Нарды" />
+        <SectionHeader title={t('store.checkersNardy')} />
         <div className="grid grid-cols-2 gap-3">
           {NARDY_CHECKERS.map((skin) => (
             <SkinCard
@@ -380,19 +381,19 @@ export function Store({ balance }: { balance: number }) {
             <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-gold-light/60 text-gold-dark">
               <Star size={26} className="fill-current" />
             </div>
-            <p className="mt-3 text-lg font-extrabold">Покупка</p>
+            <p className="mt-3 text-lg font-extrabold">{t('store.purchase')}</p>
             <p className="mt-1 text-sm text-muted">{pending.title}</p>
             <div className="mt-4 flex items-center justify-center gap-1.5 text-3xl font-extrabold">
               <Star size={24} className="fill-gold text-gold" />
               {pending.stars.toLocaleString('ru-RU')}
             </div>
-            <p className="mt-1 text-xs text-muted">Оплата звёздами Telegram</p>
+            <p className="mt-1 text-xs text-muted">{t('store.payWithStars')}</p>
             <div className="mt-6 flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setPending(null)}>
-                Отмена
+                {t('common.cancel')}
               </Button>
               <Button className="flex-1" onClick={confirmPurchase}>
-                Купить за <PriceTag stars={pending.stars} />
+                {t('store.buyFor')} <PriceTag stars={pending.stars} />
               </Button>
             </div>
           </div>

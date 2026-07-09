@@ -16,6 +16,7 @@ import { NardyMatch, hasNardySave, type OnlineNardy } from './screens/NardyMatch
 import { NardySetup, type NardyConfig } from './screens/NardySetup'
 import { Matchmaking } from './screens/Matchmaking'
 import { isVip, syncVip } from './lib/skins'
+import { onLangChange, t } from './lib/i18n'
 import {
   initTelegram,
   displayName,
@@ -89,6 +90,8 @@ export default function App() {
   const [friends, setFriends] = useState<ServerFriend[]>([])
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [pendingInvite, setPendingInvite] = useState<PendingInvite | null>(null)
+  const [, forceLang] = useState(0)
+  useEffect(() => onLangChange(() => forceLang((x) => x + 1)), [])
 
   useEffect(() => {
     const u = initTelegram()
@@ -182,13 +185,13 @@ export default function App() {
     const onInvite = (inv: IncomingInvite) => setInvite(inv)
     const onNotFound = () => {
       setMatchmaking(null)
-      setJoinError('Партия не найдена или уже началась')
+      setJoinError(t('invite.notFound'))
     }
     const onFriends = (list: ServerFriend[]) => setFriends(list)
     const onHistory = (list: HistoryEntry[]) => setHistory(list)
     const onInviteOffline = () => {
       setMatchmaking(null)
-      setJoinError('Друг сейчас не в сети')
+      setJoinError(t('invite.offline'))
     }
     s.on('match:found', onFound)
     s.on('invite:incoming', onInvite)
