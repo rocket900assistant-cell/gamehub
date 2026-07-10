@@ -174,6 +174,11 @@ const D: Record<string, Entry> = {
   'durak.mode.vse': { ru: 'Все', en: 'All' },
   'durak.mode.klassika': { ru: 'Классика', en: 'Classic' },
   'durak.mode.nichya': { ru: 'Ничья', en: 'Draw' },
+  'durak.role.attack': { ru: 'Атакует', en: 'Attacks' },
+  'durak.role.defend': { ru: 'Защищается', en: 'Defends' },
+  'durak.role.take': { ru: 'Берёт', en: 'Takes' },
+  'durak.turnOf': { ru: 'Ходит', en: 'Turn' },
+  'durak.youWord': { ru: 'вы', en: 'you' },
   // in-match
   'match.bot': { ru: 'Бот', en: 'Bot' },
   'match.onlineWord': { ru: 'онлайн', en: 'online' },

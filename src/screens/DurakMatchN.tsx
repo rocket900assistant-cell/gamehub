@@ -226,6 +226,9 @@ export function DurakMatchN({
   // opponents in play order after me (wraps for online seat > 0)
   const opponents = Array.from({ length: s.n - 1 }, (_, i) => (me + 1 + i) % s.n)
   const oppName = (seat: number) => seats[seat]?.name ?? `${t('durakN.bot')} ${seat}`
+  const roleOf = (seat: number): 'attack' | 'defend' | 'take' | null =>
+    s.result ? null : seat === s.defender ? (s.taking ? 'take' : 'defend') : seat === s.attacker ? 'attack' : null
+  const turnName = s.result ? null : s.turn === me ? myName ?? displayName(user) : oppName(s.turn)
 
   const draw = s.result != null && s.result.loser === null
   const iLost = s.result?.loser === me
@@ -267,12 +270,23 @@ export function DurakMatchN({
               active={s.turn === seat && !s.result}
               progress={clockFor(seat)}
               vip={seats[seat]?.vip}
+              role={roleOf(seat)}
               labelTop
             />
             <CardFan count={s.hands[seat].length} />
           </div>
         ))}
       </div>
+
+      {/* whose-turn banner — clearly visible to all players on the field */}
+      {turnName && (
+        <div className="relative z-10 mt-1 flex justify-center">
+          <span className="flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-1 text-[12px] font-semibold text-white backdrop-blur">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#38d66b]" />
+            {t('durak.turnOf')}: {s.turn === me ? t('durak.youWord') : turnName}
+          </span>
+        </div>
+      )}
 
       {/* table (drop zone) */}
       <div data-table className="relative z-10 flex min-h-0 flex-1 flex-col">
@@ -370,6 +384,7 @@ export function DurakMatchN({
             active={myTurn}
             progress={clockFor(me)}
             photo={user.photoUrl}
+            role={roleOf(me)}
             you
             onLight
           />

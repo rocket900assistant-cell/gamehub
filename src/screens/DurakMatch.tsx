@@ -695,6 +695,7 @@ export function PlayerTile({
   onLight,
   vip,
   labelTop,
+  role,
 }: {
   name: string
   elo?: number
@@ -705,10 +706,19 @@ export function PlayerTile({
   onLight?: boolean
   vip?: boolean
   labelTop?: boolean
+  role?: 'attack' | 'defend' | 'take' | null
 }) {
   const initial = name.charAt(0).toUpperCase()
   const RW = 52
   const RR = 14
+  const roleChip =
+    role === 'attack'
+      ? { text: t('durak.role.attack'), bg: '#16a34a' }
+      : role === 'defend'
+        ? { text: t('durak.role.defend'), bg: '#2563eb' }
+        : role === 'take'
+          ? { text: t('durak.role.take'), bg: '#dc2626' }
+          : null
   const frac = progress == null ? 0 : Math.max(0, Math.min(1, progress))
   const low = progress != null && progress < 0.25
   const label = (
@@ -738,6 +748,10 @@ export function PlayerTile({
     <div className="flex flex-col items-center">
       {labelTop && label}
       <div className="relative h-[62px] w-[62px]">
+        {/* pulsing halo on the player whose turn it is now */}
+        {active && (
+          <span className="gh-turn-halo pointer-events-none absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-xl" />
+        )}
         {/* timer outline (follows the rounded-square avatar; pathLength=100 normalises the dash) */}
         {progress != null && (
           <svg className="absolute inset-0 -rotate-90" viewBox="0 0 62 62">
@@ -785,6 +799,15 @@ export function PlayerTile({
             initial
           )}
         </div>
+        {/* role badge — visible to everyone on the field */}
+        {roleChip && (
+          <span
+            className="absolute -bottom-1.5 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white shadow"
+            style={{ backgroundColor: roleChip.bg }}
+          >
+            {roleChip.text}
+          </span>
+        )}
       </div>
       {!labelTop && label}
     </div>
