@@ -475,6 +475,7 @@ export function ChessMatch({ user, match, myName, onMinimize, onExit }: ChessMat
 
       <PlayerBar
         name={oppName}
+        src={match.mode === 'online' ? match.opponent.photoUrl ?? undefined : undefined}
         elo={oppElo}
         clock={fmt(oppClock)}
         active={oppActive}

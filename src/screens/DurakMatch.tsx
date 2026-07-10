@@ -36,6 +36,7 @@ export interface OnlineDurak {
   opponentName: string
   opponentElo: number
   opponentVip?: boolean
+  opponentPhoto?: string | null
   myElo: number
   initial: DurakState // the viewer's own view (viewer is always 'you')
   deadline: number
@@ -402,6 +403,7 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
             active={s.turn === 'opp' && !s.result}
             progress={oppProgress}
             vip={isOnline ? online!.opponentVip : false}
+            photo={isOnline ? online!.opponentPhoto ?? undefined : undefined}
             labelTop
           />
           <CardFan count={s.hands.opp.length} />

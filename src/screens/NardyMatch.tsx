@@ -37,6 +37,7 @@ export interface OnlineNardy {
   opponentName: string
   opponentElo: number
   opponentVip?: boolean
+  opponentPhoto?: string | null
   myElo: number
   initial: NardyState
   deadline: number
@@ -444,6 +445,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
             off={s.off[other(myColor)]}
             elo={isOnline ? online!.opponentElo : undefined}
             vip={isOnline ? online!.opponentVip : false}
+            src={isOnline ? online!.opponentPhoto ?? undefined : undefined}
           />
           <div className="flex items-center gap-2">
             <DiceRow s={s} />
@@ -501,6 +503,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
             off={s.off[myColor]}
             elo={isOnline ? online!.myElo : undefined}
             vip={vipMe}
+            src={user.photoUrl}
           />
         </div>
 
@@ -654,6 +657,7 @@ function PlayerChip({
   off,
   elo,
   vip,
+  src,
 }: {
   name: string
   color: NPlayer
@@ -661,6 +665,7 @@ function PlayerChip({
   off: number
   elo?: number
   vip?: boolean
+  src?: string
 }) {
   return (
     <div
@@ -668,10 +673,19 @@ function PlayerChip({
         active ? 'bg-[#38d66b]/25 ring-1 ring-[#38d66b]' : 'bg-black/30'
       }`}
     >
-      <span
-        className="h-4 w-4 rounded-full ring-1 ring-black/30"
-        style={{ background: color === 'w' ? '#f2ead9' : '#26262a' }}
-      />
+      {src ? (
+        <img
+          src={src}
+          alt=""
+          className="h-6 w-6 shrink-0 rounded-full object-cover ring-1 ring-black/30"
+          style={{ boxShadow: `0 0 0 2px ${color === 'w' ? '#f2ead9' : '#26262a'}` }}
+        />
+      ) : (
+        <span
+          className="h-4 w-4 rounded-full ring-1 ring-black/30"
+          style={{ background: color === 'w' ? '#f2ead9' : '#26262a' }}
+        />
+      )}
       <span className="text-xs font-bold text-white">{name}</span>
       {vip && (
         <span className="rounded-full bg-gradient-to-b from-gold to-gold-dark px-1 text-[9px] font-bold text-white">

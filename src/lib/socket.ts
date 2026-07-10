@@ -111,6 +111,7 @@ export interface Opponent {
   name: string
   elo: number
   vip?: boolean
+  photoUrl?: string | null
 }
 
 export type MatchConfig =

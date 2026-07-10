@@ -434,7 +434,7 @@ function startRoom(room) {
         seat: durakSeat(room, p.userId),
         minutes: room.minutes,
         elo: p.elo,
-        opponent: { name: opp.name, elo: opp.elo, vip: opp.vip },
+        opponent: { name: opp.name, elo: opp.elo, vip: opp.vip, photoUrl: opp.photoUrl ?? null },
         durak: durak.viewFor(room.durak, durakSeat(room, p.userId)),
         deadline: room.deadline,
       })
@@ -445,7 +445,7 @@ function startRoom(room) {
         color: p.color,
         minutes: room.minutes,
         elo: p.elo,
-        opponent: { name: opp.name, elo: opp.elo, vip: opp.vip },
+        opponent: { name: opp.name, elo: opp.elo, vip: opp.vip, photoUrl: opp.photoUrl ?? null },
         nardy: room.nardy,
         deadline: room.deadline,
       })
@@ -454,7 +454,7 @@ function startRoom(room) {
         roomId: room.id,
         color: p.color,
         minutes: room.minutes,
-        opponent: { name: opp.name, elo: opp.elo, vip: opp.vip },
+        opponent: { name: opp.name, elo: opp.elo, vip: opp.vip, photoUrl: opp.photoUrl ?? null },
         fen: room.chess.fen(),
         clocks: room.clocks,
       })
@@ -612,7 +612,7 @@ io.on('connection', (socket) => {
           color: me.color,
           minutes: room.minutes,
           elo: me.elo,
-          opponent: { name: opp?.name, elo: opp?.elo, vip: opp?.vip },
+          opponent: { name: opp?.name, elo: opp?.elo, vip: opp?.vip, photoUrl: opp?.photoUrl ?? null },
           nardy: room.nardy,
           deadline: room.deadline,
         })
@@ -626,7 +626,7 @@ io.on('connection', (socket) => {
           seat,
           minutes: room.minutes,
           elo: me.elo,
-          opponent: { name: opp?.name, elo: opp?.elo, vip: opp?.vip },
+          opponent: { name: opp?.name, elo: opp?.elo, vip: opp?.vip, photoUrl: opp?.photoUrl ?? null },
           durak: durak.viewFor(room.durak, seat),
           deadline: room.deadline,
         })
@@ -639,7 +639,7 @@ io.on('connection', (socket) => {
           roomId: room.id,
           color: me.color,
           minutes: room.minutes,
-          opponent: { name: opp?.name, elo: opp?.elo, vip: opp?.vip },
+          opponent: { name: opp?.name, elo: opp?.elo, vip: opp?.vip, photoUrl: opp?.photoUrl ?? null },
           fen: room.chess.fen(),
           clocks: room.clocks,
         })

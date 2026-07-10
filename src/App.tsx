@@ -149,7 +149,7 @@ export default function App() {
       roomId: string
       color: 'w' | 'b'
       minutes: number
-      opponent: { name: string; elo: number; vip?: boolean }
+      opponent: { name: string; elo: number; vip?: boolean; photoUrl?: string | null }
       game?: string
       elo?: number
       fen?: string
@@ -182,6 +182,7 @@ export default function App() {
           opponentName: m.opponent?.name ?? t('common.opponent'),
           opponentElo: m.opponent?.elo ?? 1200,
           opponentVip: m.opponent?.vip,
+          opponentPhoto: m.opponent?.photoUrl,
           myElo: m.elo ?? 1200,
           initial: m.nardy,
           deadline: m.deadline ?? Date.now() + 120000,
@@ -194,6 +195,7 @@ export default function App() {
           opponentName: m.opponent?.name ?? t('common.opponent'),
           opponentElo: m.opponent?.elo ?? 1200,
           opponentVip: m.opponent?.vip,
+          opponentPhoto: m.opponent?.photoUrl,
           myElo: m.elo ?? 1200,
           initial: m.durak,
           deadline: m.deadline ?? Date.now() + 60000,
