@@ -223,7 +223,7 @@ export function playDefend(s, card, pairIndex) {
     n.turn = n.defender
   } else {
     n.passed = Array(n.n).fill(false)
-    n.turn = firstThrower(n)
+    n.turn = windowFirst(n)
     if (n.turn < 0) return finishBeaten(n)
   }
   return n
@@ -263,7 +263,7 @@ export function beginTake(s) {
   const n = clone(s)
   n.taking = true
   n.passed = Array(n.n).fill(false)
-  n.turn = firstThrower(n)
+  n.turn = windowFirst(n)
   if (n.turn < 0) return finishTake(n)
   return n
 }
@@ -296,6 +296,23 @@ function nextThrower(s, from) {
     if (!s.passed[seat] && legalThrow(s, seat).length > 0) return seat
   }
   return -1
+}
+
+/** A neighbour (not the main attacker) that could throw a card in right now. */
+function neighbourCanThrow(s) {
+  return throwers(s).some(
+    (seat) => seat !== s.attacker && !s.passed[seat] && legalThrow(s, seat).length > 0,
+  )
+}
+
+/**
+ * Who opens the throw-in window. The MAIN attacker always decides first — even
+ * with no card to add — so a neighbour can never подкинуть ahead of them.
+ */
+function windowFirst(s) {
+  const a = s.attacker
+  if (!s.out[a] && !s.passed[a] && legalThrow(s, a).length === 0 && neighbourCanThrow(s)) return a
+  return firstThrower(s)
 }
 
 function finishBeaten(s) {

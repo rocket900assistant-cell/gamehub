@@ -291,9 +291,9 @@ export function playDefend(s: DurakNState, card: Card, pairIndex?: number): Dura
   if (n.table.some((p) => !p.defend)) {
     n.turn = n.defender // more to beat
   } else {
-    // all defended → open the throw-in window (attacker first)
+    // all defended → open the throw-in window (main attacker decides first)
     n.passed = Array(n.n).fill(false)
-    n.turn = firstThrower(n)
+    n.turn = windowFirst(n)
     if (n.turn < 0) return finishBeaten(n) // no one can throw → бито
   }
   return n
@@ -340,7 +340,7 @@ export function beginTake(s: DurakNState): DurakNState {
   const n = clone(s)
   n.taking = true
   n.passed = Array(n.n).fill(false)
-  n.turn = firstThrower(n)
+  n.turn = windowFirst(n)
   if (n.turn < 0) return finishTake(n)
   return n
 }
@@ -377,6 +377,25 @@ function nextThrower(s: DurakNState, from: number): number {
     if (!s.passed[seat] && legalThrow(s, seat).length > 0) return seat
   }
   return -1
+}
+
+/** A neighbour (not the main attacker) that could throw a card in right now. */
+function neighbourCanThrow(s: DurakNState): boolean {
+  return throwers(s).some(
+    (seat) => seat !== s.attacker && !s.passed[seat] && legalThrow(s, seat).length > 0,
+  )
+}
+
+/**
+ * Who opens the throw-in window. The MAIN attacker always decides first — even
+ * with no card to add — so a neighbour can never подкинуть ahead of them: the
+ * attacker adds a card or passes («Бито») first, then the neighbours may throw.
+ * Falls back to the next eligible thrower (or -1 → бито) once the attacker is done.
+ */
+function windowFirst(s: DurakNState): number {
+  const a = s.attacker
+  if (!s.out[a] && !s.passed[a] && legalThrow(s, a).length === 0 && neighbourCanThrow(s)) return a
+  return firstThrower(s)
 }
 
 /** All attacks were beaten and no one throws in → discard, refill, next bout. */
