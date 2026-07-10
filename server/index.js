@@ -788,6 +788,24 @@ io.on('connection', (socket) => {
 
   socket.on('lobby:leave', () => leaveLobby(socketUser.get(socket.id)))
 
+  // Invite an ONLINE friend straight into this open lobby (by their telegram id).
+  socket.on('lobby:invite', ({ roomId, toTg }) => {
+    const fromId = socketUser.get(socket.id)
+    const room = rooms.get(roomId)
+    if (!room || room.game !== 'durakn' || room.started || room.over) return
+    if (!room.players.some((p) => p.userId === fromId)) return // must be in the lobby
+    const targetSid = tgSocket.get(Number(toTg))
+    if (!targetSid) return socket.emit('lobby:inviteResult', { toTg, ok: false })
+    const from = users.get(fromId)
+    io.to(targetSid).emit('invite:incoming', {
+      roomId,
+      from: { name: from?.name },
+      game: 'durak', // shown as Дурак (deck-based); joinRoom uses the room's real game
+      minutes: room.minutes || 36,
+    })
+    socket.emit('lobby:inviteResult', { toTg, ok: true })
+  })
+
   // Invite a friend (by their telegram id) into a private room for a game.
   socket.on('invite', ({ toTg, game, minutes, transfer }) => {
     const fromId = socketUser.get(socket.id)

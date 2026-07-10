@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, Swords } from 'lucide-react'
 import { BottomNav, type Tab } from './components/BottomNav'
 import { InviteBanner } from './components/InviteBanner'
@@ -13,7 +13,7 @@ import { ChessMatch, hasChessSave, readChessSave } from './screens/ChessMatch'
 import { DurakMatch, hasDurakSave, type OnlineDurak } from './screens/DurakMatch'
 import { DurakMatchN, type OnlineDurakN } from './screens/DurakMatchN'
 import { DurakSetup, type DurakConfig, type LobbyCfg } from './screens/DurakSetup'
-import { DurakLobby } from './screens/DurakLobby'
+import { DurakLobby, type LobbyState } from './screens/DurakLobby'
 import { NardyMatch, hasNardySave, type OnlineNardy } from './screens/NardyMatch'
 import { NardySetup, type NardyConfig } from './screens/NardySetup'
 import { Matchmaking } from './screens/Matchmaking'
@@ -65,9 +65,11 @@ interface PendingInvite {
 export default function App() {
   const [tab, setTab] = useState<Tab>('games')
   const [sub, setSub] = useState<SubScreen>(null)
+  const subRef = useRef<SubScreen>(null)
+  subRef.current = sub
   const [durakCfg, setDurakCfg] = useState<DurakConfig | null>(null)
   const [durakNCfg, setDurakNCfg] = useState<{ players: number; deck: number; neighborsOnly: boolean; transfer: boolean; allowDraw: boolean } | null>(null)
-  const [durakLobby, setDurakLobby] = useState<{ mode: 'browse' | 'create'; cfg: LobbyCfg } | null>(null)
+  const [durakLobby, setDurakLobby] = useState<{ mode: 'browse' | 'create' | 'joined'; cfg: LobbyCfg; initial?: LobbyState } | null>(null)
   const [nardyCfg, setNardyCfg] = useState<NardyConfig | null>(null)
   const [durakResume, setDurakResume] = useState(false)
   const [durakSaved, setDurakSaved] = useState(() => hasDurakSave())
@@ -221,7 +223,26 @@ export default function App() {
       setMatchmaking(null)
       setJoinError(t('invite.offline'))
     }
+    // A durakn lobby invite was accepted (or we joined one) while not on the
+    // lobby screen → open the waiting room seeded with this state.
+    const onLobbyState = (st: LobbyState) => {
+      if (subRef.current === 'durak-lobby') return // already in the lobby UI
+      setDurakLobby({
+        mode: 'joined',
+        cfg: {
+          players: st.capacity,
+          deck: st.deck,
+          transfer: st.transfer,
+          neighborsOnly: st.neighborsOnly,
+          allowDraw: st.allowDraw,
+        },
+        initial: st,
+      })
+      setMatchmaking(null)
+      setSub('durak-lobby')
+    }
     s.on('match:found', onFound)
+    s.on('lobby:state', onLobbyState)
     s.on('invite:incoming', onInvite)
     s.on('room:notfound', onNotFound)
     s.on('friends', onFriends)
@@ -244,6 +265,7 @@ export default function App() {
       s.off('connect', doRegister)
       s.off('profile', onProfile)
       s.off('match:found', onFound)
+      s.off('lobby:state', onLobbyState)
       s.off('invite:incoming', onInvite)
       s.off('room:notfound', onNotFound)
       s.off('friends', onFriends)
@@ -552,7 +574,13 @@ export default function App() {
                 }}
               />
             ) : sub === 'durak-lobby' && durakLobby ? (
-              <DurakLobby mode={durakLobby.mode} cfg={durakLobby.cfg} onBack={() => setSub('durak-setup')} />
+              <DurakLobby
+                mode={durakLobby.mode}
+                cfg={durakLobby.cfg}
+                friends={friends}
+                initial={durakLobby.initial}
+                onBack={() => setSub(durakLobby.mode === 'joined' ? null : 'durak-setup')}
+              />
             ) : sub === 'durak' ? (
               <DurakMatch
                 user={user}
