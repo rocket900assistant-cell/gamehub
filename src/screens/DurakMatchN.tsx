@@ -85,6 +85,7 @@ export function DurakMatchN({
   const [drag, setDrag] = useState<{ card: Card; x: number; y: number } | null>(null)
   const [selIdx, setSelIdx] = useState(-1)
   const [confirmResign, setConfirmResign] = useState(false)
+  const [eloDelta, setEloDelta] = useState<number | null>(null)
 
   // ── chat ──
   const [chatOpen, setChatOpen] = useState(false)
@@ -118,7 +119,8 @@ export function DurakMatchN({
       setDeadline(p.deadline)
       if (p.seats) setSeats(p.seats)
     }
-    const onOver = (g: { youWon: boolean | null; draw?: boolean }) => {
+    const onOver = (g: { youWon: boolean | null; draw?: boolean; eloDelta?: number }) => {
+      if (typeof g.eloDelta === 'number') setEloDelta(g.eloDelta)
       setS((cur) =>
         cur.result
           ? cur
@@ -553,22 +555,46 @@ export function DurakMatchN({
             <p className="text-2xl font-extrabold">
               {draw ? t('match.draw') : iLost ? t('match.youLost') : t('match.youWon')}
             </p>
-            <p className="mt-1 text-sm text-muted">
-              {isOnline ? t('match.onlineGame') : t('match.botUnrated')}
-            </p>
+            {isOnline && eloDelta != null && eloDelta !== 0 ? (
+              <p
+                className={`mt-1 text-sm font-extrabold ${eloDelta > 0 ? 'text-success' : 'text-danger'}`}
+              >
+                {eloDelta > 0 ? `+${eloDelta}` : eloDelta} Elo
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-muted">
+                {isOnline ? t('match.onlineGame') : t('match.botUnrated')}
+              </p>
+            )}
             <div className="mt-6 flex gap-2">
-              <Button variant="secondary" className="flex-1" onClick={onExit}>
-                {t('match.toMenu')}
-              </Button>
-              {!isOnline && (
+              {isOnline ? (
                 <Button
+                  variant="secondary"
                   className="flex-1"
-                  onClick={() => setS(createGameN({ players, deck, neighborsOnly, transfer, allowDraw }))}
+                  onClick={() => {
+                    getSocket().emit('lobby:leave', { roomId: online!.roomId })
+                    onExit()
+                  }}
                 >
-                  <RotateCcw size={16} /> {t('match.again')}
+                  {t('lobby.leave')}
                 </Button>
+              ) : (
+                <>
+                  <Button variant="secondary" className="flex-1" onClick={onExit}>
+                    {t('match.toMenu')}
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={() => setS(createGameN({ players, deck, neighborsOnly, transfer, allowDraw }))}
+                  >
+                    <RotateCcw size={16} /> {t('match.again')}
+                  </Button>
+                </>
               )}
             </div>
+            {isOnline && (
+              <p className="mt-3 text-xs text-muted">{t('durakN.backToLobby')}</p>
+            )}
           </div>
         </div>
       )}

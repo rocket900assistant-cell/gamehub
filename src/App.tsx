@@ -228,6 +228,7 @@ export default function App() {
     // A durakn lobby invite was accepted (or we joined one) while not on the
     // lobby screen → open the waiting room seeded with this state.
     const onLobbyState = (st: LobbyState) => {
+      setDurakNOnline(null) // a finished round reverted to the lobby → leave the table
       if (subRef.current === 'durak-lobby') return // already in the lobby UI
       setDurakLobby({
         mode: 'joined',

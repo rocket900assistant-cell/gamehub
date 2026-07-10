@@ -178,6 +178,27 @@ export async function getHistory(tgId, limit = 10) {
   return rows
 }
 
+/** Apply an Elo change to ONE player (+ win/loss counter, history). For N-player
+ *  games where a single loser faces several winners. Returns the new Elo. */
+export async function applyElo({ tgId, game, delta, won }) {
+  if (!pool || !tgId) return null
+  const col = ELO_COL[game] ?? 'elo_chess'
+  const wl = won ? 'wins = wins + 1' : 'losses = losses + 1'
+  try {
+    const { rows } = await pool.query(
+      `UPDATE users SET ${col} = GREATEST(100, ${col} + $2), games = games + 1, ${wl} WHERE tg_id = $1 RETURNING ${col} AS elo`,
+      [tgId, delta ?? 0],
+    )
+    if (rows[0]) {
+      await pool.query('INSERT INTO elo_history (tg_id, game, elo) VALUES ($1,$2,$3)', [tgId, game, rows[0].elo])
+      return rows[0].elo
+    }
+  } catch (e) {
+    console.error('[db] applyElo failed:', e.message)
+  }
+  return null
+}
+
 /** Apply an Elo change + win/loss counters and log the game. Best-effort. */
 export async function recordResult({ game, winner, loser, winnerDelta, loserDelta, reason, stake = 0 }) {
   if (!pool) return

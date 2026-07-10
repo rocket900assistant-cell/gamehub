@@ -232,6 +232,7 @@ const D: Record<string, Entry> = {
   'durakN.pass': { ru: 'Пас', en: 'Pass' },
   'durakN.bot': { ru: 'Бот', en: 'Bot' },
   'durakN.offline': { ru: 'нет сети…', en: 'reconnecting…' },
+  'durakN.backToLobby': { ru: 'Возврат в лобби…', en: 'Back to the lobby…' },
   'lobby.open': { ru: 'Открытые игры', en: 'Open games' },
   'lobby.create': { ru: 'Создать лобби', en: 'Create lobby' },
   'lobby.title': { ru: 'Открытые игры', en: 'Open games' },

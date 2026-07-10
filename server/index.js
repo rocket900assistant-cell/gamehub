@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend } from './db.js'
 import { verifyInitData } from './telegram.js'
 import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther } from './nardy.js'
 import * as durak from './durak.js'
@@ -343,11 +343,47 @@ function scheduleDurakNBot(room) {
 }
 
 function durakNFinish(room) {
-  if (room.over) return
-  room.over = true
+  if (room.over || room.finishing) return
+  room.finishing = true
   clearInterval(room.timer)
   clearTimeout(room.botTimer)
   const loser = room.durakN.result?.loser // seat | null
+
+  // ── rating: only rated when the дурак is a HUMAN and there's ≥1 human winner
+  //    (no bot-farming). Loser drops once; each winner gains vs the loser. ──
+  const humans = []
+  for (let seat = 0; seat < room.durakN.n; seat++) {
+    const uid = room.seatUser[seat]
+    if (uid) humans.push({ seat, uid, tgId: userTg.get(uid), elo: users.get(uid)?.elo ?? 1200 })
+  }
+  const deltas = {}
+  const winners = humans.filter((h) => h.seat !== loser)
+  const loserH = loser != null ? humans.find((h) => h.seat === loser) : null
+  if (loserH && winners.length > 0) {
+    let loss = 0
+    for (const w of winners) {
+      deltas[w.seat] = eloDelta(w.elo, loserH.elo, true)
+      loss += eloDelta(loserH.elo, w.elo, false)
+    }
+    deltas[loser] = Math.round(loss / winners.length)
+    if (dbEnabled) {
+      ;(async () => {
+        for (const w of winners) if (w.tgId) await applyElo({ tgId: w.tgId, game: 'durak', delta: deltas[w.seat], won: true })
+        if (loserH.tgId) await applyElo({ tgId: loserH.tgId, game: 'durak', delta: deltas[loser], won: false })
+        for (const h of humans) {
+          const sid = sidOf(h.uid)
+          if (!h.tgId || !sid) continue
+          try {
+            const row = await getUser(h.tgId)
+            if (row) io.to(sid).emit('profile', dbProfile(row))
+          } catch {
+            /* ignore */
+          }
+        }
+      })()
+    }
+  }
+
   for (let seat = 0; seat < room.durakN.n; seat++) {
     const uid = room.seatUser[seat]
     const sid = uid && sidOf(uid)
@@ -356,7 +392,35 @@ function durakNFinish(room) {
         youWon: loser == null ? null : loser !== seat,
         draw: loser == null,
         reason: 'durak',
+        eloDelta: deltas[seat] ?? 0,
       })
+  }
+
+  // ── persistent table: keep connected players together in the lobby so they can
+  //    play another round without recreating anything. ──
+  room.finishing = false
+  const cfg = {
+    players: room.seats,
+    deck: room.minutes || 36,
+    neighborsOnly: room.durakN.neighborsOnly,
+    transfer: room.durakN.transfer,
+    allowDraw: room.durakN.allowDraw,
+  }
+  const survivors = room.players.filter((p) => sidOf(p.userId)) // still connected
+  if (survivors.length > 0) {
+    room.players = survivors
+    room.started = false
+    room.seatUser = []
+    room.durakN = durakN.createGameN(cfg)
+    room.deadline = 0
+    setTimeout(() => {
+      if (rooms.get(room.id) === room && !room.started && !room.over) {
+        emitLobbyState(room)
+        broadcastLobbies()
+      }
+    }, 2500) // brief pause so players see the result, then back to the lobby
+  } else {
+    room.over = true
   }
 }
 
