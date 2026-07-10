@@ -30,6 +30,7 @@ export interface DurakNState {
   out: boolean[] // players who finished (escaped: safe, no more cards)
   discard: number
   neighborsOnly: boolean // "Соседи" mode: only the defender's neighbours may throw in
+  transfer: boolean // "Переводной" mode enabled
   result: { loser: number | null } | null // loser seat, or null = draw
 }
 
@@ -37,6 +38,7 @@ export interface GameNOptions {
   players?: number // 2..6
   deck?: number // 24 | 36 | 52
   neighborsOnly?: boolean // "Соседи": only the defender's two neighbours may throw in
+  transfer?: boolean // "Переводной": defender may bounce the attack to the next player
 }
 
 const SUITS: Suit[] = ['♠', '♥', '♦', '♣']
@@ -111,6 +113,7 @@ export function createGameN(opts: GameNOptions = {}): DurakNState {
     out,
     discard: 0,
     neighborsOnly: !!opts.neighborsOnly,
+    transfer: !!opts.transfer,
     result: null,
   }
 }
@@ -291,6 +294,41 @@ export function playDefend(s: DurakNState, card: Card, pairIndex?: number): Dura
   return n
 }
 
+// ── Переводной (transfer) ───────────────────────────────────────────
+/** Can the defender bounce the (all same-rank, undefended) attack to the next player? */
+export function canTransfer(s: DurakNState): boolean {
+  if (!s.transfer || s.result || s.taking) return false
+  if (s.turn !== s.defender) return false
+  if (s.table.length === 0 || s.table.some((p) => p.defend)) return false
+  const rank = s.table[0].attack.rank
+  if (!s.table.every((p) => p.attack.rank === rank)) return false
+  const target = nextIn(s.out, s.defender)
+  if (target === s.defender) return false
+  // the new defender must be able to receive/beat all of them
+  if (s.table.length + 1 > s.hands[target].length) return false
+  return s.hands[s.defender].some((c) => c.rank === rank)
+}
+
+export function legalTransfers(s: DurakNState): Card[] {
+  if (!canTransfer(s)) return []
+  const rank = s.table[0].attack.rank
+  return s.hands[s.defender].filter((c) => c.rank === rank)
+}
+
+/** Defender adds a same-rank card and passes the bout to the next player. */
+export function playTransfer(s: DurakNState, card: Card): DurakNState {
+  if (!legalTransfers(s).some((c) => cardId(c) === cardId(card))) return s
+  const n = clone(s)
+  const oldDef = n.defender
+  n.hands[oldDef] = removeCard(n.hands[oldDef], card)
+  n.table.push({ attack: card, by: oldDef })
+  n.attacker = oldDef // old defender becomes the attacker
+  n.defender = nextIn(n.out, oldDef) // the next player must now defend
+  n.passed = Array(n.n).fill(false)
+  n.turn = n.defender
+  return n
+}
+
 /** Defender takes: open a throw-in window so others may подкинуть first. */
 export function beginTake(s: DurakNState): DurakNState {
   if (!canTake(s)) return s
@@ -384,6 +422,10 @@ export function botStep(s: DurakNState, seat: number): DurakNState {
   if (s.result || s.turn !== seat) return s
   // Defender's turn
   if (seat === s.defender && !s.taking) {
+    if (canTransfer(s)) {
+      const tr = legalTransfers(s).filter((c) => c.suit !== s.trump) // cheap non-trump only
+      if (tr.length) return playTransfer(s, cheapest(tr, s.trump))
+    }
     const { cards, pair } = legalDefends(s)
     if (cards.length) return playDefend(s, cheapest(cards, s.trump), pair)
     return beginTake(s)

@@ -12,6 +12,8 @@ import {
   botStep,
   playAttack,
   playDefend,
+  playTransfer,
+  canTransfer,
   beginTake,
   pass as enginePass,
   canTake,
@@ -24,6 +26,7 @@ interface DurakMatchNProps {
   players: number
   deck: number
   neighborsOnly: boolean
+  transfer: boolean
   myName?: string
   onExit: () => void
 }
@@ -36,12 +39,12 @@ const FELT_BASE: React.CSSProperties = {
 
 const ME = 0
 
-export function DurakMatchN({ user, players, deck, neighborsOnly, myName, onExit }: DurakMatchNProps) {
+export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, myName, onExit }: DurakMatchNProps) {
   const felt = useMemo(
     () => ({ ...FELT_BASE, backgroundImage: `url('${equippedDurakFeltSrc()}')` }),
     [],
   )
-  const [s, setS] = useState<DurakNState>(() => createGameN({ players, deck, neighborsOnly }))
+  const [s, setS] = useState<DurakNState>(() => createGameN({ players, deck, neighborsOnly, transfer }))
   const [drag, setDrag] = useState<{ card: Card; x: number; y: number } | null>(null)
   const [selIdx, setSelIdx] = useState(-1)
 
@@ -74,8 +77,17 @@ export function DurakMatchN({ user, players, deck, neighborsOnly, myName, onExit
     }
     const el = document.elementFromPoint(x, y)
     const pairEl = el?.closest<HTMLElement>('[data-pair]')
-    const pair = pairEl ? Number(pairEl.dataset.pair) : s.table.findIndex((p) => !p.defend)
-    apply(playDefend(s, card, pair))
+    if (pairEl) {
+      apply(playDefend(s, card, Number(pairEl.dataset.pair))) // dropped on a pair → beat it
+      return
+    }
+    // dropped on the open table: transfer (переводной) if legal, else beat the first pair
+    const tr = playTransfer(s, card)
+    if (tr !== s) {
+      apply(tr)
+      return
+    }
+    apply(playDefend(s, card, s.table.findIndex((p) => !p.defend)))
   }
 
   const handIdxAt = (x: number, y: number) => {
@@ -125,7 +137,9 @@ export function DurakMatchN({ user, players, deck, neighborsOnly, myName, onExit
     : !myTurn
       ? t('durak.oppTurn')
       : defendingNow
-        ? t('durak.defendOrTake')
+        ? canTransfer(s)
+          ? t('durak.defendTransferTake')
+          : t('durak.defendOrTake')
         : s.table.length === 0
           ? t('durak.attack')
           : t('durak.throwOrBeat')
@@ -300,7 +314,7 @@ export function DurakMatchN({ user, players, deck, neighborsOnly, myName, onExit
               <Button variant="secondary" className="flex-1" onClick={onExit}>
                 {t('match.toMenu')}
               </Button>
-              <Button className="flex-1" onClick={() => setS(createGameN({ players, deck, neighborsOnly }))}>
+              <Button className="flex-1" onClick={() => setS(createGameN({ players, deck, neighborsOnly, transfer }))}>
                 <RotateCcw size={16} /> {t('match.again')}
               </Button>
             </div>
