@@ -685,7 +685,7 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
 }
 
 /** Square avatar tile with name label, card-count badge, turn glow + timer ring. */
-function PlayerTile({
+export function PlayerTile({
   name,
   elo,
   active,
@@ -815,7 +815,7 @@ function fanStep(count: number, cardW: number, width: number, loose: number) {
 }
 
 /** Wide, shallow face-down fan for the opponent (spread out like a held hand). */
-function CardFan({ count }: { count: number }) {
+export function CardFan({ count }: { count: number }) {
   const [ref, w] = useWidth()
   if (count === 0) return <div ref={ref} className="h-10" />
   const cardW = 40
@@ -844,7 +844,7 @@ function CardFan({ count }: { count: number }) {
 }
 
 /** Your hand — arced, overlapping. Slide to browse (card lifts), pull up to play. */
-function HandFan({
+export function HandFan({
   cards,
   selIdx,
   carrying,
