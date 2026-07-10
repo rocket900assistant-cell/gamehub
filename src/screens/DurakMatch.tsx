@@ -706,7 +706,7 @@ export function PlayerTile({
   onLight?: boolean
   vip?: boolean
   labelTop?: boolean
-  role?: 'attack' | 'defend' | 'take' | null
+  role?: 'attack' | 'take' | null
 }) {
   const initial = name.charAt(0).toUpperCase()
   const RW = 52
@@ -714,11 +714,9 @@ export function PlayerTile({
   const roleChip =
     role === 'attack'
       ? { text: t('durak.role.attack'), bg: '#16a34a' }
-      : role === 'defend'
-        ? { text: t('durak.role.defend'), bg: '#2563eb' }
-        : role === 'take'
-          ? { text: t('durak.role.take'), bg: '#dc2626' }
-          : null
+      : role === 'take'
+        ? { text: t('durak.role.take'), bg: '#dc2626' }
+        : null
   const frac = progress == null ? 0 : Math.max(0, Math.min(1, progress))
   const low = progress != null && progress < 0.25
   const label = (

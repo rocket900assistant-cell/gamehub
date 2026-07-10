@@ -29,7 +29,7 @@ export interface LobbyState {
   transfer: boolean
   neighborsOnly: boolean
   allowDraw: boolean
-  seats: { name: string; vip: boolean }[]
+  seats: { name: string; vip: boolean; photoUrl?: string | null }[]
 }
 
 interface DurakLobbyProps {
@@ -169,8 +169,12 @@ export function DurakLobby({ mode, cfg, friends, initial, onBack }: DurakLobbyPr
           <div className="space-y-2">
             {current.seats.map((p, i) => (
               <div key={i} className="flex items-center gap-3 rounded-xl bg-black/5 px-3 py-2">
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-b from-gold to-gold-dark text-sm font-extrabold text-white">
-                  {p.name.charAt(0).toUpperCase()}
+                <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-b from-gold to-gold-dark text-sm font-extrabold text-white">
+                  {p.photoUrl ? (
+                    <img src={p.photoUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    p.name.charAt(0).toUpperCase()
+                  )}
                 </span>
                 <span className="flex-1 truncate font-bold">{p.name}</span>
                 {i === 0 && (

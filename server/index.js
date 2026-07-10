@@ -110,6 +110,7 @@ function addPlayer(room, userId) {
     name: u?.name ?? 'Игрок',
     elo: u?.elos?.[room.game] ?? u?.elo ?? 1200,
     vip: !!u?.vip,
+    photoUrl: u?.photoUrl ?? null,
     color: room.players.length === 0 ? 'w' : 'b',
   })
 }
@@ -207,7 +208,7 @@ function emitLobbyState(room) {
       transfer: !!room.durakN.transfer,
       neighborsOnly: !!room.durakN.neighborsOnly,
       allowDraw: !!room.durakN.allowDraw,
-      seats: room.players.map((x) => ({ name: x.name, vip: x.vip })),
+      seats: room.players.map((x) => ({ name: x.name, vip: x.vip, photoUrl: x.photoUrl ?? null })),
     })
   }
 }
@@ -286,9 +287,9 @@ const seatOf = (room, userId) => room.seatUser.indexOf(userId)
 /** Names/vip/bot per seat, for the client to render opponents. */
 function durakNSeatInfo(room) {
   return room.seatUser.map((uid) => {
-    if (!uid) return { name: 'Бот', vip: false, bot: true }
+    if (!uid) return { name: 'Бот', vip: false, bot: true, photoUrl: null }
     const u = users.get(uid)
-    return { name: u?.name ?? 'Игрок', vip: !!u?.vip, bot: false }
+    return { name: u?.name ?? 'Игрок', vip: !!u?.vip, bot: false, photoUrl: u?.photoUrl ?? null }
   })
 }
 
@@ -552,7 +553,7 @@ function endGame(room, winnerColor, reason) {
 io.on('connection', (socket) => {
   socket.on('register', async ({ userId, name, elo, initData, username, photoUrl, vip }) => {
     socketUser.set(socket.id, userId)
-    users.set(userId, { ...users.get(userId), socketId: socket.id, name, elo, vip: !!vip })
+    users.set(userId, { ...users.get(userId), socketId: socket.id, name, elo, vip: !!vip, photoUrl })
 
     // Resolve a trusted telegram id: verify initData if we have a bot token,
     // otherwise fall back to the id embedded in the composite userId.

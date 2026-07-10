@@ -28,6 +28,7 @@ export interface SeatInfo {
   name: string
   vip: boolean
   bot: boolean
+  photoUrl?: string | null
 }
 
 export interface OnlineDurakN {
@@ -279,8 +280,8 @@ export function DurakMatchN({
   // opponents in play order after me (wraps for online seat > 0)
   const opponents = Array.from({ length: s.n - 1 }, (_, i) => (me + 1 + i) % s.n)
   const oppName = (seat: number) => seats[seat]?.name ?? `${t('durakN.bot')} ${seat}`
-  const roleOf = (seat: number): 'attack' | 'defend' | 'take' | null =>
-    s.result ? null : seat === s.defender ? (s.taking ? 'take' : 'defend') : seat === s.attacker ? 'attack' : null
+  const roleOf = (seat: number): 'attack' | 'take' | null =>
+    s.result ? null : seat === s.defender ? (s.taking ? 'take' : null) : seat === s.attacker ? 'attack' : null
   const turnName = s.result ? null : s.turn === me ? myName ?? displayName(user) : oppName(s.turn)
 
   const draw = s.result != null && s.result.loser === null
@@ -330,6 +331,7 @@ export function DurakMatchN({
               active={s.turn === seat && !s.result}
               progress={clockFor(seat)}
               vip={seats[seat]?.vip}
+              photo={seats[seat]?.photoUrl ?? undefined}
               role={roleOf(seat)}
               labelTop
             />
