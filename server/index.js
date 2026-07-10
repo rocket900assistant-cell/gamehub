@@ -20,7 +20,7 @@ const nQueues = new Map() // durakn config key -> { ids: [], timer } (fills with
 const DURAKN_FILL_MS = 6000 // wait this long for humans, then fill remaining seats with bots
 const rooms = new Map() // roomId -> room
 const abandonTimers = new Map() // "userId:roomId" -> timeout (reconnect grace)
-const RECONNECT_GRACE_MS = 30000
+const RECONNECT_GRACE_MS = 120000 // 2 min to reconnect before a started game abandons you
 
 // persistent DB (Neon Postgres) — optional; no-ops if DATABASE_URL is unset
 initDb().catch((e) => console.error('[db] init failed:', e.message))
@@ -287,9 +287,15 @@ const seatOf = (room, userId) => room.seatUser.indexOf(userId)
 /** Names/vip/bot per seat, for the client to render opponents. */
 function durakNSeatInfo(room) {
   return room.seatUser.map((uid) => {
-    if (!uid) return { name: 'Бот', vip: false, bot: true, photoUrl: null }
+    if (!uid) return { name: 'Бот', vip: false, bot: true, photoUrl: null, offline: false }
     const u = users.get(uid)
-    return { name: u?.name ?? 'Игрок', vip: !!u?.vip, bot: false, photoUrl: u?.photoUrl ?? null }
+    return {
+      name: u?.name ?? 'Игрок',
+      vip: !!u?.vip,
+      bot: false,
+      photoUrl: u?.photoUrl ?? null,
+      offline: !u?.socketId, // dropped connection (paused, within reconnect grace)
+    }
   })
 }
 
@@ -481,11 +487,14 @@ function tick(room) {
   if (room.game === 'durakn') {
     if (room.deadline && Date.now() >= room.deadline && !room.durakN.result) {
       const turn = room.durakN.turn
-      if (room.seatUser[turn]) {
-        room.durakN = durakN.resign(room.durakN, turn) // human timed out → out
-        durakNAfter(room)
+      const uid = room.seatUser[turn]
+      if (!uid || !sidOf(uid)) {
+        // bot's turn, or the player to move is offline → pause the clock (they keep
+        // the reconnect grace to return; the abandon timer resigns them if they don't)
+        room.deadline = Date.now() + room.moveMs
       } else {
-        room.deadline = Date.now() + room.moveMs // bot's turn — bot loop handles it
+        room.durakN = durakN.resign(room.durakN, turn) // present but timed out → out
+        durakNAfter(room)
       }
     }
     return
@@ -590,6 +599,9 @@ io.on('connection', (socket) => {
       if (room.game === 'durakn') {
         const seat = room.seatUser.indexOf(userId)
         if (seat < 0) continue
+        // returning on your own turn → give a fresh move clock
+        if (room.durakN.turn === seat && !room.durakN.result)
+          room.deadline = Date.now() + room.moveMs
         const info = durakNSeatInfo(room)
         socket.emit('match:found', {
           roomId: room.id,
@@ -600,11 +612,7 @@ io.on('connection', (socket) => {
           deadline: room.deadline,
           seats: info,
         })
-        socket.emit('durakn:state', {
-          durakn: durakN.viewForN(room.durakN, seat),
-          deadline: room.deadline,
-          seats: info,
-        })
+        durakNBroadcast(room) // resync everyone (fresh clock + presence)
       } else if (room.game === 'nardy') {
         socket.emit('match:found', {
           roomId: room.id,
@@ -1117,6 +1125,8 @@ io.on('connection', (socket) => {
     for (const room of rooms.values()) {
       if (room.over || !room.started) continue
       if (!room.players.some((p) => p.userId === userId)) continue
+      // let the others see this player as offline (their clock is now paused)
+      if (room.game === 'durakn') durakNBroadcast(room)
       const key = `${userId}:${room.id}`
       if (abandonTimers.has(key)) continue
       const t = setTimeout(() => {

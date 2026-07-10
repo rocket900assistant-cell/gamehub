@@ -29,6 +29,7 @@ export interface SeatInfo {
   vip: boolean
   bot: boolean
   photoUrl?: string | null
+  offline?: boolean
 }
 
 export interface OnlineDurakN {
@@ -326,16 +327,24 @@ export function DurakMatchN({
       <div className="relative z-10 mt-1 flex items-start justify-around px-1">
         {opponents.map((seat) => (
           <div key={seat} className="flex w-[86px] flex-col items-center">
-            <PlayerTile
-              name={oppName(seat)}
-              active={s.turn === seat && !s.result}
-              progress={clockFor(seat)}
-              vip={seats[seat]?.vip}
-              photo={seats[seat]?.photoUrl ?? undefined}
-              role={roleOf(seat)}
-              labelTop
-            />
-            <CardFan count={s.hands[seat].length} />
+            <div className={`relative ${seats[seat]?.offline ? 'opacity-45 grayscale' : ''}`}>
+              <PlayerTile
+                name={oppName(seat)}
+                active={s.turn === seat && !s.result}
+                progress={clockFor(seat)}
+                vip={seats[seat]?.vip}
+                photo={seats[seat]?.photoUrl ?? undefined}
+                role={roleOf(seat)}
+                labelTop
+              />
+            </div>
+            {seats[seat]?.offline ? (
+              <span className="mt-0.5 rounded-full bg-black/40 px-1.5 py-0.5 text-[9px] font-bold text-white/90 backdrop-blur">
+                {t('durakN.offline')}
+              </span>
+            ) : (
+              <CardFan count={s.hands[seat].length} />
+            )}
           </div>
         ))}
       </div>
