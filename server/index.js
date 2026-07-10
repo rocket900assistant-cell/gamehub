@@ -342,62 +342,8 @@ function scheduleDurakNBot(room) {
   }, 700)
 }
 
-function durakNFinish(room) {
-  if (room.over || room.finishing) return
-  room.finishing = true
-  clearInterval(room.timer)
-  clearTimeout(room.botTimer)
-  const loser = room.durakN.result?.loser // seat | null
-
-  // ── rating: only rated when the дурак is a HUMAN and there's ≥1 human winner
-  //    (no bot-farming). Loser drops once; each winner gains vs the loser. ──
-  const humans = []
-  for (let seat = 0; seat < room.durakN.n; seat++) {
-    const uid = room.seatUser[seat]
-    if (uid) humans.push({ seat, uid, tgId: userTg.get(uid), elo: users.get(uid)?.elo ?? 1200 })
-  }
-  const deltas = {}
-  const winners = humans.filter((h) => h.seat !== loser)
-  const loserH = loser != null ? humans.find((h) => h.seat === loser) : null
-  if (loserH && winners.length > 0) {
-    let loss = 0
-    for (const w of winners) {
-      deltas[w.seat] = eloDelta(w.elo, loserH.elo, true)
-      loss += eloDelta(loserH.elo, w.elo, false)
-    }
-    deltas[loser] = Math.round(loss / winners.length)
-    if (dbEnabled) {
-      ;(async () => {
-        for (const w of winners) if (w.tgId) await applyElo({ tgId: w.tgId, game: 'durak', delta: deltas[w.seat], won: true })
-        if (loserH.tgId) await applyElo({ tgId: loserH.tgId, game: 'durak', delta: deltas[loser], won: false })
-        for (const h of humans) {
-          const sid = sidOf(h.uid)
-          if (!h.tgId || !sid) continue
-          try {
-            const row = await getUser(h.tgId)
-            if (row) io.to(sid).emit('profile', dbProfile(row))
-          } catch {
-            /* ignore */
-          }
-        }
-      })()
-    }
-  }
-
-  for (let seat = 0; seat < room.durakN.n; seat++) {
-    const uid = room.seatUser[seat]
-    const sid = uid && sidOf(uid)
-    if (sid)
-      io.to(sid).emit('game:over', {
-        youWon: loser == null ? null : loser !== seat,
-        draw: loser == null,
-        reason: 'durak',
-        eloDelta: deltas[seat] ?? 0,
-      })
-  }
-
-  // ── persistent table: keep connected players together in the lobby so they can
-  //    play another round without recreating anything. ──
+/** After a round: reset the room to an open lobby so the same players can replay. */
+function revertDurakNRoom(room) {
   room.finishing = false
   const cfg = {
     players: room.seats,
@@ -422,6 +368,102 @@ function durakNFinish(room) {
   } else {
     room.over = true
   }
+}
+
+function durakNFinish(room) {
+  if (room.over || room.finishing) return
+  room.finishing = true
+  clearInterval(room.timer)
+  clearTimeout(room.botTimer)
+  const loser = room.durakN.result?.loser // seat | null
+  const n = room.durakN.n
+  const seatUser = [...room.seatUser]
+
+  const finalize = (deltas) => {
+    for (let seat = 0; seat < n; seat++) {
+      const uid = seatUser[seat]
+      const sid = uid && sidOf(uid)
+      if (sid)
+        io.to(sid).emit('game:over', {
+          youWon: loser == null ? null : loser !== seat,
+          draw: loser == null,
+          reason: 'durak',
+          eloDelta: deltas[seat] ?? 0,
+        })
+    }
+    revertDurakNRoom(room)
+  }
+
+  // ── rating: only when the дурак is a HUMAN with ≥1 human winner (no bot-farming).
+  //    Loser drops once; each winner gains vs the loser — using their real durak Elo. ──
+  const humans = []
+  for (let seat = 0; seat < n; seat++) {
+    const uid = seatUser[seat]
+    if (uid) humans.push({ seat, uid, tgId: userTg.get(uid) })
+  }
+  const winners = humans.filter((h) => h.seat !== loser)
+  const loserH = loser != null ? humans.find((h) => h.seat === loser) : null
+
+  if (!loserH || winners.length === 0) {
+    finalize({}) // draw, or a bot is the дурак → unrated
+    return
+  }
+
+  const calcDeltas = (eloOf) => {
+    const deltas = {}
+    let loss = 0
+    for (const w of winners) {
+      deltas[w.seat] = eloDelta(eloOf[w.seat], eloOf[loserH.seat], true)
+      loss += eloDelta(eloOf[loserH.seat], eloOf[w.seat], false)
+    }
+    deltas[loserH.seat] = Math.round(loss / winners.length)
+    return deltas
+  }
+
+  if (!dbEnabled) {
+    const eloOf = {}
+    for (const h of humans) eloOf[h.seat] = users.get(h.uid)?.elo ?? 1200
+    finalize(calcDeltas(eloOf))
+    return
+  }
+
+  // load each human's real durak Elo from the DB, then rate + persist + emit
+  ;(async () => {
+    let deltas = {}
+    try {
+      const eloOf = {}
+      await Promise.all(
+        humans.map(async (h) => {
+          let e = users.get(h.uid)?.elo ?? 1200
+          if (h.tgId) {
+            try {
+              const row = await getUser(h.tgId)
+              if (row && typeof row.elo_durak === 'number') e = row.elo_durak
+            } catch {
+              /* keep fallback */
+            }
+          }
+          eloOf[h.seat] = e
+        }),
+      )
+      deltas = calcDeltas(eloOf)
+      for (const w of winners) if (w.tgId) await applyElo({ tgId: w.tgId, game: 'durak', delta: deltas[w.seat], won: true })
+      if (loserH.tgId) await applyElo({ tgId: loserH.tgId, game: 'durak', delta: deltas[loserH.seat], won: false })
+    } catch (e) {
+      console.error('[durakN] rating failed:', e.message)
+    }
+    finalize(deltas) // always emit game:over + revert the room
+    for (const h of humans) {
+      const sid = sidOf(h.uid)
+      if (!h.tgId || !sid) continue
+      try {
+        const row = await getUser(h.tgId)
+        if (row) io.to(sid).emit('profile', dbProfile(row))
+      } catch {
+        /* ignore */
+      }
+    }
+  })()
 }
 
 // ── Durak (online) helpers ──
