@@ -176,7 +176,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 interface DurakSetupProps {
   onBack: () => void
   onCreate: (cfg: DurakConfig) => void
-  onQuickMatch: (deck: number, transfer: boolean) => void
+  onQuickMatch: (deck: number, transfer: boolean, players: number, throwAll: boolean, draw: boolean) => void
   onInvite: (deck: number, transfer: boolean) => void
 }
 
@@ -327,7 +327,7 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite }: DurakSe
       </button>
 
       <div className="space-y-3">
-        <Button size="lg" className="w-full" onClick={() => onQuickMatch(deck, transfer)}>
+        <Button size="lg" className="w-full" onClick={() => onQuickMatch(deck, transfer, players, throwAll, draw)}>
           <Swords size={18} /> {t('setup.quickOnline')}
         </Button>
         <Button

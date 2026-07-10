@@ -5,6 +5,7 @@ import { initDb, upsertUser, getUser, recordResult, dbEnabled, addFriendship, re
 import { verifyInitData } from './telegram.js'
 import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther } from './nardy.js'
 import * as durak from './durak.js'
+import * as durakN from './durakN.js'
 
 const PORT = process.env.PORT || 3001
 
@@ -15,6 +16,8 @@ const userTg = new Map() // composite userId -> verified telegram id (for DB)
 const tgSocket = new Map() // telegram id -> socketId (presence: online friends)
 const tgInfo = new Map() // telegram id -> { name, username, photoUrl, elos } (last seen)
 const queues = new Map() // "game:minutes" -> [userId]
+const nQueues = new Map() // durakn config key -> { ids: [], timer } (fills with bots on timeout)
+const DURAKN_FILL_MS = 6000 // wait this long for humans, then fill remaining seats with bots
 const rooms = new Map() // roomId -> room
 const abandonTimers = new Map() // "userId:roomId" -> timeout (reconnect grace)
 const RECONNECT_GRACE_MS = 30000
@@ -74,6 +77,19 @@ function createRoom(game, minutes, opts = {}) {
     room.durak = durak.createGame({ deck: minutes || 36, transfer: !!opts.transfer })
     room.moveMs = 60000 // per-action clock
     room.deadline = 0
+  } else if (game === 'durakn') {
+    // N-player durak vs a mix of humans + bots. minutes reused as deck size.
+    room.seats = Math.max(2, Math.min(6, opts.players ?? 3))
+    room.durakN = durakN.createGameN({
+      players: room.seats,
+      deck: minutes || 36,
+      neighborsOnly: !!opts.neighborsOnly,
+      transfer: !!opts.transfer,
+      allowDraw: opts.allowDraw ?? true,
+    })
+    room.moveMs = 60000
+    room.deadline = 0
+    room.seatUser = [] // filled at startRoom (seat -> userId | null[bot])
   } else {
     room.chess = new Chess()
     room.clocks = { w: minutes * 60000, b: minutes * 60000 }
@@ -85,7 +101,8 @@ function createRoom(game, minutes, opts = {}) {
 
 function addPlayer(room, userId) {
   if (room.players.some((p) => p.userId === userId)) return
-  if (room.players.length >= 2) return
+  const max = room.game === 'durakn' ? room.seats : 2
+  if (room.players.length >= max) return
   const u = users.get(userId)
   room.players.push({
     userId,
@@ -98,6 +115,52 @@ function addPlayer(room, userId) {
 }
 
 const sidOf = (userId) => users.get(userId)?.socketId
+
+// ── Durak N-players matchmaking (humans + bot fill) ──
+const nKey = (o) =>
+  `durakn:${o.players}:${o.deck}:${o.transfer ? 't' : 'c'}:${o.neighborsOnly ? 'n' : 'a'}:${o.allowDraw ? 'd' : 'k'}`
+
+function startDurakNRoom(ids, opts) {
+  const room = rooms.get(createRoom('durakn', opts.deck, opts))
+  for (const id of ids.slice(0, opts.players)) addPlayer(room, id)
+  startRoom(room) // remaining seats are bots
+}
+
+function quickMatchDurakN(userId, socket, opts) {
+  const key = nKey(opts)
+  let q = nQueues.get(key)
+  if (!q) {
+    q = { ids: [], timer: null }
+    nQueues.set(key, q)
+  }
+  if (q.ids.includes(userId)) return
+  q.ids.push(userId)
+  socket.emit('queue:waiting')
+  if (q.ids.length >= opts.players) {
+    clearTimeout(q.timer)
+    const ids = q.ids.splice(0, opts.players)
+    if (q.ids.length === 0) nQueues.delete(key)
+    startDurakNRoom(ids, opts)
+    return
+  }
+  if (!q.timer) {
+    q.timer = setTimeout(() => {
+      const ids = q.ids.slice()
+      nQueues.delete(key)
+      if (ids.length > 0) startDurakNRoom(ids, opts) // fill the rest with bots
+    }, DURAKN_FILL_MS)
+  }
+}
+
+function leaveNQueues(userId) {
+  for (const [k, q] of nQueues) {
+    q.ids = q.ids.filter((id) => id !== userId)
+    if (q.ids.length === 0) {
+      clearTimeout(q.timer)
+      nQueues.delete(k)
+    }
+  }
+}
 
 // ── friends (mutual, by telegram id) ──────────────
 /** Build the friend list for a player: profile + live online flag. */
@@ -141,6 +204,79 @@ function emitToRoom(room, event, payload) {
   }
 }
 
+// ── Durak N-players (online) helpers ──
+const seatOf = (room, userId) => room.seatUser.indexOf(userId)
+
+/** Names/vip/bot per seat, for the client to render opponents. */
+function durakNSeatInfo(room) {
+  return room.seatUser.map((uid) => {
+    if (!uid) return { name: 'Бот', vip: false, bot: true }
+    const u = users.get(uid)
+    return { name: u?.name ?? 'Игрок', vip: !!u?.vip, bot: false }
+  })
+}
+
+function durakNBroadcast(room) {
+  const info = durakNSeatInfo(room)
+  for (let seat = 0; seat < room.durakN.n; seat++) {
+    const uid = room.seatUser[seat]
+    const sid = uid && sidOf(uid)
+    if (sid)
+      io.to(sid).emit('durakn:state', {
+        durakn: durakN.viewForN(room.durakN, seat),
+        deadline: room.deadline,
+        seats: info,
+      })
+  }
+}
+
+/** After any durakN state change: broadcast, end on result, else reset clock + run bots. */
+function durakNAfter(room) {
+  if (room.over) return
+  durakNBroadcast(room)
+  if (room.durakN.result) {
+    durakNFinish(room)
+    return
+  }
+  room.deadline = Date.now() + room.moveMs
+  scheduleDurakNBot(room)
+}
+
+/** If the seat to move is a bot, play its move after a short delay. */
+function scheduleDurakNBot(room) {
+  clearTimeout(room.botTimer)
+  const turn = room.durakN.turn
+  if (room.durakN.result || room.seatUser[turn]) return // human's turn (or over)
+  room.botTimer = setTimeout(() => {
+    if (room.over || room.durakN.result) return
+    const t = room.durakN.turn
+    if (room.seatUser[t]) return // became a human's turn
+    const next = durakN.botStep(room.durakN, t)
+    if (next !== room.durakN) {
+      room.durakN = next
+      durakNAfter(room)
+    }
+  }, 700)
+}
+
+function durakNFinish(room) {
+  if (room.over) return
+  room.over = true
+  clearInterval(room.timer)
+  clearTimeout(room.botTimer)
+  const loser = room.durakN.result?.loser // seat | null
+  for (let seat = 0; seat < room.durakN.n; seat++) {
+    const uid = room.seatUser[seat]
+    const sid = uid && sidOf(uid)
+    if (sid)
+      io.to(sid).emit('game:over', {
+        youWon: loser == null ? null : loser !== seat,
+        draw: loser == null,
+        reason: 'durak',
+      })
+  }
+}
+
 // ── Durak (online) helpers ──
 const durakSeat = (room, userId) => (room.players[0]?.userId === userId ? 'you' : 'opp')
 
@@ -176,6 +312,31 @@ const ABORT_WINDOW_MS = 10000
 
 function startRoom(room) {
   if (room.started) return
+  if (room.game === 'durakn') {
+    room.started = true
+    room.startedAt = Date.now()
+    // seat i = the i-th human that joined; remaining seats are bots (null)
+    room.seatUser = Array.from({ length: room.durakN.n }, (_, i) => room.players[i]?.userId ?? null)
+    room.deadline = Date.now() + room.moveMs
+    const info = durakNSeatInfo(room)
+    for (let seat = 0; seat < room.durakN.n; seat++) {
+      const uid = room.seatUser[seat]
+      const sid = uid && sidOf(uid)
+      if (!sid) continue
+      io.to(sid).emit('match:found', {
+        roomId: room.id,
+        game: 'durakn',
+        seat,
+        players: room.durakN.n,
+        durakn: durakN.viewForN(room.durakN, seat),
+        deadline: room.deadline,
+        seats: info,
+      })
+    }
+    room.timer = setInterval(() => tick(room), 250)
+    scheduleDurakNBot(room)
+    return
+  }
   // randomize sides for fairness (50/50 who plays white)
   if (room.players.length === 2 && Math.random() < 0.5) {
     room.players[0].color = 'b'
@@ -237,6 +398,18 @@ function tick(room) {
   if (room.game === 'durak') {
     if (room.deadline && Date.now() >= room.deadline) {
       durakCommit(room, durak.resign(room.durak, room.durak.turn)) // player to act loses
+    }
+    return
+  }
+  if (room.game === 'durakn') {
+    if (room.deadline && Date.now() >= room.deadline && !room.durakN.result) {
+      const turn = room.durakN.turn
+      if (room.seatUser[turn]) {
+        room.durakN = durakN.resign(room.durakN, turn) // human timed out → out
+        durakNAfter(room)
+      } else {
+        room.deadline = Date.now() + room.moveMs // bot's turn — bot loop handles it
+      }
     }
     return
   }
@@ -337,7 +510,25 @@ io.on('connection', (socket) => {
       const me = room.players.find((p) => p.userId === userId)
       if (!me) continue
       const opp = room.players.find((p) => p.userId !== userId)
-      if (room.game === 'nardy') {
+      if (room.game === 'durakn') {
+        const seat = room.seatUser.indexOf(userId)
+        if (seat < 0) continue
+        const info = durakNSeatInfo(room)
+        socket.emit('match:found', {
+          roomId: room.id,
+          game: 'durakn',
+          seat,
+          players: room.durakN.n,
+          durakn: durakN.viewForN(room.durakN, seat),
+          deadline: room.deadline,
+          seats: info,
+        })
+        socket.emit('durakn:state', {
+          durakn: durakN.viewForN(room.durakN, seat),
+          deadline: room.deadline,
+          seats: info,
+        })
+      } else if (room.game === 'nardy') {
         socket.emit('match:found', {
           roomId: room.id,
           game: 'nardy',
@@ -423,9 +614,18 @@ io.on('connection', (socket) => {
     }
   })
 
-  socket.on('quickMatch', ({ game, minutes, transfer }) => {
+  socket.on('quickMatch', ({ game, minutes, transfer, players, neighborsOnly, allowDraw }) => {
     const userId = socketUser.get(socket.id)
     if (!userId) return
+    if (game === 'durakn') {
+      return quickMatchDurakN(userId, socket, {
+        players: Math.max(2, Math.min(6, players ?? 3)),
+        deck: minutes || 36,
+        transfer: !!transfer,
+        neighborsOnly: !!neighborsOnly,
+        allowDraw: allowDraw ?? true,
+      })
+    }
     // include durak options in the bucket so only same-config players match
     const key = game === 'durak' ? `durak:${minutes}:${transfer ? 't' : 'c'}` : qkey(game, minutes)
     const q = (queues.get(key) ?? []).filter((id) => id !== userId)
@@ -446,6 +646,7 @@ io.on('connection', (socket) => {
   socket.on('cancelQuick', () => {
     const userId = socketUser.get(socket.id)
     for (const [k, q] of queues) queues.set(k, q.filter((id) => id !== userId))
+    leaveNQueues(userId)
   })
 
   socket.on('createRoom', ({ game, minutes, transfer }, cb) => {
@@ -606,6 +807,24 @@ io.on('connection', (socket) => {
     }
   })
 
+  // ── Durak N-players (online) actions ──
+  socket.on('durakn:action', ({ roomId, type, card, pair }) => {
+    const room = rooms.get(roomId)
+    if (!room || room.over || room.game !== 'durakn') return
+    const seat = seatOf(room, socketUser.get(socket.id))
+    if (seat < 0 || room.durakN.turn !== seat) return // only the seat whose turn it is
+    let next = room.durakN
+    if (type === 'attack') next = durakN.playAttack(room.durakN, seat, card)
+    else if (type === 'defend') next = durakN.playDefend(room.durakN, card, pair)
+    else if (type === 'transfer') next = durakN.playTransfer(room.durakN, card)
+    else if (type === 'take') next = durakN.beginTake(room.durakN)
+    else if (type === 'pass') next = durakN.pass(room.durakN, seat)
+    if (next !== room.durakN) {
+      room.durakN = next
+      durakNAfter(room)
+    }
+  })
+
   // ── Nardy (online) ──
   const myColor = (room) =>
     room.players.find((p) => p.userId === socketUser.get(socket.id))?.color
@@ -725,6 +944,7 @@ io.on('connection', (socket) => {
     const userId = socketUser.get(socket.id)
     socketUser.delete(socket.id)
     for (const [k, q] of queues) queues.set(k, q.filter((id) => id !== userId))
+    leaveNQueues(userId)
     // Presence: go offline + tell my friends (only if THIS socket was the live one).
     const tgId = userTg.get(userId)
     if (tgId && tgSocket.get(tgId) === socket.id) {
@@ -749,6 +969,14 @@ io.on('connection', (socket) => {
         const r = rooms.get(room.id)
         if (!r || r.over) return
         if (users.get(userId)?.socketId) return // reconnected — don't abandon
+        if (r.game === 'durakn') {
+          const seat = r.seatUser.indexOf(userId)
+          if (seat >= 0 && !r.durakN.result) {
+            r.durakN = durakN.resign(r.durakN, seat) // leaves → that seat is out
+            durakNAfter(r)
+          }
+          return
+        }
         const me = r.players.find((p) => p.userId === userId)
         if (me) endGame(r, me.color === 'w' ? 'b' : 'w', 'abandon')
       }, RECONNECT_GRACE_MS)

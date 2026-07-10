@@ -11,7 +11,7 @@ import { History } from './screens/History'
 import { NewChessGame } from './screens/NewChessGame'
 import { ChessMatch, hasChessSave, readChessSave } from './screens/ChessMatch'
 import { DurakMatch, hasDurakSave, type OnlineDurak } from './screens/DurakMatch'
-import { DurakMatchN } from './screens/DurakMatchN'
+import { DurakMatchN, type OnlineDurakN } from './screens/DurakMatchN'
 import { DurakSetup, type DurakConfig } from './screens/DurakSetup'
 import { NardyMatch, hasNardySave, type OnlineNardy } from './screens/NardyMatch'
 import { NardySetup, type NardyConfig } from './screens/NardySetup'
@@ -91,6 +91,7 @@ export default function App() {
   })
   const [nardyOnline, setNardyOnline] = useState<OnlineNardy | null>(null)
   const [durakOnline, setDurakOnline] = useState<OnlineDurak | null>(null)
+  const [durakNOnline, setDurakNOnline] = useState<OnlineDurakN | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
   const [friends, setFriends] = useState<ServerFriend[]>([])
   const [history, setHistory] = useState<HistoryEntry[]>([])
@@ -150,10 +151,25 @@ export default function App() {
       clocks?: { w: number; b: number }
       nardy?: OnlineNardy['initial']
       durak?: OnlineDurak['initial']
+      durakn?: OnlineDurakN['initial']
+      seat?: number
+      players?: number
+      seats?: OnlineDurakN['seats']
       deadline?: number
     }) => {
       setMatchmaking(null)
       setSub(null)
+      if (m.game === 'durakn' && m.durakn) {
+        setDurakNOnline({
+          roomId: m.roomId,
+          seat: m.seat ?? 0,
+          players: m.players ?? m.durakn.n,
+          seats: m.seats ?? [],
+          initial: m.durakn,
+          deadline: m.deadline ?? Date.now() + 60000,
+        })
+        return
+      }
       if (m.game === 'nardy' && m.nardy) {
         setNardyOnline({
           roomId: m.roomId,
@@ -431,8 +447,25 @@ export default function App() {
         </main>
       )}
 
+      {/* Online N-player Durak — fullscreen while active */}
+      {durakNOnline && (
+        <main className="flex flex-1 flex-col overflow-y-auto px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-6">
+          <DurakMatchN
+            user={user}
+            players={durakNOnline.players}
+            deck={0}
+            neighborsOnly={false}
+            transfer={false}
+            allowDraw={false}
+            myName={myName}
+            online={durakNOnline}
+            onExit={() => setDurakNOnline(null)}
+          />
+        </main>
+      )}
+
       {/* Normal app — hidden while a match is fullscreen */}
-      {!inMatchFull && !nardyOnline && !durakOnline && (
+      {!inMatchFull && !nardyOnline && !durakOnline && !durakNOnline && (
         <>
           <main className="flex-1 overflow-y-auto px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-6">
             {invite && (
@@ -481,12 +514,23 @@ export default function App() {
                     setSub('durak')
                   }
                 }}
-                onQuickMatch={(deck, transfer) => {
-                  getSocket().emit('quickMatch', { game: 'durak', minutes: deck, transfer })
+                onQuickMatch={(deck, transfer, players, throwAll, draw) => {
+                  if (players > 2) {
+                    getSocket().emit('quickMatch', {
+                      game: 'durakn',
+                      minutes: deck,
+                      players,
+                      transfer,
+                      neighborsOnly: !throwAll,
+                      allowDraw: draw,
+                    })
+                  } else {
+                    getSocket().emit('quickMatch', { game: 'durak', minutes: deck, transfer })
+                  }
                   setMatchmaking({
                     minutes: deck,
                     label: t('mm.searching'),
-                    subtitle: `${t('game.durak')} · ${deck} ${t('unit.cards')}${transfer ? ` · ${t('mode.transfer')}` : ''}`,
+                    subtitle: `${t('game.durak')} · ${players} ${t('durakN.players')}${transfer ? ` · ${t('mode.transfer')}` : ''}`,
                   })
                   setSub(null)
                 }}

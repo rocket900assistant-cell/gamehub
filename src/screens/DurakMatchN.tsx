@@ -6,6 +6,7 @@ import { Confetti } from '../components/Confetti'
 import { HandFan, CardFan, PlayerTile } from './DurakMatch'
 import { equippedDurakFeltSrc } from '../lib/skins'
 import { t } from '../lib/i18n'
+import { getSocket } from '../lib/socket'
 import { displayName, type TgUser } from '../lib/telegram'
 import {
   createGameN,
@@ -21,6 +22,21 @@ import {
   type DurakNState,
 } from '../lib/durakN'
 
+export interface SeatInfo {
+  name: string
+  vip: boolean
+  bot: boolean
+}
+
+export interface OnlineDurakN {
+  roomId: string
+  seat: number // this player's seat index
+  players: number
+  seats: SeatInfo[] // by seat index
+  initial: DurakNState // server view for this seat (own hand visible)
+  deadline: number
+}
+
 interface DurakMatchNProps {
   user: TgUser
   players: number
@@ -29,6 +45,7 @@ interface DurakMatchNProps {
   transfer: boolean
   allowDraw: boolean
   myName?: string
+  online?: OnlineDurakN | null
   onExit: () => void
 }
 
@@ -38,57 +55,118 @@ const FELT_BASE: React.CSSProperties = {
   backgroundPosition: 'center',
 }
 
-const ME = 0
+const MOVE_MS = 60000
 
-export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, allowDraw, myName, onExit }: DurakMatchNProps) {
+export function DurakMatchN({
+  user,
+  players,
+  deck,
+  neighborsOnly,
+  transfer,
+  allowDraw,
+  myName,
+  online,
+  onExit,
+}: DurakMatchNProps) {
+  const isOnline = !!online
+  const me = online ? online.seat : 0
   const felt = useMemo(
     () => ({ ...FELT_BASE, backgroundImage: `url('${equippedDurakFeltSrc()}')` }),
     [],
   )
-  const [s, setS] = useState<DurakNState>(() => createGameN({ players, deck, neighborsOnly, transfer, allowDraw }))
+  const [s, setS] = useState<DurakNState>(() =>
+    online ? online.initial : createGameN({ players, deck, neighborsOnly, transfer, allowDraw }),
+  )
+  const [seats, setSeats] = useState<SeatInfo[]>(() => online?.seats ?? [])
   const [drag, setDrag] = useState<{ card: Card; x: number; y: number } | null>(null)
   const [selIdx, setSelIdx] = useState(-1)
 
-  // Bots (seats 1..n-1) auto-play until it's the human's turn or the game ends.
+  // ── online: server-authoritative state + move clock ──
+  const [deadline, setDeadline] = useState(() => online?.deadline ?? 0)
+  const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    if (s.result || s.turn === ME) return
+    if (!isOnline) return
+    const sock = getSocket()
+    const onState = (p: { durakn: DurakNState; deadline: number; seats?: SeatInfo[] }) => {
+      setS(p.durakn)
+      setDeadline(p.deadline)
+      if (p.seats) setSeats(p.seats)
+    }
+    const onOver = (g: { youWon: boolean | null; draw?: boolean }) => {
+      setS((cur) =>
+        cur.result
+          ? cur
+          : { ...cur, result: { loser: g.draw ? null : g.youWon === false ? me : -1 } },
+      )
+    }
+    sock.on('durakn:state', onState)
+    sock.on('game:over', onOver)
+    return () => {
+      sock.off('durakn:state', onState)
+      sock.off('game:over', onOver)
+    }
+  }, [isOnline, me])
+
+  useEffect(() => {
+    if (!isOnline || s.result) return
+    const id = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(id)
+  }, [isOnline, s.result])
+
+  // Bots (local only) auto-play until it's the human's turn or the game ends.
+  useEffect(() => {
+    if (isOnline || s.result || s.turn === me) return
     const id = setTimeout(
-      () => setS((cur) => (cur.result || cur.turn === ME ? cur : botStep(cur, cur.turn))),
+      () => setS((cur) => (cur.result || cur.turn === me ? cur : botStep(cur, cur.turn))),
       650,
     )
     return () => clearTimeout(id)
-  }, [s])
+  }, [s, isOnline, me])
 
-  const myTurn = !s.result && s.turn === ME
-  const iAmDefender = s.defender === ME
+  const myTurn = !s.result && s.turn === me
+  const iAmDefender = s.defender === me
   const undef = s.table.filter((p) => !p.defend).length
   const defendingNow = iAmDefender && !s.taking && undef > 0
   const inThrowWindow = myTurn && (s.taking || (undef === 0 && s.table.length > 0))
   const takeNow = myTurn && canTake(s)
 
+  const remaining = Math.max(0, deadline - now)
+  const clockFor = (seat: number) =>
+    isOnline && !s.result && s.turn === seat ? remaining / MOVE_MS : null
+
   const apply = (next: DurakNState) => {
     if (next !== s) setS(next)
   }
+  const emitAction = (type: string, extra: object = {}) =>
+    getSocket().emit('durakn:action', { roomId: online!.roomId, type, ...extra })
+
+  const doAttack = (card: Card) =>
+    isOnline ? emitAction('attack', { card }) : apply(playAttack(s, me, card))
+  const doDefend = (card: Card, pair: number) =>
+    isOnline ? emitAction('defend', { card, pair }) : apply(playDefend(s, card, pair))
+  const doTransfer = (card: Card) =>
+    isOnline ? emitAction('transfer', { card }) : apply(playTransfer(s, card))
+  const doTake = () => (isOnline ? emitAction('take') : apply(beginTake(s)))
+  const doPass = () => (isOnline ? emitAction('pass') : apply(enginePass(s, me)))
 
   // Drop a card at a screen point — the engine validates; illegal = snap back.
   function playAt(card: Card, x: number, y: number) {
     if (!defendingNow) {
-      apply(playAttack(s, ME, card)) // attacker / thrower — a light flick plays it
+      doAttack(card) // attacker / thrower — a light flick plays it
       return
     }
     const el = document.elementFromPoint(x, y)
     const pairEl = el?.closest<HTMLElement>('[data-pair]')
     if (pairEl) {
-      apply(playDefend(s, card, Number(pairEl.dataset.pair))) // dropped on a pair → beat it
+      doDefend(card, Number(pairEl.dataset.pair)) // dropped on a pair → beat it
       return
     }
     // dropped on the open table: transfer (переводной) if legal, else beat the first pair
-    const tr = playTransfer(s, card)
-    if (tr !== s) {
-      apply(tr)
+    if (playTransfer(s, card) !== s) {
+      doTransfer(card)
       return
     }
-    apply(playDefend(s, card, s.table.findIndex((p) => !p.defend)))
+    doDefend(card, s.table.findIndex((p) => !p.defend))
   }
 
   const handIdxAt = (x: number, y: number) => {
@@ -111,7 +189,7 @@ export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, allo
       }
       if (startY - ev.clientY > 22) {
         carrying = true
-        const card = s.hands[ME][sel]
+        const card = s.hands[me][sel]
         if (card) setDrag({ card, x: ev.clientX, y: ev.clientY })
       } else {
         const i = handIdxAt(ev.clientX, startY)
@@ -124,7 +202,7 @@ export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, allo
     const up = (ev: PointerEvent) => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
-      const card = s.hands[ME][sel]
+      const card = s.hands[me][sel]
       setDrag(null)
       setSelIdx(-1)
       if (carrying && card) playAt(card, ev.clientX, ev.clientY)
@@ -145,9 +223,12 @@ export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, allo
           ? t('durak.attack')
           : t('durak.throwOrBeat')
 
-  const opponents = Array.from({ length: s.n - 1 }, (_, i) => i + 1)
+  // opponents in play order after me (wraps for online seat > 0)
+  const opponents = Array.from({ length: s.n - 1 }, (_, i) => (me + 1 + i) % s.n)
+  const oppName = (seat: number) => seats[seat]?.name ?? `${t('durakN.bot')} ${seat}`
+
   const draw = s.result != null && s.result.loser === null
-  const iLost = s.result?.loser === ME
+  const iLost = s.result?.loser === me
   const iWon = s.result != null && !iLost && !draw
 
   return (
@@ -173,7 +254,7 @@ export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, allo
           {`${t('game.durak')} · ${s.n} ${t('durakN.players')}`}
         </span>
         <span className="ml-auto flex h-9 items-center rounded-xl bg-white/95 px-3 text-[12px] font-semibold text-[#8a8a8a] shadow">
-          {t('match.training')}
+          {isOnline ? t('match.onlineWord') : t('match.training')}
         </span>
       </div>
 
@@ -182,9 +263,10 @@ export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, allo
         {opponents.map((seat) => (
           <div key={seat} className="flex w-[86px] flex-col items-center">
             <PlayerTile
-              name={`${t('durakN.bot')} ${seat}`}
+              name={oppName(seat)}
               active={s.turn === seat && !s.result}
-              progress={null}
+              progress={clockFor(seat)}
+              vip={seats[seat]?.vip}
               labelTop
             />
             <CardFan count={s.hands[seat].length} />
@@ -233,14 +315,14 @@ export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, allo
           {s.table.map((p, i) => (
             <div key={i} data-pair={i} className="relative" style={{ width: 100, height: 124 }}>
               <div
-                className={p.by === ME ? 'gh-drop-bottom' : 'gh-drop-top'}
+                className={p.by === me ? 'gh-drop-bottom' : 'gh-drop-top'}
                 style={{ position: 'absolute', left: 2, top: 2 }}
               >
                 <PlayingCard card={p.attack} size="lg" style={{ transform: 'rotate(-3deg)' }} />
               </div>
               {p.defend && (
                 <div
-                  className={s.defender === ME ? 'gh-drop-bottom' : 'gh-drop-top'}
+                  className={s.defender === me ? 'gh-drop-bottom' : 'gh-drop-top'}
                   style={{ position: 'absolute', left: 13, top: 7, zIndex: 20 }}
                 >
                   <PlayingCard
@@ -257,7 +339,7 @@ export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, allo
 
         {/* your hand */}
         <HandFan
-          cards={s.hands[ME]}
+          cards={s.hands[me]}
           selIdx={selIdx}
           carrying={drag != null}
           canDrag={myTurn}
@@ -269,12 +351,12 @@ export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, allo
       <div className="relative z-10 -mt-1 flex items-center gap-2 rounded-t-3xl bg-surface px-4 pb-[calc(0.6rem+env(safe-area-inset-bottom))] pt-2.5 shadow-[0_-8px_24px_rgba(0,0,0,0.3)]">
         <div className="w-24 shrink-0">
           {takeNow ? (
-            <Button size="sm" variant="secondary" className="w-full" onClick={() => apply(beginTake(s))}>
+            <Button size="sm" variant="secondary" className="w-full" onClick={doTake}>
               {t('match.take')}
             </Button>
           ) : inThrowWindow ? (
-            <Button size="sm" className="w-full" onClick={() => apply(enginePass(s, ME))}>
-              {s.taking ? t('match.done') : s.attacker === ME ? t('match.beat') : t('durakN.pass')}
+            <Button size="sm" className="w-full" onClick={doPass}>
+              {s.taking ? t('match.done') : s.attacker === me ? t('match.beat') : t('durakN.pass')}
             </Button>
           ) : (
             <span className="block text-center text-[11px] font-medium leading-tight text-muted">
@@ -286,7 +368,7 @@ export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, allo
           <PlayerTile
             name={myName ?? displayName(user)}
             active={myTurn}
-            progress={null}
+            progress={clockFor(me)}
             photo={user.photoUrl}
             you
             onLight
@@ -313,14 +395,21 @@ export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, allo
             <p className="text-2xl font-extrabold">
               {draw ? t('match.draw') : iLost ? t('match.youLost') : t('match.youWon')}
             </p>
-            <p className="mt-1 text-sm text-muted">{t('match.botUnrated')}</p>
+            <p className="mt-1 text-sm text-muted">
+              {isOnline ? t('match.onlineGame') : t('match.botUnrated')}
+            </p>
             <div className="mt-6 flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={onExit}>
                 {t('match.toMenu')}
               </Button>
-              <Button className="flex-1" onClick={() => setS(createGameN({ players, deck, neighborsOnly, transfer, allowDraw }))}>
-                <RotateCcw size={16} /> {t('match.again')}
-              </Button>
+              {!isOnline && (
+                <Button
+                  className="flex-1"
+                  onClick={() => setS(createGameN({ players, deck, neighborsOnly, transfer, allowDraw }))}
+                >
+                  <RotateCcw size={16} /> {t('match.again')}
+                </Button>
+              )}
             </div>
           </div>
         </div>
