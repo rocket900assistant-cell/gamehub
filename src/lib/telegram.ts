@@ -37,8 +37,8 @@ interface TelegramWebApp {
 }
 
 // TODO: replace with the real bot username once it exists.
-// TEST bot. Change to the official bot username when going live.
-export const BOT_USERNAME = 'Testappforcodebot'
+// Official bot username — used to build all invite / deep-link URLs.
+export const BOT_USERNAME = 'gamehubappsbot'
 export const STARS_BOT_URL = 'https://t.me/'
 
 /** Opens the external stars-purchase bot (inside Telegram if available). */
