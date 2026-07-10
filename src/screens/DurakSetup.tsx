@@ -187,7 +187,7 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite }: DurakSe
   const [deck, setDeck] = useState(36)
   const [fast, setFast] = useState(false)
   const [transfer, setTransfer] = useState(false)
-  const [throwAll, setThrowAll] = useState(true)
+  const [throwAll, setThrowAll] = useState(false)
   const [draw, setDraw] = useState(false)
   const [privateGame, setPrivateGame] = useState(false)
 

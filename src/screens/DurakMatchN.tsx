@@ -23,6 +23,7 @@ interface DurakMatchNProps {
   user: TgUser
   players: number
   deck: number
+  neighborsOnly: boolean
   myName?: string
   onExit: () => void
 }
@@ -35,12 +36,12 @@ const FELT_BASE: React.CSSProperties = {
 
 const ME = 0
 
-export function DurakMatchN({ user, players, deck, myName, onExit }: DurakMatchNProps) {
+export function DurakMatchN({ user, players, deck, neighborsOnly, myName, onExit }: DurakMatchNProps) {
   const felt = useMemo(
     () => ({ ...FELT_BASE, backgroundImage: `url('${equippedDurakFeltSrc()}')` }),
     [],
   )
-  const [s, setS] = useState<DurakNState>(() => createGameN({ players, deck }))
+  const [s, setS] = useState<DurakNState>(() => createGameN({ players, deck, neighborsOnly }))
   const [drag, setDrag] = useState<{ card: Card; x: number; y: number } | null>(null)
   const [selIdx, setSelIdx] = useState(-1)
 
@@ -299,7 +300,7 @@ export function DurakMatchN({ user, players, deck, myName, onExit }: DurakMatchN
               <Button variant="secondary" className="flex-1" onClick={onExit}>
                 {t('match.toMenu')}
               </Button>
-              <Button className="flex-1" onClick={() => setS(createGameN({ players, deck }))}>
+              <Button className="flex-1" onClick={() => setS(createGameN({ players, deck, neighborsOnly }))}>
                 <RotateCcw size={16} /> {t('match.again')}
               </Button>
             </div>

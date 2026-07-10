@@ -29,12 +29,14 @@ export interface DurakNState {
   passed: boolean[] // throwers who declined in the current throw-in window
   out: boolean[] // players who finished (escaped: safe, no more cards)
   discard: number
+  neighborsOnly: boolean // "Соседи" mode: only the defender's neighbours may throw in
   result: { loser: number | null } | null // loser seat, or null = draw
 }
 
 export interface GameNOptions {
   players?: number // 2..6
   deck?: number // 24 | 36 | 52
+  neighborsOnly?: boolean // "Соседи": only the defender's two neighbours may throw in
 }
 
 const SUITS: Suit[] = ['♠', '♥', '♦', '♣']
@@ -108,6 +110,7 @@ export function createGameN(opts: GameNOptions = {}): DurakNState {
     passed: Array(n).fill(false),
     out,
     discard: 0,
+    neighborsOnly: !!opts.neighborsOnly,
     result: null,
   }
 }
@@ -117,6 +120,15 @@ function nextIn(out: boolean[], from: number): number {
   const n = out.length
   for (let i = 1; i <= n; i++) {
     const s = (from + i) % n
+    if (!out[s]) return s
+  }
+  return from
+}
+/** Previous seat before `from` (exclusive) that is still in play. */
+function prevIn(out: boolean[], from: number): number {
+  const n = out.length
+  for (let i = 1; i <= n; i++) {
+    const s = (from - i + n) % n
     if (!out[s]) return s
   }
   return from
@@ -140,6 +152,14 @@ const tableLimit = (s: DurakNState) => Math.min(6, s.hands[s.defender].length + 
 
 /** Seats (in throw order: attacker first) that may throw a card in right now. */
 function throwers(s: DurakNState): number[] {
+  if (s.neighborsOnly) {
+    // "Соседи": only the defender's two neighbours (one of which is the attacker).
+    const order: number[] = []
+    for (const seat of [s.attacker, prevIn(s.out, s.defender), nextIn(s.out, s.defender)]) {
+      if (seat !== s.defender && !s.out[seat] && !order.includes(seat)) order.push(seat)
+    }
+    return order
+  }
   const order: number[] = []
   for (let i = 0; i < s.n; i++) {
     const seat = (s.attacker + i) % s.n

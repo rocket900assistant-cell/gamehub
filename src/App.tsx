@@ -64,7 +64,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('games')
   const [sub, setSub] = useState<SubScreen>(null)
   const [durakCfg, setDurakCfg] = useState<DurakConfig | null>(null)
-  const [durakNCfg, setDurakNCfg] = useState<{ players: number; deck: number } | null>(null)
+  const [durakNCfg, setDurakNCfg] = useState<{ players: number; deck: number; neighborsOnly: boolean } | null>(null)
   const [nardyCfg, setNardyCfg] = useState<NardyConfig | null>(null)
   const [durakResume, setDurakResume] = useState(false)
   const [durakSaved, setDurakSaved] = useState(() => hasDurakSave())
@@ -473,7 +473,7 @@ export default function App() {
                 onCreate={(cfg) => {
                   if (cfg.players > 2) {
                     // 3–5 players vs bots → the N-player table
-                    setDurakNCfg({ players: cfg.players, deck: cfg.deck })
+                    setDurakNCfg({ players: cfg.players, deck: cfg.deck, neighborsOnly: !cfg.throwAll })
                     setSub('durakN')
                   } else {
                     setDurakCfg(cfg)
@@ -517,6 +517,7 @@ export default function App() {
                 user={user}
                 players={durakNCfg.players}
                 deck={durakNCfg.deck}
+                neighborsOnly={durakNCfg.neighborsOnly}
                 myName={myName}
                 onExit={() => setSub(null)}
               />
