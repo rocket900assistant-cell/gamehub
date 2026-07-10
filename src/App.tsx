@@ -12,7 +12,8 @@ import { NewChessGame } from './screens/NewChessGame'
 import { ChessMatch, hasChessSave, readChessSave } from './screens/ChessMatch'
 import { DurakMatch, hasDurakSave, type OnlineDurak } from './screens/DurakMatch'
 import { DurakMatchN, type OnlineDurakN } from './screens/DurakMatchN'
-import { DurakSetup, type DurakConfig } from './screens/DurakSetup'
+import { DurakSetup, type DurakConfig, type LobbyCfg } from './screens/DurakSetup'
+import { DurakLobby } from './screens/DurakLobby'
 import { NardyMatch, hasNardySave, type OnlineNardy } from './screens/NardyMatch'
 import { NardySetup, type NardyConfig } from './screens/NardySetup'
 import { Matchmaking } from './screens/Matchmaking'
@@ -46,6 +47,7 @@ type SubScreen =
   | 'chess-setup'
   | 'durak-setup'
   | 'durak'
+  | 'durak-lobby'
   | 'nardy-setup'
   | 'nardy'
   | 'durakN'
@@ -65,6 +67,7 @@ export default function App() {
   const [sub, setSub] = useState<SubScreen>(null)
   const [durakCfg, setDurakCfg] = useState<DurakConfig | null>(null)
   const [durakNCfg, setDurakNCfg] = useState<{ players: number; deck: number; neighborsOnly: boolean; transfer: boolean; allowDraw: boolean } | null>(null)
+  const [durakLobby, setDurakLobby] = useState<{ mode: 'browse' | 'create'; cfg: LobbyCfg } | null>(null)
   const [nardyCfg, setNardyCfg] = useState<NardyConfig | null>(null)
   const [durakResume, setDurakResume] = useState(false)
   const [durakSaved, setDurakSaved] = useState(() => hasDurakSave())
@@ -543,7 +546,13 @@ export default function App() {
                   })
                   setSub('invite')
                 }}
+                onLobby={(mode, cfg) => {
+                  setDurakLobby({ mode, cfg })
+                  setSub('durak-lobby')
+                }}
               />
+            ) : sub === 'durak-lobby' && durakLobby ? (
+              <DurakLobby mode={durakLobby.mode} cfg={durakLobby.cfg} onBack={() => setSub('durak-setup')} />
             ) : sub === 'durak' ? (
               <DurakMatch
                 user={user}

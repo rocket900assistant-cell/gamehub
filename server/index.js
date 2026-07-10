@@ -162,6 +162,82 @@ function leaveNQueues(userId) {
   }
 }
 
+// ── Open lobbies (browsable durakn rooms that wait for real players) ──
+const lobbyWatchers = new Set() // socket ids viewing the "Открытые игры" list
+
+const isOpenLobby = (r) => r.game === 'durakn' && !r.started && !r.over && r.players.length > 0
+
+function lobbySummary() {
+  const list = []
+  for (const r of rooms.values()) {
+    if (!isOpenLobby(r)) continue
+    list.push({
+      roomId: r.id,
+      host: r.players[0]?.name ?? 'Игрок',
+      names: r.players.map((p) => p.name),
+      filled: r.players.length,
+      capacity: r.seats,
+      deck: r.minutes || 36,
+      transfer: !!r.durakN.transfer,
+      neighborsOnly: !!r.durakN.neighborsOnly,
+      allowDraw: !!r.durakN.allowDraw,
+    })
+  }
+  return list
+}
+
+function broadcastLobbies() {
+  const list = lobbySummary()
+  for (const sid of lobbyWatchers) io.to(sid).emit('lobby:list', list)
+}
+
+/** Waiting-room state for each member (per-recipient isHost flag). */
+function emitLobbyState(room) {
+  const hostId = room.players[0]?.userId
+  for (const p of room.players) {
+    const sid = sidOf(p.userId)
+    if (!sid) continue
+    io.to(sid).emit('lobby:state', {
+      roomId: room.id,
+      host: room.players[0]?.name ?? 'Игрок',
+      isHost: p.userId === hostId,
+      capacity: room.seats,
+      filled: room.players.length,
+      deck: room.minutes || 36,
+      transfer: !!room.durakN.transfer,
+      neighborsOnly: !!room.durakN.neighborsOnly,
+      allowDraw: !!room.durakN.allowDraw,
+      seats: room.players.map((x) => ({ name: x.name, vip: x.vip })),
+    })
+  }
+}
+
+/** Add a user to an open lobby; begin the match once every seat is filled. */
+function joinDurakNLobby(room, userId) {
+  if (!room || room.game !== 'durakn' || room.started || room.over) return 'gone'
+  if (room.players.length >= room.seats && !room.players.some((p) => p.userId === userId))
+    return 'gone'
+  addPlayer(room, userId)
+  if (room.players.length >= room.seats) startRoom(room) // all seats human → begin
+  else emitLobbyState(room)
+  broadcastLobbies()
+  return 'ok'
+}
+
+/** Remove a user from any open lobby they're waiting in (dissolve if empty). */
+function leaveLobby(userId) {
+  let changed = false
+  for (const room of rooms.values()) {
+    if (room.game !== 'durakn' || room.started || room.over) continue
+    if (!room.players.some((p) => p.userId === userId)) continue
+    room.players = room.players.filter((p) => p.userId !== userId)
+    changed = true
+    if (room.players.length === 0) rooms.delete(room.id)
+    else emitLobbyState(room)
+  }
+  if (changed) broadcastLobbies()
+}
+
 // ── friends (mutual, by telegram id) ──────────────
 /** Build the friend list for a player: profile + live online flag. */
 async function friendListFor(tgId) {
@@ -658,9 +734,59 @@ io.on('connection', (socket) => {
   socket.on('joinRoom', ({ roomId }) => {
     const room = rooms.get(roomId)
     if (!room) return socket.emit('room:notfound')
-    addPlayer(room, socketUser.get(socket.id))
+    const userId = socketUser.get(socket.id)
+    if (room.game === 'durakn') {
+      // durakn rooms are open lobbies (invite link / open-games list)
+      if (room.started || room.over) return socket.emit('room:notfound')
+      leaveLobby(userId)
+      if (joinDurakNLobby(room, userId) === 'gone') socket.emit('lobby:gone', { roomId })
+      return
+    }
+    addPlayer(room, userId)
     if (room.players.length === 2) startRoom(room)
   })
+
+  // ── Open lobbies («Открытые игры») ──
+  socket.on('lobby:subscribe', () => {
+    lobbyWatchers.add(socket.id)
+    socket.emit('lobby:list', lobbySummary())
+  })
+  socket.on('lobby:unsubscribe', () => lobbyWatchers.delete(socket.id))
+
+  socket.on('lobby:create', (opts, cb) => {
+    const userId = socketUser.get(socket.id)
+    if (!userId) return
+    leaveLobby(userId) // one open lobby per player
+    const roomId = createRoom('durakn', opts?.deck || 36, {
+      players: Math.max(2, Math.min(6, opts?.players ?? 3)),
+      transfer: !!opts?.transfer,
+      neighborsOnly: !!opts?.neighborsOnly,
+      allowDraw: opts?.allowDraw ?? true,
+    })
+    addPlayer(rooms.get(roomId), userId)
+    cb?.(roomId)
+    emitLobbyState(rooms.get(roomId))
+    broadcastLobbies()
+  })
+
+  socket.on('lobby:join', ({ roomId }) => {
+    const userId = socketUser.get(socket.id)
+    if (!userId) return
+    leaveLobby(userId)
+    if (joinDurakNLobby(rooms.get(roomId), userId) === 'gone')
+      socket.emit('lobby:gone', { roomId })
+  })
+
+  socket.on('lobby:start', ({ roomId }) => {
+    const userId = socketUser.get(socket.id)
+    const room = rooms.get(roomId)
+    if (!room || room.game !== 'durakn' || room.started || room.over) return
+    if (room.players[0]?.userId !== userId) return // host only
+    startRoom(room) // remaining empty seats become bots
+    broadcastLobbies()
+  })
+
+  socket.on('lobby:leave', () => leaveLobby(socketUser.get(socket.id)))
 
   // Invite a friend (by their telegram id) into a private room for a game.
   socket.on('invite', ({ toTg, game, minutes, transfer }) => {
@@ -943,8 +1069,10 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const userId = socketUser.get(socket.id)
     socketUser.delete(socket.id)
+    lobbyWatchers.delete(socket.id)
     for (const [k, q] of queues) queues.set(k, q.filter((id) => id !== userId))
     leaveNQueues(userId)
+    leaveLobby(userId) // drop out of any open lobby (started games use the abandon timer)
     // Presence: go offline + tell my friends (only if THIS socket was the live one).
     const tgId = userTg.get(userId)
     if (tgId && tgSocket.get(tgId) === socket.id) {

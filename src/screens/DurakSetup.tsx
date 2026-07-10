@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Bot, Gem, Lock, Minus, Plus, Swords, UserPlus } from 'lucide-react'
+import { ArrowLeft, Bot, Gem, List, Lock, Minus, Plus, Swords, UserPlus } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { cn } from '../lib/cn'
@@ -173,14 +173,23 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
+export interface LobbyCfg {
+  players: number
+  deck: number
+  transfer: boolean
+  neighborsOnly: boolean
+  allowDraw: boolean
+}
+
 interface DurakSetupProps {
   onBack: () => void
   onCreate: (cfg: DurakConfig) => void
   onQuickMatch: (deck: number, transfer: boolean, players: number, throwAll: boolean, draw: boolean) => void
   onInvite: (deck: number, transfer: boolean) => void
+  onLobby: (mode: 'browse' | 'create', cfg: LobbyCfg) => void
 }
 
-export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite }: DurakSetupProps) {
+export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite, onLobby }: DurakSetupProps) {
   const [free, setFree] = useState(true)
   const [stakeText, setStakeText] = useState('0.1')
   const [players, setPlayers] = useState(2)
@@ -330,6 +339,28 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite }: DurakSe
         <Button size="lg" className="w-full" onClick={() => onQuickMatch(deck, transfer, players, throwAll, draw)}>
           <Swords size={18} /> {t('setup.quickOnline')}
         </Button>
+        <div className="grid grid-cols-2 gap-3">
+          <Button
+            size="lg"
+            variant="secondary"
+            className="w-full"
+            onClick={() =>
+              onLobby('browse', { players, deck, transfer, neighborsOnly: !throwAll, allowDraw: draw })
+            }
+          >
+            <List size={18} /> {t('lobby.open')}
+          </Button>
+          <Button
+            size="lg"
+            variant="secondary"
+            className="w-full"
+            onClick={() =>
+              onLobby('create', { players, deck, transfer, neighborsOnly: !throwAll, allowDraw: draw })
+            }
+          >
+            <Plus size={18} /> {t('lobby.create')}
+          </Button>
+        </div>
         <Button
           size="lg"
           variant="secondary"
