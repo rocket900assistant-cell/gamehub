@@ -31,6 +31,7 @@ export interface DurakNState {
   discard: number
   neighborsOnly: boolean // "Соседи" mode: only the defender's neighbours may throw in
   transfer: boolean // "Переводной" mode enabled
+  allowDraw: boolean // "Ничья" mode enabled
   result: { loser: number | null } | null // loser seat, or null = draw
 }
 
@@ -39,6 +40,7 @@ export interface GameNOptions {
   deck?: number // 24 | 36 | 52
   neighborsOnly?: boolean // "Соседи": only the defender's two neighbours may throw in
   transfer?: boolean // "Переводной": defender may bounce the attack to the next player
+  allowDraw?: boolean // "Ничья": last attack beaten + both emptied = draw (else attacker loses)
 }
 
 const SUITS: Suit[] = ['♠', '♥', '♦', '♣']
@@ -114,6 +116,7 @@ export function createGameN(opts: GameNOptions = {}): DurakNState {
     discard: 0,
     neighborsOnly: !!opts.neighborsOnly,
     transfer: !!opts.transfer,
+    allowDraw: opts.allowDraw ?? true,
     result: null,
   }
 }
@@ -242,7 +245,9 @@ function settle(s: DurakNState) {
   }
   const alive = inPlayCount(s)
   if (alive <= 1) {
-    const loser = s.out.findIndex((o) => !o)
+    let loser = s.out.findIndex((o) => !o) // the lone survivor is the дурак
+    // everyone emptied at once: "Ничья" → draw; "Классика" → the last attacker loses
+    if (loser < 0) loser = s.allowDraw ? -1 : s.attacker
     s.result = { loser: loser < 0 ? null : loser }
   }
 }

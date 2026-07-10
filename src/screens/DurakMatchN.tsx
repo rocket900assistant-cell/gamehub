@@ -27,6 +27,7 @@ interface DurakMatchNProps {
   deck: number
   neighborsOnly: boolean
   transfer: boolean
+  allowDraw: boolean
   myName?: string
   onExit: () => void
 }
@@ -39,12 +40,12 @@ const FELT_BASE: React.CSSProperties = {
 
 const ME = 0
 
-export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, myName, onExit }: DurakMatchNProps) {
+export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, allowDraw, myName, onExit }: DurakMatchNProps) {
   const felt = useMemo(
     () => ({ ...FELT_BASE, backgroundImage: `url('${equippedDurakFeltSrc()}')` }),
     [],
   )
-  const [s, setS] = useState<DurakNState>(() => createGameN({ players, deck, neighborsOnly, transfer }))
+  const [s, setS] = useState<DurakNState>(() => createGameN({ players, deck, neighborsOnly, transfer, allowDraw }))
   const [drag, setDrag] = useState<{ card: Card; x: number; y: number } | null>(null)
   const [selIdx, setSelIdx] = useState(-1)
 
@@ -145,8 +146,9 @@ export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, myNa
           : t('durak.throwOrBeat')
 
   const opponents = Array.from({ length: s.n - 1 }, (_, i) => i + 1)
+  const draw = s.result != null && s.result.loser === null
   const iLost = s.result?.loser === ME
-  const iWon = s.result != null && !iLost
+  const iWon = s.result != null && !iLost && !draw
 
   return (
     <div
@@ -308,13 +310,15 @@ export function DurakMatchN({ user, players, deck, neighborsOnly, transfer, myNa
       {s.result && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6">
           <div className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
-            <p className="text-2xl font-extrabold">{iLost ? t('match.youLost') : t('match.youWon')}</p>
+            <p className="text-2xl font-extrabold">
+              {draw ? t('match.draw') : iLost ? t('match.youLost') : t('match.youWon')}
+            </p>
             <p className="mt-1 text-sm text-muted">{t('match.botUnrated')}</p>
             <div className="mt-6 flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={onExit}>
                 {t('match.toMenu')}
               </Button>
-              <Button className="flex-1" onClick={() => setS(createGameN({ players, deck, neighborsOnly, transfer }))}>
+              <Button className="flex-1" onClick={() => setS(createGameN({ players, deck, neighborsOnly, transfer, allowDraw }))}>
                 <RotateCcw size={16} /> {t('match.again')}
               </Button>
             </div>
