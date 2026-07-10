@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, RotateCcw } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronLeft, Flag, Gem, MessageCircle, RotateCcw, Send, X } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { PlayingCard } from '../components/PlayingCard'
 import { Confetti } from '../components/Confetti'
-import { HandFan, CardFan, PlayerTile } from './DurakMatch'
-import { equippedDurakFeltSrc } from '../lib/skins'
+import { HandFan, CardFan, PlayerTile, ConfirmDialog } from './DurakMatch'
+import { equippedDurakFeltSrc, isVip } from '../lib/skins'
 import { t } from '../lib/i18n'
 import { getSocket } from '../lib/socket'
+import { player } from '../data/mock'
 import { displayName, type TgUser } from '../lib/telegram'
 import {
   createGameN,
@@ -18,6 +19,7 @@ import {
   beginTake,
   pass as enginePass,
   canTake,
+  resign as engineResign,
   type Card,
   type DurakNState,
 } from '../lib/durakN'
@@ -80,9 +82,31 @@ export function DurakMatchN({
   const [seats, setSeats] = useState<SeatInfo[]>(() => online?.seats ?? [])
   const [drag, setDrag] = useState<{ card: Card; x: number; y: number } | null>(null)
   const [selIdx, setSelIdx] = useState(-1)
+  const [confirmResign, setConfirmResign] = useState(false)
 
-  // ── online: server-authoritative state + move clock ──
-  const [deadline, setDeadline] = useState(() => online?.deadline ?? 0)
+  // ── chat ──
+  const [chatOpen, setChatOpen] = useState(false)
+  const chatOpenRef = useRef(false)
+  useEffect(() => {
+    chatOpenRef.current = chatOpen
+  }, [chatOpen])
+  const [messages, setMessages] = useState<{ mine: boolean; text: string }[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [unread, setUnread] = useState(0)
+  const openChat = () => {
+    setChatOpen(true)
+    setUnread(0)
+  }
+  const sendChat = () => {
+    const txt = chatInput.trim()
+    if (!txt) return
+    setMessages((m) => [...m, { mine: true, text: txt }])
+    if (isOnline) getSocket().emit('chat', { roomId: online!.roomId, text: txt })
+    setChatInput('')
+  }
+
+  // ── move clock (1 min / turn — server-driven online, local otherwise) ──
+  const [deadline, setDeadline] = useState(() => online?.deadline ?? Date.now() + MOVE_MS)
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!isOnline) return
@@ -99,19 +123,40 @@ export function DurakMatchN({
           : { ...cur, result: { loser: g.draw ? null : g.youWon === false ? me : -1 } },
       )
     }
+    const onChat = (m: { text: string }) => {
+      setMessages((prev) => [...prev, { mine: false, text: m.text }])
+      if (!chatOpenRef.current) setUnread((u) => u + 1)
+    }
     sock.on('durakn:state', onState)
     sock.on('game:over', onOver)
+    sock.on('chat:msg', onChat)
     return () => {
       sock.off('durakn:state', onState)
       sock.off('game:over', onOver)
+      sock.off('chat:msg', onChat)
     }
   }, [isOnline, me])
 
+  // tick the clock while a game is live
   useEffect(() => {
-    if (!isOnline || s.result) return
+    if (s.result) return
     const id = setInterval(() => setNow(Date.now()), 250)
     return () => clearInterval(id)
-  }, [isOnline, s.result])
+  }, [s.result])
+
+  // local: (re)start the 1-min clock each time it becomes my turn; fold on timeout
+  useEffect(() => {
+    if (isOnline || s.result || s.turn !== me) return
+    setDeadline(Date.now() + MOVE_MS)
+  }, [isOnline, s.turn, s.result, me])
+  useEffect(() => {
+    if (isOnline || s.result || s.turn !== me) return
+    const id = setTimeout(
+      () => setS((cur) => (cur.result || cur.turn !== me ? cur : engineResign(cur, me))),
+      Math.max(0, deadline - Date.now()),
+    )
+    return () => clearTimeout(id)
+  }, [isOnline, s, deadline, me])
 
   // Bots (local only) auto-play until it's the human's turn or the game ends.
   useEffect(() => {
@@ -131,8 +176,16 @@ export function DurakMatchN({
   const takeNow = myTurn && canTake(s)
 
   const remaining = Math.max(0, deadline - now)
-  const clockFor = (seat: number) =>
-    isOnline && !s.result && s.turn === seat ? remaining / MOVE_MS : null
+  const clockFor = (seat: number) => {
+    if (s.result || s.turn !== seat) return null
+    if (isOnline) return remaining / MOVE_MS // server clock on the active seat
+    return seat === me ? remaining / MOVE_MS : null // local: only my own clock
+  }
+  const doResign = () => {
+    setConfirmResign(false)
+    if (isOnline) getSocket().emit('resign', { roomId: online!.roomId })
+    else setS((cur) => (cur.result ? cur : engineResign(cur, me)))
+  }
 
   const apply = (next: DurakNState) => {
     if (next !== s) setS(next)
@@ -245,13 +298,20 @@ export function DurakMatchN({
       />
 
       {/* top bar */}
-      <div className="relative z-10 flex items-center px-3 pt-[calc(0.4rem+env(safe-area-inset-top))]">
+      <div className="relative z-10 flex items-center gap-2 px-3 pt-[calc(0.4rem+env(safe-area-inset-top))]">
         <button
           onClick={onExit}
           aria-label="Выход"
           className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-white/90 backdrop-blur active:scale-95"
         >
           <ChevronLeft size={20} />
+        </button>
+        <button
+          onClick={() => setConfirmResign(true)}
+          aria-label="Сдаться"
+          className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-white/90 backdrop-blur active:scale-95"
+        >
+          <Flag size={17} />
         </button>
         <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-sm font-bold tracking-wide text-white/90">
           {`${t('game.durak')} · ${s.n} ${t('durakN.players')}`}
@@ -385,11 +445,29 @@ export function DurakMatchN({
             progress={clockFor(me)}
             photo={user.photoUrl}
             role={roleOf(me)}
+            vip={isVip()}
             you
             onLight
           />
         </div>
-        <div className="w-24 shrink-0" />
+        <div className="flex w-24 shrink-0 items-center justify-end gap-2">
+          <button
+            onClick={openChat}
+            aria-label="Чат"
+            className="relative grid h-9 w-9 place-items-center rounded-full bg-bg text-ink active:scale-95"
+          >
+            <MessageCircle size={18} />
+            {unread > 0 && (
+              <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">
+                {unread}
+              </span>
+            )}
+          </button>
+          <span className="flex items-center gap-1 rounded-full bg-bg px-2 py-1 text-sm font-extrabold text-ink">
+            {player.balance}
+            <Gem size={13} className="text-gold" />
+          </span>
+        </div>
       </div>
 
       {/* dragged card follows the finger */}
@@ -400,6 +478,60 @@ export function DurakMatchN({
         >
           <PlayingCard card={drag.card} size="lg" className="shadow-[0_12px_28px_rgba(0,0,0,0.5)]" />
         </div>
+      )}
+
+      {/* chat bottom sheet */}
+      {chatOpen && (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => setChatOpen(false)}>
+          <div
+            className="mx-auto flex h-[58%] w-full max-w-md flex-col rounded-t-[24px] bg-surface"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-line p-4">
+              <p className="font-bold">{t('match.chat')}</p>
+              <button onClick={() => setChatOpen(false)} aria-label="Закрыть">
+                <X size={20} className="text-muted" />
+              </button>
+            </div>
+            <div className="flex-1 space-y-2 overflow-y-auto p-4">
+              {messages.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted">{t('match.noMessages')}</p>
+              ) : (
+                messages.map((m, i) => (
+                  <div key={i} className={`flex ${m.mine ? 'justify-end' : 'justify-start'}`}>
+                    <span
+                      className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
+                        m.mine ? 'bg-gradient-to-b from-gold to-gold-dark text-white' : 'bg-bg text-ink'
+                      }`}
+                    >
+                      {m.text}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="flex items-center gap-2 border-t border-line p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && sendChat()}
+                placeholder={t('match.messagePlaceholder')}
+                className="h-11 flex-1 rounded-[var(--radius-input)] border border-line bg-bg px-3 text-[15px] outline-none placeholder:text-muted"
+              />
+              <button
+                onClick={sendChat}
+                aria-label="Отправить"
+                className="grid h-11 w-11 place-items-center rounded-[var(--radius-input)] bg-gradient-to-b from-gold to-gold-dark text-white"
+              >
+                <Send size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmResign && !s.result && (
+        <ConfirmDialog money={false} onCancel={() => setConfirmResign(false)} onConfirm={doResign} />
       )}
 
       {/* game over */}

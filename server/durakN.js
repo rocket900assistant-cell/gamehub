@@ -335,17 +335,12 @@ export function finishTake(s) {
   return n
 }
 
+// Concede / move-timeout / disconnect: the player gives up → they are the дурак,
+// the game ends. (Must NOT mark them `out`, which means "escaped safely" = a win.)
 export function resign(s, seat) {
   if (s.result) return s
   const n = clone(s)
-  n.out[seat] = true
-  const alive = inPlayCount(n)
-  if (alive <= 1) {
-    const loser = n.out.findIndex((o) => !o)
-    n.result = { loser: loser < 0 ? seat : loser }
-  } else if (n.turn === seat || n.attacker === seat || n.defender === seat) {
-    startBout(n, nextIn(n.out, seat))
-  }
+  n.result = { loser: seat }
   return n
 }
 

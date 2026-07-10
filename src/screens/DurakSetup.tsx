@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Bot, Gem, List, Lock, Minus, Plus, Swords, UserPlus } from 'lucide-react'
+import { ArrowLeft, Bot, Gem, List, Minus, Plus, Swords, UserPlus } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { cn } from '../lib/cn'
@@ -198,7 +198,6 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite, onLobby }
   const [transfer, setTransfer] = useState(false)
   const [throwAll, setThrowAll] = useState(false)
   const [draw, setDraw] = useState(false)
-  const [privateGame, setPrivateGame] = useState(false)
 
   const num = parseFloat(stakeText) || 0
   const setNum = (n: number) => setStakeText(fmtNum(Math.max(MIN_STAKE, n)))
@@ -317,24 +316,6 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite, onLobby }
         </div>
       </Section>
 
-      <button
-        onClick={() => setPrivateGame((v) => !v)}
-        className="flex w-full items-center gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4 text-left"
-      >
-        <span
-          className={cn(
-            'grid h-6 w-6 place-items-center rounded-md border',
-            privateGame ? 'border-gold bg-gold text-white' : 'border-line',
-          )}
-        >
-          {privateGame && <Lock size={13} />}
-        </span>
-        <div className="flex-1">
-          <p className="font-bold leading-tight">{t('durak.privateGame')}</p>
-          <p className="text-xs text-muted">{t('durak.privateHint')}</p>
-        </div>
-      </button>
-
       <div className="space-y-3">
         <Button size="lg" className="w-full" onClick={() => onQuickMatch(deck, transfer, players, throwAll, draw)}>
           <Swords size={18} /> {t('setup.quickOnline')}
@@ -383,7 +364,7 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite, onLobby }
               transfer,
               throwAll,
               draw,
-              privateGame,
+              privateGame: false,
             })
           }
         >

@@ -1064,6 +1064,14 @@ io.on('connection', (socket) => {
   socket.on('resign', ({ roomId }) => {
     const room = rooms.get(roomId)
     if (!room || room.over) return
+    if (room.game === 'durakn') {
+      const seat = seatOf(room, socketUser.get(socket.id))
+      if (seat >= 0 && !room.durakN.result) {
+        room.durakN = durakN.resign(room.durakN, seat) // fold → that seat is out
+        durakNAfter(room)
+      }
+      return
+    }
     const color = room.players.find(
       (p) => p.userId === socketUser.get(socket.id),
     )?.color

@@ -936,7 +936,7 @@ export function HandFan({
   )
 }
 
-function ConfirmDialog({
+export function ConfirmDialog({
   money,
   onCancel,
   onConfirm,
