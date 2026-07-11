@@ -321,6 +321,14 @@ const httpServer = createServer((req, res) => {
     })
     return
   }
+  if (req.method === 'GET' && req.url === '/status') {
+    // Non-sensitive readiness probe: exposes ONLY whether the payout sender
+    // initialised (true iff the seed matched HOT_TON_ADDRESS). No address, no
+    // balance, no secrets — safe to be public.
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, senderReady: senderReady() }))
+    return
+  }
   res.writeHead(200, { 'content-type': 'text/plain' })
   res.end('GameHub realtime server ok')
 })
