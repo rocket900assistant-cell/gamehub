@@ -5,8 +5,8 @@ import { useEffect, useState } from 'react'
 // Purely presentational — not tied to real presence.
 const MIN = 100
 const MAX = 1500
-const STEP = 45 // max change per tick — small, so it reads as natural fluctuation
-const TICK_MS = 2500
+const STEP = 60 // max change per tick — small, so it reads as natural fluctuation
+const TICK_MS = 60000 // update once a minute (calm, not distracting)
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a)
 const clamp = (n: number) => Math.max(MIN, Math.min(MAX, n))
