@@ -60,6 +60,7 @@ const D: Record<string, Entry> = {
   'wallet.address': { ru: 'Адрес', en: 'Address' },
   'wallet.comment': { ru: 'Комментарий (обязательно)', en: 'Comment (required)' },
   'wallet.commentWarn': { ru: '⚠️ Без этого комментария платёж не зачислится', en: '⚠️ Without this comment the payment won’t be credited' },
+  'wallet.credited': { ru: 'Пополнение зачислено', en: 'Deposit credited' },
   'common.chosen': { ru: 'Выбрано', en: 'Selected' },
   'common.delete': { ru: 'Удалить', en: 'Delete' },
   'common.back': { ru: 'Назад', en: 'Back' },

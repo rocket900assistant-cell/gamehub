@@ -44,11 +44,19 @@ export function Wallet({ balance, address, onBack }: WalletProps) {
   useEffect(() => {
     const s = getSocket()
     const onHistory = (p: { items: GramTx[] }) => setHistory(p.items ?? [])
+    const onCredited = (p: { amount: number }) => {
+      setDeposit(null)
+      setNotice(`${t('wallet.credited')} +${p.amount} GRAM`)
+      s.emit('gram:history') // refresh the list
+    }
     s.on('gram:history', onHistory)
+    s.on('gram:credited', onCredited)
     s.emit('gram:history')
     return () => {
       s.off('gram:history', onHistory)
+      s.off('gram:credited', onCredited)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const copy = (text: string, which: string) => {

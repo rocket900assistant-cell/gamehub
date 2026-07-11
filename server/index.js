@@ -418,6 +418,70 @@ async function setupWebhook() {
 }
 setupWebhook()
 
+// ── GRAM deposit watcher: credit incoming TON transfers by their comment tag ──
+const TONAPI = 'https://tonapi.io'
+const TONAPI_KEY = process.env.TONAPI_KEY
+let platformRaw = null // our address in raw 0:.. form (for the direction check)
+let pollingDeposits = false
+
+async function tonapi(path) {
+  const headers = TONAPI_KEY ? { Authorization: `Bearer ${TONAPI_KEY}` } : {}
+  const r = await fetch(TONAPI + path, { headers })
+  if (!r.ok) throw new Error('tonapi ' + r.status)
+  return r.json()
+}
+
+async function pollDeposits() {
+  if (!PLATFORM_TON_ADDRESS || !dbEnabled || pollingDeposits) return
+  pollingDeposits = true
+  try {
+    if (!platformRaw) {
+      const acc = await tonapi(`/v2/accounts/${PLATFORM_TON_ADDRESS}`)
+      platformRaw = acc?.address || null
+    }
+    const data = await tonapi(`/v2/accounts/${PLATFORM_TON_ADDRESS}/events?limit=50`)
+    for (const ev of data.events || []) {
+      const actions = ev.actions || []
+      for (let i = 0; i < actions.length; i++) {
+        const a = actions[i]
+        if (a.type !== 'TonTransfer' || (a.status && a.status !== 'ok')) continue
+        const tr = a.TonTransfer
+        const comment = tr?.comment && String(tr.comment).trim()
+        if (!comment) continue
+        if (platformRaw && tr.recipient?.address !== platformRaw) continue // must be INCOMING
+        const tgId = await userByDepositTag(comment)
+        if (!tgId) continue
+        const gram = Math.round((Number(tr.amount) / 1e9) * 100) / 100
+        if (!(gram > 0)) continue
+        const ref = `ton:${ev.event_id}:${i}`
+        const newBal = await adjustGram({ tgId, delta: gram, kind: 'deposit', ref, meta: { from: tr.sender?.address ?? null } })
+        if (newBal != null) {
+          // first time this tx is seen → credited; notify the player if online
+          const sid = tgSocket.get(Number(tgId))
+          if (sid) {
+            io.to(sid).emit('gram:credited', { amount: gram, balance: newBal })
+            try {
+              const row = await getUser(tgId)
+              if (row) io.to(sid).emit('profile', dbProfile(row))
+            } catch {
+              /* ignore */
+            }
+          }
+          console.log(`[gram] credited +${gram} → tg ${tgId} (${ref})`)
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[gram] pollDeposits:', e.message)
+  } finally {
+    pollingDeposits = false
+  }
+}
+if (PLATFORM_TON_ADDRESS) {
+  setInterval(pollDeposits, 25000)
+  console.log('[gram] deposit watcher on for', PLATFORM_TON_ADDRESS)
+}
+
 function emitToRoom(room, event, payload) {
   for (const p of room.players) {
     const sid = sidOf(p.userId)
