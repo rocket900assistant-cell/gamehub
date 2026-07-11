@@ -192,6 +192,7 @@ function lobbySummary() {
       transfer: !!r.durakN.transfer,
       neighborsOnly: !!r.durakN.neighborsOnly,
       allowDraw: !!r.durakN.allowDraw,
+      stake: r.stake || 0,
     })
   }
   return list
@@ -218,6 +219,7 @@ function emitLobbyState(room) {
       transfer: !!room.durakN.transfer,
       neighborsOnly: !!room.durakN.neighborsOnly,
       allowDraw: !!room.durakN.allowDraw,
+      stake: room.stake || 0,
       seats: room.players.map((x) => ({ name: x.name, vip: x.vip, photoUrl: x.photoUrl ?? null })),
     })
   }
@@ -897,6 +899,13 @@ function tick(room) {
 }
 
 // ── GRAM stakes: escrow at start, settle at end (human-vs-human only) ──
+/** Does this player (human) have enough GRAM to cover a stake? */
+async function canAffordStake(userId, stake) {
+  const tgId = userTg.get(userId)
+  if (!tgId || !dbEnabled) return false
+  return (await getBalance(tgId)) >= stake
+}
+
 /** Debit each human player's stake into escrow when a staked game begins. Idempotent. */
 function escrowStakes(room) {
   if (!(room.stake > 0) || !dbEnabled || room.escrowed) return
@@ -1269,15 +1278,18 @@ io.on('connection', (socket) => {
   })
   socket.on('lobby:unsubscribe', () => lobbyWatchers.delete(socket.id))
 
-  socket.on('lobby:create', (opts, cb) => {
+  socket.on('lobby:create', async (opts, cb) => {
     const userId = socketUser.get(socket.id)
     if (!userId) return
+    const st = opts?.stake > 0 ? Math.round(opts.stake * 100) / 100 : 0
+    if (st > 0 && !(await canAffordStake(userId, st))) return socket.emit('stake:error', { reason: 'balance' })
     leaveLobby(userId) // one open lobby per player
     const roomId = createRoom('durakn', opts?.deck || 36, {
       players: Math.max(2, Math.min(6, opts?.players ?? 3)),
       transfer: !!opts?.transfer,
       neighborsOnly: !!opts?.neighborsOnly,
       allowDraw: opts?.allowDraw ?? true,
+      stake: st,
     })
     addPlayer(rooms.get(roomId), userId)
     cb?.(roomId)
@@ -1285,12 +1297,14 @@ io.on('connection', (socket) => {
     broadcastLobbies()
   })
 
-  socket.on('lobby:join', ({ roomId }) => {
+  socket.on('lobby:join', async ({ roomId }) => {
     const userId = socketUser.get(socket.id)
     if (!userId) return
+    const room = rooms.get(roomId)
+    if (room?.stake > 0 && !(await canAffordStake(userId, room.stake)))
+      return socket.emit('stake:error', { reason: 'balance' })
     leaveLobby(userId)
-    if (joinDurakNLobby(rooms.get(roomId), userId) === 'gone')
-      socket.emit('lobby:gone', { roomId })
+    if (joinDurakNLobby(room, userId) === 'gone') socket.emit('lobby:gone', { roomId })
   })
 
   socket.on('lobby:start', ({ roomId }) => {
@@ -1298,7 +1312,10 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomId)
     if (!room || room.game !== 'durakn' || room.started || room.over) return
     if (room.players[0]?.userId !== userId) return // host only
-    startRoom(room) // remaining empty seats become bots
+    // staked lobbies are human-only (bots can't stake) — can't fill with bots
+    if (room.stake > 0 && room.players.length < room.seats)
+      return socket.emit('stake:error', { reason: 'need-humans' })
+    startRoom(room) // free games: remaining empty seats become bots
     broadcastLobbies()
   })
 

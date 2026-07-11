@@ -179,6 +179,7 @@ export interface LobbyCfg {
   transfer: boolean
   neighborsOnly: boolean
   allowDraw: boolean
+  stake: number
 }
 
 interface DurakSetupProps {
@@ -326,7 +327,7 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite, onLobby }
             variant="secondary"
             className="w-full"
             onClick={() =>
-              onLobby('browse', { players, deck, transfer, neighborsOnly: !throwAll, allowDraw: draw })
+              onLobby('browse', { players, deck, transfer, neighborsOnly: !throwAll, allowDraw: draw, stake: free ? 0 : Math.max(MIN_STAKE, num) })
             }
           >
             <List size={18} /> {t('lobby.open')}
@@ -336,7 +337,7 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite, onLobby }
             variant="secondary"
             className="w-full"
             onClick={() =>
-              onLobby('create', { players, deck, transfer, neighborsOnly: !throwAll, allowDraw: draw })
+              onLobby('create', { players, deck, transfer, neighborsOnly: !throwAll, allowDraw: draw, stake: free ? 0 : Math.max(MIN_STAKE, num) })
             }
           >
             <Plus size={18} /> {t('lobby.create')}

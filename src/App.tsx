@@ -252,6 +252,7 @@ export default function App() {
           transfer: st.transfer,
           neighborsOnly: st.neighborsOnly,
           allowDraw: st.allowDraw,
+          stake: st.stake ?? 0,
         },
         initial: st,
       })

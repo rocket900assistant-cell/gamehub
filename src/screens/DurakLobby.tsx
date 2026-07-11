@@ -17,6 +17,7 @@ interface LobbyRow {
   transfer: boolean
   neighborsOnly: boolean
   allowDraw: boolean
+  stake: number
 }
 
 export interface LobbyState {
@@ -29,6 +30,7 @@ export interface LobbyState {
   transfer: boolean
   neighborsOnly: boolean
   allowDraw: boolean
+  stake: number
   seats: { name: string; vip: boolean; photoUrl?: string | null }[]
 }
 
@@ -46,15 +48,22 @@ function ConfigChips({
   transfer,
   neighborsOnly,
   allowDraw,
+  stake,
 }: {
   deck: number
   transfer: boolean
   neighborsOnly: boolean
   allowDraw: boolean
+  stake?: number
 }) {
   const chip = 'rounded-md bg-bg px-1.5 py-0.5 text-[10px] font-bold text-muted'
   return (
     <div className="flex flex-wrap items-center gap-1">
+      {stake && stake > 0 ? (
+        <span className="rounded-md bg-gold-light/60 px-1.5 py-0.5 text-[10px] font-extrabold text-gold-dark">
+          {stake} GRAM
+        </span>
+      ) : null}
       <span className={chip}>{deck}</span>
       <span className={chip}>{transfer ? t('durak.mode.perevodnoy') : t('durak.mode.podkidnoy')}</span>
       <span className={chip}>{neighborsOnly ? t('durak.mode.sosedi') : t('durak.mode.vse')}</span>
@@ -159,6 +168,7 @@ export function DurakLobby({ mode, cfg, friends, initial, onBack }: DurakLobbyPr
               transfer={current.transfer}
               neighborsOnly={current.neighborsOnly}
               allowDraw={current.allowDraw}
+              stake={current.stake}
             />
             <span className="flex items-center gap-1 rounded-full bg-gold-light/60 px-2.5 py-1 text-sm font-extrabold text-gold-dark">
               <Users size={14} /> {current.filled}/{current.capacity}
@@ -312,6 +322,7 @@ export function DurakLobby({ mode, cfg, friends, initial, onBack }: DurakLobbyPr
                     transfer={l.transfer}
                     neighborsOnly={l.neighborsOnly}
                     allowDraw={l.allowDraw}
+                    stake={l.stake}
                   />
                 </div>
               </div>
