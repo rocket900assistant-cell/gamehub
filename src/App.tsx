@@ -17,7 +17,7 @@ import { DurakLobby, type LobbyState } from './screens/DurakLobby'
 import { NardyMatch, hasNardySave, type OnlineNardy } from './screens/NardyMatch'
 import { NardySetup, type NardyConfig } from './screens/NardySetup'
 import { Matchmaking } from './screens/Matchmaking'
-import { isVip, syncVip } from './lib/skins'
+import { isVip, syncVip, syncEntitlements, grantSkin } from './lib/skins'
 import { onLangChange, t } from './lib/i18n'
 import {
   initTelegram,
@@ -244,6 +244,12 @@ export default function App() {
       setMatchmaking(null)
       setSub('durak-lobby')
     }
+    // Shop: server is the source of truth for owned skins + a confirmed purchase.
+    const onEntitlements = (p: { items: string[] }) => syncEntitlements(p.items ?? [])
+    const onGranted = (g: { product: string }) => {
+      if (g.product === 'vip') syncVip(true)
+      else if (g.product.startsWith('skin:')) grantSkin(g.product.slice(5))
+    }
     s.on('match:found', onFound)
     s.on('lobby:state', onLobbyState)
     s.on('invite:incoming', onInvite)
@@ -252,6 +258,8 @@ export default function App() {
     s.on('history', onHistory)
     s.on('elo:trend', onEloTrend)
     s.on('invite:offline', onInviteOffline)
+    s.on('shop:entitlements', onEntitlements)
+    s.on('shop:granted', onGranted)
 
     // Opened via a deep link.
     const sp = getStartParam()
@@ -275,6 +283,8 @@ export default function App() {
       s.off('history', onHistory)
       s.off('elo:trend', onEloTrend)
       s.off('invite:offline', onInviteOffline)
+      s.off('shop:entitlements', onEntitlements)
+      s.off('shop:granted', onGranted)
     }
   }, [])
 

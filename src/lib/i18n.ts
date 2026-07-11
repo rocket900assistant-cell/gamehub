@@ -143,6 +143,7 @@ const D: Record<string, Entry> = {
   'store.vipTitle': { ru: 'VIP статус', en: 'VIP status' },
   'store.purchase': { ru: 'Покупка', en: 'Purchase' },
   'store.payWithStars': { ru: 'Оплата звёздами Telegram', en: 'Pay with Telegram Stars' },
+  'store.buyError': { ru: 'Не удалось открыть оплату. Попробуйте ещё раз.', en: "Couldn't open payment. Try again." },
   'store.buyFor': { ru: 'Купить за', en: 'Buy for' },
   // setup screens
   'setup.quickOnline': { ru: 'Быстрая игра (онлайн)', en: 'Quick game (online)' },

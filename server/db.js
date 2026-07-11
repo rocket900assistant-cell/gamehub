@@ -61,8 +61,63 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS elo_history_user ON elo_history (tg_id, game, id);
+    CREATE TABLE IF NOT EXISTS payments (
+      id         BIGSERIAL PRIMARY KEY,
+      tg_id      BIGINT NOT NULL,
+      product    TEXT NOT NULL,
+      stars      INT NOT NULL,
+      charge_id  TEXT UNIQUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS entitlements (
+      tg_id      BIGINT NOT NULL,
+      item       TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (tg_id, item)
+    );
   `)
   console.log('[db] ready')
+}
+
+/** Log a Stars payment. Idempotent on charge_id — returns true only the FIRST time. */
+export async function recordPayment({ tgId, product, stars, chargeId }) {
+  if (!pool || !tgId) return true // no DB: treat as new so the grant still runs locally
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO payments (tg_id, product, stars, charge_id) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (charge_id) DO NOTHING RETURNING id`,
+      [tgId, product, stars, chargeId ?? null],
+    )
+    return rows.length > 0 // false = duplicate charge, already processed
+  } catch (e) {
+    console.error('[db] recordPayment failed:', e.message)
+    return false
+  }
+}
+
+/** Grant a durable entitlement (owned skin, etc.). Idempotent. */
+export async function grantEntitlement(tgId, item) {
+  if (!pool || !tgId) return
+  try {
+    await pool.query(
+      'INSERT INTO entitlements (tg_id, item) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+      [tgId, item],
+    )
+  } catch (e) {
+    console.error('[db] grantEntitlement failed:', e.message)
+  }
+}
+
+/** All items a player owns. */
+export async function getEntitlements(tgId) {
+  if (!pool || !tgId) return []
+  try {
+    const { rows } = await pool.query('SELECT item FROM entitlements WHERE tg_id = $1', [tgId])
+    return rows.map((r) => r.item)
+  } catch (e) {
+    console.error('[db] getEntitlements failed:', e.message)
+    return []
+  }
 }
 
 // In-memory fallback so friends work in local dev without a database.

@@ -157,6 +157,18 @@ export function buy(id: string) {
   write(OWNED_KEY, JSON.stringify([...owned]))
 }
 
+/** Reconcile owned skins with the server (paid items live server-side).
+ *  `items` are entitlement ids like "skin:dubrovny"; we own their skin id. */
+export function syncEntitlements(items: string[]) {
+  const owned = new Set(items.filter((i) => i.startsWith('skin:')).map((i) => i.slice(5)))
+  write(OWNED_KEY, JSON.stringify([...owned]))
+}
+
+/** Grant a single skin locally (after a confirmed Stars purchase). */
+export function grantSkin(id: string) {
+  buy(id)
+}
+
 export function getEquippedPieceId(): string {
   const id = read(EQUIP_PIECE_KEY) ?? FREE_PIECE
   return PIECE_SKINS.some((s) => s.id === id) && isOwned(id) ? id : FREE_PIECE

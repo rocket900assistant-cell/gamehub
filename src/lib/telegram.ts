@@ -21,6 +21,7 @@ interface TelegramWebApp {
   setHeaderColor?: (color: string) => void
   disableVerticalSwipes?: () => void
   onEvent?: (event: string, cb: () => void) => void
+  openInvoice?: (url: string, callback?: (status: string) => void) => void
   viewportStableHeight?: number
   viewportHeight?: number
   initData?: string
@@ -46,6 +47,18 @@ export function openStarsBot() {
   const wa = getWebApp()
   if (wa?.openTelegramLink) wa.openTelegramLink(STARS_BOT_URL)
   else window.open(STARS_BOT_URL, '_blank')
+}
+
+/** Open Telegram's native Stars payment sheet for an invoice link; resolves with the status. */
+export function openStarsInvoice(link: string): Promise<string> {
+  return new Promise((resolve) => {
+    const wa = getWebApp()
+    if (wa?.openInvoice) wa.openInvoice(link, (status) => resolve(status))
+    else {
+      window.open(link, '_blank')
+      resolve('unknown')
+    }
+  })
 }
 
 /** Deep link that opens the mini app straight into a specific game room. */

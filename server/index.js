@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements } from './db.js'
 import { verifyInitData } from './telegram.js'
 import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther } from './nardy.js'
 import * as durak from './durak.js'
@@ -266,13 +266,137 @@ async function pushFriends(tgId) {
   io.to(sid).emit('friends', await friendListFor(tgId))
 }
 
-// HTTP server with a health-check route (Render pings "/").
+// ── Telegram Stars payments ──
+const BOT_TOKEN = process.env.BOT_TOKEN
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'gh_' + (BOT_TOKEN ? BOT_TOKEN.slice(-10).replace(/\W/g, '') : 'dev')
+const WEBHOOK_PATH = `/tg/${WEBHOOK_SECRET}`
+
+// HTTP server: health-check ("/") + the Telegram webhook (payments).
 const httpServer = createServer((req, res) => {
+  if (req.method === 'POST' && req.url === WEBHOOK_PATH) {
+    if (req.headers['x-telegram-bot-api-secret-token'] !== WEBHOOK_SECRET) {
+      res.writeHead(401)
+      res.end()
+      return
+    }
+    let body = ''
+    req.on('data', (c) => {
+      body += c
+      if (body.length > 1e6) req.destroy()
+    })
+    req.on('end', () => {
+      res.writeHead(200)
+      res.end('ok') // acknowledge fast, then process
+      try {
+        handleTgUpdate(JSON.parse(body))
+      } catch (e) {
+        console.error('[tg] webhook parse:', e.message)
+      }
+    })
+    return
+  }
   res.writeHead(200, { 'content-type': 'text/plain' })
   res.end('GameHub realtime server ok')
 })
 httpServer.listen(PORT)
 const io = new Server(httpServer, { cors: { origin: '*' } })
+
+/** Call the Telegram Bot API. */
+async function callTG(method, params) {
+  if (!BOT_TOKEN) return null
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(params),
+    })
+    const j = await r.json()
+    if (!j.ok) console.error('[tg]', method, 'failed:', j.description)
+    return j.ok ? j.result : null
+  } catch (e) {
+    console.error('[tg]', method, 'error:', e.message)
+    return null
+  }
+}
+
+// Shop prices live on the SERVER (client can't tamper them).
+const VIP_PRICE_STARS = 999
+const SKIN_PRICE_STARS = 150
+function productInfo(product) {
+  if (product === 'vip') return { title: 'VIP статус', description: 'VIP в GameHub: все скины и привилегии', stars: VIP_PRICE_STARS }
+  if (typeof product === 'string' && product.startsWith('skin:')) return { title: 'Скин', description: 'Скин для GameHub', stars: SKIN_PRICE_STARS }
+  return null
+}
+
+/** Create a Telegram Stars invoice link for `product` bought by `userId`. */
+async function createStarsInvoice(userId, product) {
+  const info = productInfo(product)
+  if (!info) return null
+  return callTG('createInvoiceLink', {
+    title: info.title,
+    description: info.description,
+    payload: `${userId}::${product}`, // who + what — checked on successful_payment
+    currency: 'XTR', // Telegram Stars
+    prices: [{ label: info.title, amount: info.stars }],
+  })
+}
+
+/** Apply a paid product to the buyer and push the update to their client. */
+async function grantProduct(tgId, userId, product) {
+  if (product === 'vip') await setUserVip(tgId, true)
+  else if (product.startsWith('skin:')) await grantEntitlement(tgId, product)
+  const sid = (userId && sidOf(userId)) || (tgId && tgSocket.get(Number(tgId)))
+  if (sid) {
+    io.to(sid).emit('shop:granted', { product })
+    try {
+      const row = await getUser(tgId)
+      if (row) io.to(sid).emit('profile', dbProfile(row))
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Telegram webhook updates — payments only (pre-checkout + successful payment). */
+async function handleTgUpdate(update) {
+  if (update.pre_checkout_query) {
+    // must be answered within 10s or the charge is cancelled
+    await callTG('answerPreCheckoutQuery', { pre_checkout_query_id: update.pre_checkout_query.id, ok: true })
+    return
+  }
+  const sp = update.message?.successful_payment
+  if (sp) {
+    const tgId = update.message.from?.id
+    const [userId, product] = String(sp.invoice_payload || '').split('::')
+    if (!product || !productInfo(product)) return
+    const fresh = await recordPayment({ tgId, product, stars: sp.total_amount, chargeId: sp.telegram_payment_charge_id })
+    if (fresh) await grantProduct(tgId, userId, product) // grant once per charge (idempotent)
+  }
+}
+
+/** Point Telegram's webhook at this server so payments reach us. */
+async function setupWebhook() {
+  if (!BOT_TOKEN) {
+    console.warn('[tg] BOT_TOKEN not set — payments disabled')
+    return
+  }
+  const base =
+    process.env.RENDER_EXTERNAL_URL ||
+    process.env.PUBLIC_URL ||
+    'https://gamehub-server-6ujx.onrender.com' // known prod URL fallback
+  if (!base) {
+    console.warn('[tg] no public URL — webhook not set; payments will not confirm')
+    return
+  }
+  const url = base.replace(/\/+$/, '') + WEBHOOK_PATH
+  const r = await callTG('setWebhook', {
+    url,
+    secret_token: WEBHOOK_SECRET,
+    allowed_updates: ['message', 'pre_checkout_query'],
+  })
+  console.log('[tg] setWebhook', url, r ? '✓' : '✗')
+}
+setupWebhook()
 
 function emitToRoom(room, event, payload) {
   for (const p of room.players) {
@@ -688,6 +812,8 @@ io.on('connection', (socket) => {
       tgInfo.set(tgId, { name, username, photoUrl, elos: tgInfo.get(tgId)?.elos })
       pushFriends(tgId).catch(() => {})
       for (const f of await friendListFor(tgId)) pushFriends(f.id).catch(() => {})
+      // owned skins (server = source of truth for paid items)
+      getEntitlements(tgId).then((items) => socket.emit('shop:entitlements', { items })).catch(() => {})
     }
 
     // Reconnect: cancel any pending abandon + resume an in-progress game.
@@ -1191,6 +1317,16 @@ io.on('connection', (socket) => {
       (p) => p.userId === socketUser.get(socket.id),
     )?.color
     if (color) endGame(room, color === 'w' ? 'b' : 'w', 'resign')
+  })
+
+  // ── Shop: create a Telegram Stars invoice for a product ──
+  socket.on('shop:buy', async ({ product }, cb) => {
+    const userId = socketUser.get(socket.id)
+    if (!userId) return cb?.({ error: 'no-user' })
+    if (!productInfo(product)) return cb?.({ error: 'bad-product' })
+    if (!BOT_TOKEN) return cb?.({ error: 'payments-off' })
+    const link = await createStarsInvoice(userId, product)
+    cb?.(link ? { link } : { error: 'invoice-failed' })
   })
 
   socket.on('abort', ({ roomId }) => {

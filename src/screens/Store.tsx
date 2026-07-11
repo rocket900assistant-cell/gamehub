@@ -3,7 +3,8 @@ import { Check, Star } from 'lucide-react'
 import { StarBalance } from '../components/ui/StarBalance'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { Button } from '../components/ui/Button'
-import { setVip } from '../lib/socket'
+import { setVip, getSocket } from '../lib/socket'
+import { openStarsInvoice } from '../lib/telegram'
 import { t, tf } from '../lib/i18n'
 import {
   BOARD_SKINS,
@@ -11,7 +12,6 @@ import {
   DURAK_FELTS,
   NARDY_CHECKERS,
   PIECE_SKINS,
-  VIP_PRICE_STARS,
   type BoardSkin,
   type CheckerSkin,
   type ImageSkin,
@@ -192,14 +192,31 @@ function SkinCard({
 export function Store({ balance }: { balance: number }) {
   const [, setRev] = useState(0)
   const refresh = () => setRev((v) => v + 1)
-  // Purchase window: item awaiting confirmation (paid in Telegram Stars).
-  const [pending, setPending] = useState<{ title: string; stars: number; confirm: () => void } | null>(null)
-  const buyFlow = (title: string, stars: number, confirm: () => void) =>
-    setPending({ title, stars, confirm })
-  const confirmPurchase = () => {
-    pending?.confirm()
-    setPending(null)
-    refresh()
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  // Real Telegram Stars purchase: server makes an invoice → native pay sheet →
+  // on success the server grants the item; we also apply it locally right away.
+  const purchase = (product: string, grantLocal: () => void) => {
+    if (busy) return
+    setErr('')
+    setBusy(true)
+    getSocket().emit('shop:buy', { product }, (res: { link?: string; error?: string }) => {
+      if (!res?.link) {
+        setBusy(false)
+        setErr(t('store.buyError'))
+        return
+      }
+      openStarsInvoice(res.link).then((status) => {
+        setBusy(false)
+        if (status === 'paid') {
+          grantLocal()
+          refresh()
+        } else if (status === 'failed') {
+          setErr(t('store.buyError'))
+        }
+      })
+    })
   }
   const equippedPiece = getEquippedPieceId()
   const equippedBoardId = getEquippedBoardId()
@@ -219,7 +236,7 @@ export function Store({ balance }: { balance: number }) {
       <button
         disabled={vip}
         onClick={() =>
-          buyFlow(t('store.vipTitle'), VIP_PRICE_STARS, () => {
+          purchase('vip', () => {
             buyVip()
             setVip()
           })
@@ -250,7 +267,7 @@ export function Store({ balance }: { balance: number }) {
               equipped={equippedPiece === skin.id}
               preview={<PiecePreview skin={skin} />}
               onBuy={() =>
-                buyFlow(skin.name, skin.price, () => {
+                purchase('skin:' + skin.id, () => {
                   buy(skin.id)
                   equipPiece(skin.id)
                 })
@@ -276,7 +293,7 @@ export function Store({ balance }: { balance: number }) {
               equipped={equippedBoardId === skin.id}
               preview={<BoardPreview skin={skin} />}
               onBuy={() =>
-                buyFlow(skin.name, skin.price, () => {
+                purchase('skin:' + skin.id, () => {
                   buy(skin.id)
                   equipBoard(skin.id)
                 })
@@ -302,7 +319,7 @@ export function Store({ balance }: { balance: number }) {
               equipped={equippedBack === skin.id}
               preview={<BackPreview skin={skin} />}
               onBuy={() =>
-                buyFlow(skin.name, skin.price, () => {
+                purchase('skin:' + skin.id, () => {
                   buy(skin.id)
                   equipDurakBack(skin.id)
                 })
@@ -328,7 +345,7 @@ export function Store({ balance }: { balance: number }) {
               equipped={equippedFelt === skin.id}
               preview={<FeltPreview skin={skin} />}
               onBuy={() =>
-                buyFlow(skin.name, skin.price, () => {
+                purchase('skin:' + skin.id, () => {
                   buy(skin.id)
                   equipDurakFelt(skin.id)
                 })
@@ -354,7 +371,7 @@ export function Store({ balance }: { balance: number }) {
               equipped={equippedChecker === skin.id}
               preview={<CheckerPreview skin={skin} />}
               onBuy={() =>
-                buyFlow(skin.name, skin.price, () => {
+                purchase('skin:' + skin.id, () => {
                   buy(skin.id)
                   equipChecker(skin.id)
                 })
@@ -368,35 +385,13 @@ export function Store({ balance }: { balance: number }) {
         </div>
       </section>
 
-      {/* purchase window — pay in Telegram Stars */}
-      {pending && (
+      {/* purchase error toast */}
+      {err && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-6"
-          onClick={() => setPending(null)}
+          className="fixed inset-x-0 bottom-24 z-50 mx-auto w-fit max-w-[90%] rounded-full bg-danger px-4 py-2 text-sm font-semibold text-white shadow-lg"
+          onClick={() => setErr('')}
         >
-          <div
-            className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-gold-light/60 text-gold-dark">
-              <Star size={26} className="fill-current" />
-            </div>
-            <p className="mt-3 text-lg font-extrabold">{t('store.purchase')}</p>
-            <p className="mt-1 text-sm text-muted">{pending.title}</p>
-            <div className="mt-4 flex items-center justify-center gap-1.5 text-3xl font-extrabold">
-              <Star size={24} className="fill-gold text-gold" />
-              {pending.stars.toLocaleString('ru-RU')}
-            </div>
-            <p className="mt-1 text-xs text-muted">{t('store.payWithStars')}</p>
-            <div className="mt-6 flex gap-2">
-              <Button variant="secondary" className="flex-1" onClick={() => setPending(null)}>
-                {t('common.cancel')}
-              </Button>
-              <Button className="flex-1" onClick={confirmPurchase}>
-                {t('store.buyFor')} <PriceTag stars={pending.stars} />
-              </Button>
-            </div>
-          </div>
+          {err}
         </div>
       )}
     </div>
