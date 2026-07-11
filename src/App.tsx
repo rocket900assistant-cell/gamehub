@@ -503,6 +503,7 @@ export default function App() {
           <DurakMatch
             user={user}
             config={null}
+            balance={profile?.balance ?? 0}
             online={durakOnline}
             myName={myName}
             onExit={() => setDurakOnline(null)}
@@ -516,6 +517,7 @@ export default function App() {
           <DurakMatchN
             user={user}
             players={durakNOnline.players}
+            balance={profile?.balance ?? 0}
             deck={0}
             neighborsOnly={false}
             transfer={false}
@@ -633,6 +635,7 @@ export default function App() {
               <DurakMatch
                 user={user}
                 config={durakCfg}
+                balance={profile?.balance ?? 0}
                 resume={durakResume}
                 myName={myName}
                 onExit={() => {
@@ -645,6 +648,7 @@ export default function App() {
               <DurakMatchN
                 user={user}
                 players={durakNCfg.players}
+                balance={profile?.balance ?? 0}
                 deck={durakNCfg.deck}
                 neighborsOnly={durakNCfg.neighborsOnly}
                 transfer={durakNCfg.transfer}

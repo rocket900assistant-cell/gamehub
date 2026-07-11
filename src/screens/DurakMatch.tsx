@@ -30,7 +30,6 @@ import {
 import type { TgUser } from '../lib/telegram'
 import { displayName, haptic } from '../lib/telegram'
 import { getSocket } from '../lib/socket'
-import { player } from '../data/mock'
 
 export interface OnlineDurak {
   roomId: string
@@ -46,6 +45,7 @@ export interface OnlineDurak {
 interface DurakMatchProps {
   user: TgUser
   config: DurakConfig | null
+  balance?: number
   resume?: boolean
   online?: OnlineDurak | null
   myName?: string
@@ -83,7 +83,7 @@ const FELT_BASE: React.CSSProperties = {
   backgroundPosition: 'center',
 }
 
-export function DurakMatch({ user, config, resume, online, myName, onExit }: DurakMatchProps) {
+export function DurakMatch({ user, config, balance = 0, resume, online, myName, onExit }: DurakMatchProps) {
   const isOnline = !!online
   // Equipped table felt (chosen in the shop, read once per match).
   const felt = useMemo(
@@ -586,7 +586,7 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
             )}
           </button>
           <span className="flex items-center gap-1 rounded-full bg-bg px-2.5 py-1 text-sm font-extrabold text-ink">
-            {player.balance}
+            {balance}
             <Gem size={13} className="text-gold" />
           </span>
         </div>

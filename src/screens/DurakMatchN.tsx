@@ -8,7 +8,6 @@ import { HandFan, CardFan, PlayerTile, ConfirmDialog } from './DurakMatch'
 import { equippedDurakFeltSrc, isVip } from '../lib/skins'
 import { t } from '../lib/i18n'
 import { getSocket } from '../lib/socket'
-import { player } from '../data/mock'
 import { displayName, haptic, type TgUser } from '../lib/telegram'
 import {
   createGameN,
@@ -45,6 +44,7 @@ export interface OnlineDurakN {
 interface DurakMatchNProps {
   user: TgUser
   players: number
+  balance?: number
   deck: number
   neighborsOnly: boolean
   transfer: boolean
@@ -65,6 +65,7 @@ const MOVE_MS = 60000
 export function DurakMatchN({
   user,
   players,
+  balance = 0,
   deck,
   neighborsOnly,
   transfer,
@@ -494,7 +495,7 @@ export function DurakMatchN({
             )}
           </button>
           <span className="flex items-center gap-1 rounded-full bg-bg px-2 py-1 text-sm font-extrabold text-ink">
-            {player.balance}
+            {balance}
             <Gem size={13} className="text-gold" />
           </span>
         </div>
