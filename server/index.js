@@ -1,7 +1,8 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, getOrCreateDepositTag, userByDepositTag } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, getOrCreateDepositTag, userByDepositTag, getBalance } from './db.js'
+import { settleStakes } from './gramStakes.js'
 import { verifyInitData } from './telegram.js'
 import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther } from './nardy.js'
 import * as durak from './durak.js'
@@ -72,6 +73,7 @@ function createRoom(game, minutes, opts = {}) {
     started: false,
     over: false,
     timer: null,
+    stake: opts.stake > 0 ? Math.round(opts.stake * 100) / 100 : 0, // GRAM per player (0 = free)
   }
   if (game === 'nardy') {
     room.nardy = createNardy()
@@ -124,12 +126,12 @@ const sidOf = (userId) => users.get(userId)?.socketId
 
 // ── Durak N-players matchmaking (humans + bot fill) ──
 const nKey = (o) =>
-  `durakn:${o.players}:${o.deck}:${o.transfer ? 't' : 'c'}:${o.neighborsOnly ? 'n' : 'a'}:${o.allowDraw ? 'd' : 'k'}`
+  `durakn:${o.players}:${o.deck}:${o.transfer ? 't' : 'c'}:${o.neighborsOnly ? 'n' : 'a'}:${o.allowDraw ? 'd' : 'k'}:${o.stake > 0 ? 's' + o.stake : 'f'}`
 
 function startDurakNRoom(ids, opts) {
   const room = rooms.get(createRoom('durakn', opts.deck, opts))
   for (const id of ids.slice(0, opts.players)) addPlayer(room, id)
-  startRoom(room) // remaining seats are bots
+  startRoom(room) // free games: remaining seats are bots
 }
 
 function quickMatchDurakN(userId, socket, opts) {
@@ -149,7 +151,9 @@ function quickMatchDurakN(userId, socket, opts) {
     startDurakNRoom(ids, opts)
     return
   }
-  if (!q.timer) {
+  // Free games fill empty seats with bots after a wait. STAKED games are
+  // human-only (bots can't stake), so they wait for real players.
+  if (!q.timer && !(opts.stake > 0)) {
     q.timer = setTimeout(() => {
       const ids = q.ids.slice()
       nQueues.delete(key)
@@ -276,6 +280,8 @@ const BOT_TOKEN = process.env.BOT_TOKEN
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'gh_' + (BOT_TOKEN ? BOT_TOKEN.slice(-10).replace(/\W/g, '') : 'dev')
 const MINIAPP_URL = process.env.MINIAPP_URL || 'https://gamehub-mahr.pages.dev'
 const PLATFORM_TON_ADDRESS = process.env.PLATFORM_TON_ADDRESS || null // where GRAM deposits land
+const STAKE_FEE_RATE = Number(process.env.STAKE_FEE_RATE ?? 0.1) // owner fee = 10% of the loser's stake
+const MIN_STAKE = 0.1 // GRAM
 const WEBHOOK_PATH = `/tg/${WEBHOOK_SECRET}`
 
 // HTTP server: health-check ("/") + the Telegram webhook (payments).
@@ -586,8 +592,17 @@ function durakNFinish(room) {
   const loser = room.durakN.result?.loser // seat | null
   const n = room.durakN.n
   const seatUser = [...room.seatUser]
+  const finishOrder = [...(room.durakN.finishOrder || [])] // escape order (for stake placement)
 
-  const finalize = (deltas) => {
+  const finalize = async (deltas) => {
+    // ── GRAM stakes payout by placement (loser forfeits, 60/30/10 by finish order) ──
+    let gram = new Map()
+    if (room.stake > 0 && dbEnabled) {
+      const tgAt = (seat) => userTg.get(seatUser[seat])
+      const order = finishOrder.map(tgAt).filter((x) => x != null)
+      const loserTg = loser != null ? tgAt(loser) : null
+      gram = await settleRoomStakes(room, loser == null ? { draw: true } : { order, loser: loserTg })
+    }
     for (let seat = 0; seat < n; seat++) {
       const uid = seatUser[seat]
       const sid = uid && sidOf(uid)
@@ -597,6 +612,7 @@ function durakNFinish(room) {
           draw: loser == null,
           reason: 'durak',
           eloDelta: deltas[seat] ?? 0,
+          gram: gram.get(userTg.get(uid)) ?? 0,
         })
     }
     revertDurakNRoom(room)
@@ -709,6 +725,7 @@ const ABORT_WINDOW_MS = 10000
 
 function startRoom(room) {
   if (room.started) return
+  escrowStakes(room) // debit stakes into escrow (no-op for free games)
   if (room.game === 'durakn') {
     room.started = true
     room.startedAt = Date.now()
@@ -821,6 +838,57 @@ function tick(room) {
   if (room.clocks[t] === 0) endGame(room, t === 'w' ? 'b' : 'w', 'time')
 }
 
+// ── GRAM stakes: escrow at start, settle at end (human-vs-human only) ──
+/** Debit each human player's stake into escrow when a staked game begins. Idempotent. */
+function escrowStakes(room) {
+  if (!(room.stake > 0) || !dbEnabled || room.escrowed) return
+  room.escrowed = true
+  for (const p of room.players) {
+    if (!p.tgId) continue
+    adjustGram({ tgId: p.tgId, delta: -room.stake, kind: 'stake', ref: `stake:${room.id}:${p.tgId}` }).catch(() => {})
+  }
+}
+
+/**
+ * Pay out a finished staked game. `order` = non-loser tgIds best→worst; `loser` = losing tgId
+ * (null / draw=true → refund everyone). Returns Map(tgId → net GRAM delta) for the result screen.
+ * Idempotent per game (per-tgId refs + room.settled guard).
+ */
+async function settleRoomStakes(room, { order = [], loser = null, draw = false }) {
+  const deltas = new Map()
+  if (!(room.stake > 0) || !dbEnabled || room.settled) return deltas
+  const humans = room.players.filter((p) => p.tgId)
+  const n = humans.length
+  if (n < 2) return deltas
+  room.settled = true
+  const seatOf = new Map(humans.map((p, i) => [p.tgId, i]))
+  let loserSeat = null
+  let finishOrder = []
+  if (!draw && loser != null && seatOf.has(loser)) {
+    loserSeat = seatOf.get(loser)
+    finishOrder = order.map((tg) => seatOf.get(tg)).filter((x) => x != null)
+  }
+  const { payouts, fee } = settleStakes({ n, stake: room.stake, loserSeat, finishOrder, feeRate: STAKE_FEE_RATE })
+  for (const p of humans) {
+    const pay = payouts[seatOf.get(p.tgId)] ?? 0
+    if (pay > 0)
+      await adjustGram({ tgId: p.tgId, delta: pay, kind: draw ? 'refund' : 'win', ref: `payout:${room.id}:${p.tgId}` })
+    deltas.set(p.tgId, Math.round((pay - room.stake) * 100) / 100) // net change for display
+  }
+  if (fee > 0) await adjustGram({ tgId: 0, delta: fee, kind: 'fee', ref: `fee:${room.id}` })
+  for (const p of humans) {
+    const sid = sidOf(p.userId)
+    if (!sid) continue
+    try {
+      const row = await getUser(p.tgId)
+      if (row) io.to(sid).emit('profile', dbProfile(row))
+    } catch {
+      /* ignore */
+    }
+  }
+  return deltas
+}
+
 function endGame(room, winnerColor, reason) {
   if (room.over) return
   room.over = true
@@ -863,17 +931,31 @@ function endGame(room, winnerColor, reason) {
       })()
     }
   }
-  for (const p of room.players) {
-    const sid = sidOf(p.userId)
-    if (!sid) continue
-    io.to(sid).emit('game:over', {
-      winner: winnerColor,
-      reason,
-      youWon: winnerColor ? p.color === winnerColor : null,
-      eloDelta: p === a ? da : db,
-      mars: !!room.mars,
-      clocks: room.clocks,
-    })
+  const emitOver = (gram) => {
+    for (const p of room.players) {
+      const sid = sidOf(p.userId)
+      if (!sid) continue
+      io.to(sid).emit('game:over', {
+        winner: winnerColor,
+        reason,
+        youWon: winnerColor ? p.color === winnerColor : null,
+        eloDelta: p === a ? da : db,
+        mars: !!room.mars,
+        gram: gram?.get(p.tgId) ?? 0,
+        clocks: room.clocks,
+      })
+    }
+  }
+  // ── GRAM stakes payout (1v1 human games): winner takes 1.9×, draw/abort refunds ──
+  if (room.stake > 0 && a && b && dbEnabled) {
+    const winner = winnerColor ? (a.color === winnerColor ? a : b) : null
+    const loser = winner ? (winner === a ? b : a) : null
+    settleRoomStakes(
+      room,
+      winner ? { order: [winner.tgId], loser: loser.tgId } : { draw: true },
+    ).then(emitOver)
+  } else {
+    emitOver(null)
   }
 }
 
@@ -1047,9 +1129,17 @@ io.on('connection', (socket) => {
     }
   })
 
-  socket.on('quickMatch', ({ game, minutes, transfer, players, neighborsOnly, allowDraw }) => {
+  socket.on('quickMatch', async ({ game, minutes, transfer, players, neighborsOnly, allowDraw, stake }) => {
     const userId = socketUser.get(socket.id)
     if (!userId) return
+    // GRAM stake: validate amount + the player can cover it (human, enough balance)
+    const st = stake > 0 ? Math.round(stake * 100) / 100 : 0
+    if (st > 0) {
+      if (st < MIN_STAKE) return socket.emit('stake:error', { reason: 'min' })
+      const tgId = userTg.get(userId)
+      const bal = tgId && dbEnabled ? await getBalance(tgId) : 0
+      if (!tgId || bal < st) return socket.emit('stake:error', { reason: 'balance', balance: bal })
+    }
     if (game === 'durakn') {
       return quickMatchDurakN(userId, socket, {
         players: Math.max(2, Math.min(6, players ?? 3)),
@@ -1057,15 +1147,18 @@ io.on('connection', (socket) => {
         transfer: !!transfer,
         neighborsOnly: !!neighborsOnly,
         allowDraw: allowDraw ?? true,
+        stake: st,
       })
     }
-    // include durak options in the bucket so only same-config players match
-    const key = game === 'durak' ? `durak:${minutes}:${transfer ? 't' : 'c'}` : qkey(game, minutes)
+    // same-config AND same-stake players match together
+    const key =
+      (game === 'durak' ? `durak:${minutes}:${transfer ? 't' : 'c'}` : qkey(game, minutes)) +
+      (st > 0 ? `:s${st}` : '')
     const q = (queues.get(key) ?? []).filter((id) => id !== userId)
     if (q.length > 0) {
       const oppId = q.shift()
       queues.set(key, q)
-      const room = rooms.get(createRoom(game, minutes, { transfer }))
+      const room = rooms.get(createRoom(game, minutes, { transfer, stake: st }))
       addPlayer(room, oppId)
       addPlayer(room, userId)
       startRoom(room)

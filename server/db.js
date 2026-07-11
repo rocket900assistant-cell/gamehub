@@ -90,8 +90,22 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS gram_ledger_user ON gram_ledger (tg_id, id);
     ALTER TABLE users ADD COLUMN IF NOT EXISTS deposit_tag TEXT;
     CREATE UNIQUE INDEX IF NOT EXISTS users_deposit_tag ON users (deposit_tag) WHERE deposit_tag IS NOT NULL;
+    -- "house" account (tg_id 0) accrues the owner's fee; its balance_gram = withdrawable profit
+    INSERT INTO users (tg_id, name) VALUES (0, 'HOUSE') ON CONFLICT (tg_id) DO NOTHING;
   `)
   console.log('[db] ready')
+}
+
+/** Current GRAM balance (0 if no row / no DB). */
+export async function getBalance(tgId) {
+  if (!pool || tgId == null) return 0
+  try {
+    const { rows } = await pool.query('SELECT balance_gram FROM users WHERE tg_id = $1', [tgId])
+    return rows[0] ? Number(rows[0].balance_gram) : 0
+  } catch (e) {
+    console.error('[db] getBalance failed:', e.message)
+    return 0
+  }
 }
 
 /** Each player's personal deposit comment/tag (so incoming TON is attributed to them). */
