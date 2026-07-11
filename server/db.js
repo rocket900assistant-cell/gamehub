@@ -216,6 +216,37 @@ export async function getFeeHistory(limit = 20) {
   }
 }
 
+/** Refund stakes whose game never settled (server restarted mid-game). Idempotent.
+ *  Runs once at startup. Returns the number refunded. */
+export async function refundOrphanedStakes() {
+  if (!pool) return 0
+  try {
+    const { rows } = await pool.query(
+      `SELECT tg_id, (-amount) AS amount, ref FROM (
+         SELECT tg_id, amount, ref, 'settled:' || split_part(ref, ':', 2) AS mref
+         FROM gram_ledger WHERE kind = 'stake'
+       ) s
+       WHERE NOT EXISTS (SELECT 1 FROM gram_ledger m WHERE m.kind = 'settled' AND m.ref = s.mref)
+         AND NOT EXISTS (SELECT 1 FROM gram_ledger r WHERE r.ref = 'stalerefund:' || s.ref)`,
+    )
+    let n = 0
+    for (const r of rows) {
+      const res = await adjustGram({
+        tgId: Number(r.tg_id),
+        delta: Number(r.amount),
+        kind: 'refund',
+        ref: 'stalerefund:' + r.ref,
+      })
+      if (res != null) n++
+    }
+    if (n > 0) console.log(`[gram] refunded ${n} orphaned stake(s) from a prior restart`)
+    return n
+  } catch (e) {
+    console.error('[db] refundOrphanedStakes failed:', e.message)
+    return 0
+  }
+}
+
 /** Current GRAM balance (0 if no row / no DB). */
 export async function getBalance(tgId) {
   if (!pool || tgId == null) return 0

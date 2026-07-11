@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, getWithdrawal, setWithdrawalStatus, getFeeHistory } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes } from './db.js'
 import { settleStakes } from './gramStakes.js'
 import { initSender, senderReady, hotBalance, sendTon } from './tonSender.js'
 import { verifyInitData } from './telegram.js'
@@ -30,7 +30,9 @@ const abandonTimers = new Map() // "userId:roomId" -> timeout (reconnect grace)
 const RECONNECT_GRACE_MS = 120000 // 2 min to reconnect before a started game abandons you
 
 // persistent DB (Neon Postgres) — optional; no-ops if DATABASE_URL is unset
-initDb().catch((e) => console.error('[db] init failed:', e.message))
+initDb()
+  .then(() => refundOrphanedStakes()) // return any stakes stuck by a prior restart
+  .catch((e) => console.error('[db] init failed:', e.message))
 
 /** Shape a users row for the client. */
 function dbProfile(r) {
@@ -943,6 +945,7 @@ async function settleRoomStakes(room, { order = [], loser = null, draw = false }
     deltas.set(p.tgId, Math.round((pay - room.stake) * 100) / 100) // net change for display
   }
   if (fee > 0) await adjustGram({ tgId: 0, delta: fee, kind: 'fee', ref: `fee:${room.id}` })
+  await adjustGram({ tgId: 0, delta: 0, kind: 'settled', ref: `settled:${room.id}` }) // marks the game rated → escrow not orphaned
   for (const p of humans) {
     const sid = sidOf(p.userId)
     if (!sid) continue

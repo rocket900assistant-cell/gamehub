@@ -140,7 +140,7 @@ export function Wallet({ balance, address, owner, onOpenAdmin, onBack }: WalletP
   const submitWithdraw = () => {
     const amt = round2(parseFloat(wdAmount) || 0)
     if (amt < 1) return setWdErr(t('wallet.wdMin'))
-    if (amt > balance) return setWdErr(t('stake.insufficient'))
+    if (amt > balance) return setWdErr(t('wallet.insufficient'))
     if (!/^[EU]Q[A-Za-z0-9_-]{46}$/.test(wdAddr.trim())) return setWdErr(t('wallet.wdBadAddr'))
     setWdBusy(true)
     getSocket().emit(
@@ -153,7 +153,7 @@ export function Wallet({ balance, address, owner, onOpenAdmin, onBack }: WalletP
           setNotice(`${t('wallet.wdRequested')} · ${res.payout} GRAM`)
           getSocket().emit('gram:history')
         } else {
-          setWdErr(res?.error === 'balance' ? t('stake.insufficient') : res?.error === 'address' ? t('wallet.wdBadAddr') : t('wallet.wdMin'))
+          setWdErr(res?.error === 'balance' ? t('wallet.insufficient') : res?.error === 'address' ? t('wallet.wdBadAddr') : t('wallet.wdMin'))
         }
       },
     )
