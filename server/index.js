@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, userByUsername, createFriendRequest, listIncomingRequests, acceptFriendRequest, declineFriendRequest, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, debitIfAffordable, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes, getAdminStats } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, userByUsername, createFriendRequest, listIncomingRequests, acceptFriendRequest, declineFriendRequest, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, debitIfAffordable, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes, getAdminStats, listUsers } from './db.js'
 import { settleStakes } from './gramStakes.js'
 import { initSender, senderReady, hotBalance, sendTon } from './tonSender.js'
 import { verifyInitData } from './telegram.js'
@@ -329,6 +329,57 @@ const CORS = {
   'access-control-allow-methods': 'POST, OPTIONS',
   'access-control-allow-headers': 'content-type',
 }
+/** Owner-only JSON route: verifies the admin bot's initData + OWNER_TG_ID, then
+ *  replies with whatever `produce()` returns. Shared by all /admin/* endpoints. */
+function adminRoute(req, res, produce) {
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, CORS)
+    res.end()
+    return
+  }
+  if (req.method !== 'POST') {
+    res.writeHead(405, CORS)
+    res.end()
+    return
+  }
+  let body = ''
+  req.on('data', (c) => {
+    body += c
+    if (body.length > 1e5) req.destroy()
+  })
+  req.on('end', async () => {
+    try {
+      const { initData } = JSON.parse(body || '{}')
+      const user = verifyInitData(initData, ADMIN_BOT_TOKEN)
+      if (!user || !isOwner(user.id)) {
+        res.writeHead(403, { ...CORS, 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: 'forbidden' }))
+        return
+      }
+      const data = await produce()
+      res.writeHead(200, { ...CORS, 'content-type': 'application/json' })
+      res.end(JSON.stringify(data))
+    } catch (e) {
+      res.writeHead(500, { ...CORS, 'content-type': 'application/json' })
+      res.end(JSON.stringify({ error: 'failed' }))
+      console.error('[admin] route:', e.message)
+    }
+  })
+}
+
+async function adminPlayers() {
+  const rows = await listUsers(300)
+  return rows.map((u) => ({
+    id: Number(u.tg_id),
+    name: u.name,
+    username: u.username,
+    balance: Number(u.balance_gram),
+    games: u.games,
+    online: tgSocket.has(Number(u.tg_id)),
+    joined: u.created_at,
+  }))
+}
+
 let statsCache = { at: 0, data: null }
 async function adminStats() {
   if (Date.now() - statsCache.at < 30000 && statsCache.data) return statsCache.data
@@ -370,40 +421,9 @@ const httpServer = createServer((req, res) => {
     })
     return
   }
-  // Admin dashboard stats — owner-only, verified via the ADMIN bot's initData.
-  if (req.url === '/admin/stats') {
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204, CORS)
-      res.end()
-      return
-    }
-    if (req.method === 'POST') {
-      let body = ''
-      req.on('data', (c) => {
-        body += c
-        if (body.length > 1e5) req.destroy()
-      })
-      req.on('end', async () => {
-        try {
-          const { initData } = JSON.parse(body || '{}')
-          const user = verifyInitData(initData, ADMIN_BOT_TOKEN)
-          if (!user || !isOwner(user.id)) {
-            res.writeHead(403, { ...CORS, 'content-type': 'application/json' })
-            res.end(JSON.stringify({ error: 'forbidden' }))
-            return
-          }
-          const data = await adminStats()
-          res.writeHead(200, { ...CORS, 'content-type': 'application/json' })
-          res.end(JSON.stringify(data))
-        } catch (e) {
-          res.writeHead(500, { ...CORS, 'content-type': 'application/json' })
-          res.end(JSON.stringify({ error: 'failed' }))
-          console.error('[admin] stats:', e.message)
-        }
-      })
-      return
-    }
-  }
+  // Admin dashboard — owner-only, verified via the ADMIN bot's initData.
+  if (req.url === '/admin/stats') return adminRoute(req, res, adminStats)
+  if (req.url === '/admin/players') return adminRoute(req, res, adminPlayers)
   if (req.method === 'GET' && req.url === '/status') {
     // Non-sensitive readiness probe: exposes ONLY whether the payout sender
     // initialised (true iff the seed matched HOT_TON_ADDRESS). No address, no

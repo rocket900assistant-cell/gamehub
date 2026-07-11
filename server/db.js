@@ -289,6 +289,17 @@ export async function getAdminStats() {
   }
 }
 
+/** Player list for the admin (newest first). Read-only. */
+export async function listUsers(limit = 300) {
+  if (!pool) return []
+  const { rows } = await pool.query(
+    `SELECT tg_id, username, name, balance_gram, games, wins, created_at
+       FROM users WHERE tg_id <> 0 ORDER BY created_at DESC LIMIT $1`,
+    [limit],
+  )
+  return rows
+}
+
 /** Current GRAM balance (0 if no row / no DB). */
 export async function getBalance(tgId) {
   if (!pool || tgId == null) return 0

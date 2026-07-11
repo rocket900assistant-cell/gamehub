@@ -61,6 +61,24 @@
   .tile.accent { background: linear-gradient(155deg, color-mix(in srgb, var(--gold) 22%, var(--surface)), var(--surface)); border-color: color-mix(in srgb, var(--gold) 40%, var(--line)); }
   .tile.accent .value { color: var(--accent); }
   .tile.warn .value { color: var(--danger); }
+  .loadp {
+    width: 100%; margin-top: 8px; appearance: none; border: 1px solid var(--line);
+    background: var(--surface); color: var(--ink); border-radius: 14px; height: 48px;
+    font-size: 15px; font-weight: 600; cursor: pointer; transition: background .15s;
+  }
+  .loadp:active { background: var(--bg); }
+  .plist { display: flex; flex-direction: column; gap: 8px; }
+  .prow {
+    display: flex; align-items: center; gap: 12px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px;
+  }
+  .pdot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted-t); opacity: .35; flex-shrink: 0; }
+  .pdot.on { background: #3fb567; opacity: 1; }
+  .pinfo { flex: 1; min-width: 0; }
+  .pname { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .puser { font-size: 12px; color: var(--muted-t); }
+  .pbal { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pbal span { font-size: 11px; color: var(--muted-t); font-weight: 600; }
   .msg {
     margin-top: 60px; text-align: center; color: var(--muted-t);
   }
@@ -84,6 +102,10 @@
   <div id="root">
     <div class="msg"><div class="big">⏳</div><p>Загрузка…</p></div>
   </div>
+  <div id="players-area" style="margin-top:24px; display:none">
+    <button class="loadp" id="loadp">👤 Показать игроков</button>
+    <div id="players"></div>
+  </div>
 </div>
 
 <script>
@@ -93,6 +115,7 @@
 
   const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 })
   const fmt = (n) => nf.format(Number(n || 0))
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
   const gram = (n) => fmt(n) + ' GRAM'
   const gameName = (g) => ({ chess: 'Шахматы', durak: 'Дурак 1×1', durakn: 'Дурак N', nardy: 'Нарды' }[g] || g)
 
@@ -139,8 +162,41 @@
       ]),
     ]
     document.getElementById('root').innerHTML = groups.join('')
+    document.getElementById('players-area').style.display = ''
     const at = d.at ? new Date(d.at) : new Date()
     document.getElementById('upd').textContent = 'обновлено ' + at.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  function renderPlayers(list) {
+    const rows = list.map((p) => `
+      <div class="prow">
+        <span class="pdot ${p.online ? 'on' : ''}"></span>
+        <div class="pinfo">
+          <div class="pname">${esc(p.name || 'Игрок')}</div>
+          <div class="puser">${p.username ? '@' + esc(p.username) : 'id ' + p.id} · ${fmt(p.games)} партий</div>
+        </div>
+        <div class="pbal">${fmt(p.balance)} <span>GRAM</span></div>
+      </div>`).join('')
+    document.getElementById('players').innerHTML = `<h2>👤 Игроки (${list.length})</h2><div class="plist">${rows}</div>`
+  }
+
+  async function loadPlayers() {
+    const initData = tg && tg.initData
+    if (!initData) return
+    const btn = document.getElementById('loadp')
+    btn.textContent = 'Загрузка…'
+    try {
+      const r = await fetch(SERVER + '/admin/players', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ initData }),
+      })
+      if (!r.ok) { btn.textContent = 'Ошибка — повторить'; return }
+      renderPlayers(await r.json())
+      btn.style.display = 'none'
+    } catch (e) {
+      btn.textContent = 'Сервер недоступен — повторить'
+    }
   }
 
   function message(emoji, text) {
@@ -172,6 +228,7 @@
     b.classList.add('spin')
     load()
   })
+  document.getElementById('loadp').addEventListener('click', loadPlayers)
   load()
   setInterval(load, 60000) // gentle auto-refresh; server caches for 30s
 </script>
