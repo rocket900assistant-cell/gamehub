@@ -37,6 +37,7 @@ interface Result {
   reason: string
   youWon?: boolean | null
   eloDelta?: number
+  gram?: number
 }
 
 function fmt(ms: number): string {
@@ -216,6 +217,7 @@ export function ChessMatch({ user, match, myName, onMinimize, onExit }: ChessMat
       reason: string
       youWon: boolean | null
       eloDelta: number
+      gram?: number
     }) => setResult(o)
     s.on('game:state', onState)
     s.on('game:over', onOver)
@@ -834,6 +836,12 @@ function GameOver({
           </div>
           <p className="mt-4 text-2xl font-extrabold">{title}</p>
           <p className="mt-1 text-sm text-muted">{reasonText}</p>
+          {result.gram != null && result.gram !== 0 && (
+            <p className={`mt-3 text-2xl font-extrabold ${result.gram > 0 ? 'text-success' : 'text-danger'}`}>
+              {result.gram > 0 ? '+' : '−'}
+              {Math.abs(result.gram).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} GRAM
+            </p>
+          )}
           {!aborted && rated && (
             <p
               className={`mt-4 text-3xl font-extrabold ${

@@ -92,6 +92,7 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
   )
   // Elo change from the server (online rated games).
   const [eloDelta, setEloDelta] = useState<number | null>(null)
+  const [gram, setGram] = useState<number | null>(null)
   const vipMe = isVip()
   // resumed game restores its state + original config from storage
   const saved = useRef(!isOnline && resume ? readDurakSave() : null).current
@@ -214,7 +215,8 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
       setS(p.durak)
       setDeadline(p.deadline)
     }
-    const onOver = (g: { youWon: boolean | null; eloDelta?: number }) => {
+    const onOver = (g: { youWon: boolean | null; eloDelta?: number; gram?: number }) => {
+      if (typeof g.gram === 'number' && g.gram !== 0) setGram(g.gram)
       // resign / timeout / opponent-left end via game:over (no durak:state)
       if (typeof g.eloDelta === 'number') setEloDelta(g.eloDelta)
       setS((cur) =>
@@ -688,6 +690,7 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
           canRematch={!isOnline}
           rated={isOnline}
           eloDelta={eloDelta}
+          gram={gram}
           onExit={onExit}
           onRematch={() => setS(createGame({ deck: deckSize, transfer }))}
         />
@@ -983,6 +986,7 @@ function DurakOver({
   canRematch,
   rated,
   eloDelta,
+  gram,
   onExit,
   onRematch,
 }: {
@@ -991,6 +995,7 @@ function DurakOver({
   canRematch: boolean
   rated: boolean
   eloDelta: number | null
+  gram: number | null
   onExit: () => void
   onRematch: () => void
 }) {
@@ -1002,6 +1007,12 @@ function DurakOver({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6">
       <div className="gh-pop-in w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
         <p className="text-2xl font-extrabold">{title}</p>
+        {gram != null && gram !== 0 && (
+          <p className={`mt-2 text-2xl font-extrabold ${gram > 0 ? 'text-success' : 'text-danger'}`}>
+            {gram > 0 ? '+' : '−'}
+            {Math.abs(gram).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} GRAM
+          </p>
+        )}
         <p className="mt-1 text-sm text-muted">
           {money ? t('match.onGram') : canRematch ? t('match.botUnrated') : t('match.onlineGame')}
         </p>

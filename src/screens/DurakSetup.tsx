@@ -184,7 +184,7 @@ export interface LobbyCfg {
 interface DurakSetupProps {
   onBack: () => void
   onCreate: (cfg: DurakConfig) => void
-  onQuickMatch: (deck: number, transfer: boolean, players: number, throwAll: boolean, draw: boolean) => void
+  onQuickMatch: (deck: number, transfer: boolean, players: number, throwAll: boolean, draw: boolean, stake: number) => void
   onInvite: (deck: number, transfer: boolean) => void
   onLobby: (mode: 'browse' | 'create', cfg: LobbyCfg) => void
 }
@@ -317,7 +317,7 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite, onLobby }
       </Section>
 
       <div className="space-y-3">
-        <Button size="lg" className="w-full" onClick={() => onQuickMatch(deck, transfer, players, throwAll, draw)}>
+        <Button size="lg" className="w-full" onClick={() => onQuickMatch(deck, transfer, players, throwAll, draw, free ? 0 : Math.max(MIN_STAKE, num))}>
           <Swords size={18} /> {t('setup.quickOnline')}
         </Button>
         <div className="grid grid-cols-2 gap-3">

@@ -61,6 +61,8 @@ const D: Record<string, Entry> = {
   'wallet.comment': { ru: 'Комментарий (обязательно)', en: 'Comment (required)' },
   'wallet.commentWarn': { ru: '⚠️ Без этого комментария платёж не зачислится', en: '⚠️ Without this comment the payment won’t be credited' },
   'wallet.credited': { ru: 'Пополнение зачислено', en: 'Deposit credited' },
+  'stake.insufficient': { ru: 'Недостаточно GRAM для ставки', en: 'Not enough GRAM for the stake' },
+  'stake.min': { ru: 'Минимальная ставка 0.1 GRAM', en: 'Minimum stake is 0.1 GRAM' },
   'common.chosen': { ru: 'Выбрано', en: 'Selected' },
   'common.delete': { ru: 'Удалить', en: 'Delete' },
   'common.back': { ru: 'Назад', en: 'Back' },

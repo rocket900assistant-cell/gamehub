@@ -169,6 +169,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
   const [sel, setSel] = useState<number | null>(null)
   const [eloDelta, setEloDelta] = useState<number | null>(null)
   const [mars, setMars] = useState(false)
+  const [gram, setGram] = useState<number | null>(null)
   const vipMe = isVip()
   const [confirmResign, setConfirmResign] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
@@ -296,8 +297,9 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
       deadline.current = p.deadline
       setSel(null)
     }
-    const onOver = (g: { youWon: boolean | null; eloDelta?: number; mars?: boolean }) => {
+    const onOver = (g: { youWon: boolean | null; eloDelta?: number; mars?: boolean; gram?: number }) => {
       if (typeof g.eloDelta === 'number') setEloDelta(g.eloDelta)
+      if (typeof g.gram === 'number' && g.gram !== 0) setGram(g.gram)
       if (g.mars) setMars(true)
       setS((c) => (c.result ? c : { ...c, result: g.youWon ? myColor : other(myColor) }))
     }
@@ -628,6 +630,12 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
             {mars && (
               <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-gradient-to-b from-gold to-gold-dark px-3 py-1 text-sm font-extrabold text-white">
                 {t('nardy.mars')} · ×2
+              </p>
+            )}
+            {gram != null && gram !== 0 && (
+              <p className={`mt-2 text-2xl font-extrabold ${gram > 0 ? 'text-success' : 'text-danger'}`}>
+                {gram > 0 ? '+' : '−'}
+                {Math.abs(gram).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} GRAM
               </p>
             )}
             <p className="mt-1 text-sm text-muted">

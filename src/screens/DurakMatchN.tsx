@@ -87,6 +87,7 @@ export function DurakMatchN({
   const [selIdx, setSelIdx] = useState(-1)
   const [confirmResign, setConfirmResign] = useState(false)
   const [eloDelta, setEloDelta] = useState<number | null>(null)
+  const [gram, setGram] = useState<number | null>(null)
 
   // ── chat ──
   const [chatOpen, setChatOpen] = useState(false)
@@ -120,8 +121,9 @@ export function DurakMatchN({
       setDeadline(p.deadline)
       if (p.seats) setSeats(p.seats)
     }
-    const onOver = (g: { youWon: boolean | null; draw?: boolean; eloDelta?: number }) => {
+    const onOver = (g: { youWon: boolean | null; draw?: boolean; eloDelta?: number; gram?: number }) => {
       if (typeof g.eloDelta === 'number') setEloDelta(g.eloDelta)
+      if (typeof g.gram === 'number' && g.gram !== 0) setGram(g.gram)
       setS((cur) =>
         cur.result
           ? cur
@@ -570,6 +572,12 @@ export function DurakMatchN({
             <p className="text-2xl font-extrabold">
               {draw ? t('match.draw') : iLost ? t('match.youLost') : t('match.youWon')}
             </p>
+            {gram != null && gram !== 0 && (
+              <p className={`mt-2 text-2xl font-extrabold ${gram > 0 ? 'text-success' : 'text-danger'}`}>
+                {gram > 0 ? '+' : '−'}
+                {Math.abs(gram).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} GRAM
+              </p>
+            )}
             {isOnline && eloDelta != null && eloDelta !== 0 ? (
               <p
                 className={`mt-1 text-base font-extrabold ${eloDelta > 0 ? 'text-success' : 'text-danger'}`}

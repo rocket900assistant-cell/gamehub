@@ -227,6 +227,14 @@ export default function App() {
       setMatchmaking(null)
       setJoinError(t('invite.offline'))
     }
+    const onStakeError = (e: { reason: string; balance?: number }) => {
+      setMatchmaking(null)
+      setJoinError(
+        e.reason === 'balance'
+          ? `${t('stake.insufficient')} (${e.balance ?? 0} GRAM)`
+          : t('stake.min'),
+      )
+    }
     // A durakn lobby invite was accepted (or we joined one) while not on the
     // lobby screen → open the waiting room seeded with this state.
     const onLobbyState = (st: LobbyState) => {
@@ -260,6 +268,7 @@ export default function App() {
     s.on('history', onHistory)
     s.on('elo:trend', onEloTrend)
     s.on('invite:offline', onInviteOffline)
+    s.on('stake:error', onStakeError)
     s.on('shop:entitlements', onEntitlements)
     s.on('shop:granted', onGranted)
 
@@ -285,6 +294,7 @@ export default function App() {
       s.off('history', onHistory)
       s.off('elo:trend', onEloTrend)
       s.off('invite:offline', onInviteOffline)
+      s.off('stake:error', onStakeError)
       s.off('shop:entitlements', onEntitlements)
       s.off('shop:granted', onGranted)
     }
@@ -556,7 +566,7 @@ export default function App() {
                     setSub('durak')
                   }
                 }}
-                onQuickMatch={(deck, transfer, players, throwAll, draw) => {
+                onQuickMatch={(deck, transfer, players, throwAll, draw, stake) => {
                   if (players > 2) {
                     getSocket().emit('quickMatch', {
                       game: 'durakn',
@@ -565,14 +575,15 @@ export default function App() {
                       transfer,
                       neighborsOnly: !throwAll,
                       allowDraw: draw,
+                      stake,
                     })
                   } else {
-                    getSocket().emit('quickMatch', { game: 'durak', minutes: deck, transfer })
+                    getSocket().emit('quickMatch', { game: 'durak', minutes: deck, transfer, stake })
                   }
                   setMatchmaking({
                     minutes: deck,
                     label: t('mm.searching'),
-                    subtitle: `${t('game.durak')} · ${players} ${t('durakN.players')}${transfer ? ` · ${t('mode.transfer')}` : ''}`,
+                    subtitle: `${t('game.durak')} · ${players} ${t('durakN.players')}${stake > 0 ? ` · ${stake} GRAM` : ''}`,
                   })
                   setSub(null)
                 }}
