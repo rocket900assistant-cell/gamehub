@@ -189,7 +189,7 @@ function SkinCard({
   )
 }
 
-export function Store({ balance }: { balance: number }) {
+export function Store({ balance, onOpenWallet }: { balance: number; onOpenWallet?: () => void }) {
   const [, setRev] = useState(0)
   const refresh = () => setRev((v) => v + 1)
   const [busy, setBusy] = useState(false)
@@ -230,7 +230,7 @@ export function Store({ balance }: { balance: number }) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-extrabold">{t('store.title')}</h1>
-        <StarBalance amount={balance} />
+        <StarBalance amount={balance} onTopUp={onOpenWallet} />
       </div>
 
       {/* Premium VIP — whole banner is the buy button (opens the purchase window) */}

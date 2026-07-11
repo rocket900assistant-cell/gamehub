@@ -4,6 +4,7 @@ import { BottomNav, type Tab } from './components/BottomNav'
 import { InviteBanner } from './components/InviteBanner'
 import { Home } from './screens/Home'
 import { Store } from './screens/Store'
+import { Wallet } from './screens/Wallet'
 import { Profile } from './screens/Profile'
 import { Friends } from './screens/Friends'
 import { FriendInvite } from './screens/FriendInvite'
@@ -53,6 +54,7 @@ type SubScreen =
   | 'durakN'
   | 'invite'
   | 'history'
+  | 'wallet'
   | null
 
 interface PendingInvite {
@@ -522,6 +524,8 @@ export default function App() {
               />
             ) : sub === 'friends' ? (
               <Friends friends={friends} myId={user.id} onBack={() => setSub(null)} />
+            ) : sub === 'wallet' ? (
+              <Wallet balance={profile?.balance ?? 0} onBack={() => setSub(null)} />
             ) : sub === 'history' ? (
               <History list={history} onBack={() => setSub(null)} />
             ) : sub === 'invite' && pendingInvite ? (
@@ -669,6 +673,7 @@ export default function App() {
                     user={user}
                     profile={profile}
                     onOpenProfile={() => setTab('profile')}
+                    onOpenWallet={() => setSub('wallet')}
                     onPlay={(id) => {
                       if (id === 'chess') setSub('chess-setup')
                       else if (id === 'durak') setSub('durak-setup')
@@ -680,7 +685,7 @@ export default function App() {
                 {tab === 'store' && (
                   <>
                     {banners}
-                    <Store balance={profile?.balance ?? 0} />
+                    <Store balance={profile?.balance ?? 0} onOpenWallet={() => setSub('wallet')} />
                   </>
                 )}
                 {tab === 'profile' && (

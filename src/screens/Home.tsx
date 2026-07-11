@@ -46,11 +46,12 @@ interface HomeProps {
   user: TgUser
   profile: PlayerProfile | null
   onOpenProfile: () => void
+  onOpenWallet: () => void
   onPlay: (gameId: string) => void
   resumeBanner?: ReactNode
 }
 
-export function Home({ user, profile, onOpenProfile, onPlay, resumeBanner }: HomeProps) {
+export function Home({ user, profile, onOpenProfile, onOpenWallet, onPlay, resumeBanner }: HomeProps) {
   const eloFor = (id: string, fallback: number) => {
     const key = ELO_KEY[id]
     return profile && key ? profile.elo[key] : fallback
@@ -73,7 +74,7 @@ export function Home({ user, profile, onOpenProfile, onPlay, resumeBanner }: Hom
             </p>
           </div>
         </button>
-        <StarBalance amount={profile?.balance ?? 0} />
+        <StarBalance amount={profile?.balance ?? 0} onTopUp={onOpenWallet} />
       </div>
 
       <StarPromoBanner />

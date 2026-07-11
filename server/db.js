@@ -75,8 +75,74 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       PRIMARY KEY (tg_id, item)
     );
+    CREATE TABLE IF NOT EXISTS gram_ledger (
+      id         BIGSERIAL PRIMARY KEY,
+      tg_id      BIGINT NOT NULL,
+      kind       TEXT NOT NULL,                 -- deposit | withdraw | stake | win | refund
+      amount     NUMERIC(20,2) NOT NULL,        -- signed: +in / -out
+      status     TEXT NOT NULL DEFAULT 'done',  -- pending | done | failed
+      ref        TEXT,                          -- on-chain tx hash / request id (unique when set)
+      meta       JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS gram_ledger_ref ON gram_ledger (ref) WHERE ref IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS gram_ledger_user ON gram_ledger (tg_id, id);
   `)
   console.log('[db] ready')
+}
+
+/** A player's GRAM transaction history (most recent first). */
+export async function getGramHistory(tgId, limit = 30) {
+  if (!pool || !tgId) return []
+  try {
+    const { rows } = await pool.query(
+      'SELECT kind, amount, status, ref, created_at FROM gram_ledger WHERE tg_id = $1 ORDER BY id DESC LIMIT $2',
+      [tgId, limit],
+    )
+    return rows.map((r) => ({
+      kind: r.kind,
+      amount: Number(r.amount),
+      status: r.status,
+      ref: r.ref,
+      at: r.created_at,
+    }))
+  } catch (e) {
+    console.error('[db] getGramHistory failed:', e.message)
+    return []
+  }
+}
+
+/** Adjust a player's GRAM balance and log a ledger entry atomically. Idempotent on `ref`.
+ *  Returns the new balance, or null if a duplicate `ref` was already applied. */
+export async function adjustGram({ tgId, delta, kind, status = 'done', ref = null, meta = null }) {
+  if (!pool || !tgId) return null
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    if (ref) {
+      const dup = await client.query('SELECT 1 FROM gram_ledger WHERE ref = $1', [ref])
+      if (dup.rowCount > 0) {
+        await client.query('ROLLBACK')
+        return null
+      }
+    }
+    await client.query(
+      'INSERT INTO gram_ledger (tg_id, kind, amount, status, ref, meta) VALUES ($1,$2,$3,$4,$5,$6)',
+      [tgId, kind, delta, status, ref, meta],
+    )
+    const { rows } = await client.query(
+      'UPDATE users SET balance_gram = balance_gram + $2 WHERE tg_id = $1 RETURNING balance_gram',
+      [tgId, delta],
+    )
+    await client.query('COMMIT')
+    return rows[0] ? Number(rows[0].balance_gram) : null
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {})
+    console.error('[db] adjustGram failed:', e.message)
+    return null
+  } finally {
+    client.release()
+  }
 }
 
 /** Log a Stars payment. Idempotent on charge_id — returns true only the FIRST time. */

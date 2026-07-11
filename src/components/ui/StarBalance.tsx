@@ -8,24 +8,22 @@ interface StarBalanceProps {
   onTopUp?: () => void
 }
 
-/** GRAM balance pill (in-app currency, backed by TON). */
+/** GRAM balance pill (in-app currency, backed by TON). Tapping it opens the wallet. */
 export function StarBalance({ amount, plus = true, onTopUp }: StarBalanceProps) {
   return (
-    <div className="flex items-center gap-2 rounded-full bg-surface border border-line pl-3 pr-1.5 py-1.5 shadow-[var(--shadow-soft)]">
+    <button
+      onClick={onTopUp ?? openStarsBot}
+      aria-label="GRAM кошелёк"
+      className="flex items-center gap-2 rounded-full border border-line bg-surface py-1.5 pl-3 pr-1.5 shadow-[var(--shadow-soft)] transition active:scale-[0.97]"
+    >
       <Gem size={15} className="text-gold" />
-      <span className="text-sm font-bold tabular-nums">
-        {amount.toLocaleString('ru-RU')}
-      </span>
+      <span className="text-sm font-bold tabular-nums">{amount.toLocaleString('ru-RU')}</span>
       <span className="text-[11px] font-semibold text-muted">GRAM</span>
       {plus && (
-        <button
-          aria-label="Пополнить GRAM"
-          onClick={onTopUp ?? openStarsBot}
-          className="grid h-6 w-6 place-items-center rounded-full bg-gold text-white transition active:scale-95"
-        >
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-gold text-white">
           <Plus size={15} strokeWidth={2.5} />
-        </button>
+        </span>
       )}
-    </div>
+    </button>
   )
 }

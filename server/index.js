@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram } from './db.js'
 import { verifyInitData } from './telegram.js'
 import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther } from './nardy.js'
 import * as durak from './durak.js'
@@ -1368,6 +1368,14 @@ io.on('connection', (socket) => {
       (p) => p.userId === socketUser.get(socket.id),
     )?.color
     if (color) endGame(room, color === 'w' ? 'b' : 'w', 'resign')
+  })
+
+  // ── GRAM wallet: transaction history ──
+  socket.on('gram:history', async (_payload, cb) => {
+    const tgId = userTg.get(socketUser.get(socket.id))
+    const items = tgId ? await getGramHistory(tgId) : []
+    if (typeof cb === 'function') cb({ items })
+    else socket.emit('gram:history', { items })
   })
 
   // ── Shop: create a Telegram Stars invoice for a product ──
