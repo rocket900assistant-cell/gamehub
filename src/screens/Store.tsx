@@ -194,14 +194,12 @@ export function Store({ balance }: { balance: number }) {
   const refresh = () => setRev((v) => v + 1)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
-  const [msg, setMsg] = useState('')
 
   // Real Telegram Stars purchase: server makes an invoice → native pay sheet →
   // on success the server grants the item; we also apply it locally right away.
   const purchase = (product: string, grantLocal: () => void) => {
     if (busy) return
     setErr('')
-    setMsg('')
     setBusy(true)
     getSocket().emit('shop:buy', { product }, (res: { link?: string; error?: string }) => {
       if (!res?.link) {
@@ -233,16 +231,6 @@ export function Store({ balance }: { balance: number }) {
         <h1 className="text-2xl font-extrabold">{t('store.title')}</h1>
         <StarBalance amount={balance} />
       </div>
-
-      {/* TEMP: 1★ test purchase — remove after payment testing */}
-      <Button
-        variant="secondary"
-        className="w-full"
-        disabled={busy}
-        onClick={() => purchase('test', () => setMsg('Оплата прошла ✓'))}
-      >
-        <Star size={15} className="fill-current" /> Тест оплаты · 1★
-      </Button>
 
       {/* Premium VIP — whole banner is the buy button (opens the purchase window) */}
       <button
@@ -404,14 +392,6 @@ export function Store({ balance }: { balance: number }) {
           onClick={() => setErr('')}
         >
           {err}
-        </div>
-      )}
-      {msg && (
-        <div
-          className="fixed inset-x-0 bottom-24 z-50 mx-auto w-fit max-w-[90%] rounded-full bg-success px-4 py-2 text-sm font-semibold text-white shadow-lg"
-          onClick={() => setMsg('')}
-        >
-          {msg}
         </div>
       )}
     </div>
