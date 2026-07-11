@@ -82,36 +82,6 @@ export function WithdrawAdmin({ onBack }: { onBack: () => void }) {
         <h1 className="text-2xl font-extrabold">{t('admin.withdrawals')}</h1>
       </div>
 
-      {/* accrued fee (owner profit) */}
-      {fee && (
-        <div
-          className="rounded-[var(--radius-card)] p-4 shadow-[var(--shadow-soft)]"
-          style={{ background: 'linear-gradient(155deg,#f6ecd4,#e8d5a8)', color: '#4a3d1e' }}
-        >
-          <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: '#4a3d1eaa' }}>
-            {t('admin.feeAccrued')}
-          </p>
-          <div className="mt-1 flex items-end gap-1.5">
-            <span className="text-3xl font-extrabold tabular-nums" style={{ color: '#2a2210' }}>
-              {fee.accrued.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
-            </span>
-            <span className="mb-0.5 font-bold" style={{ color: '#4a3d1eaa' }}>GRAM</span>
-          </div>
-          {fee.hot != null && (
-            <p className="mt-1 text-xs" style={{ color: '#4a3d1eaa' }}>
-              {t('admin.hotBalance')}: {fee.hot} GRAM
-            </p>
-          )}
-          <Button
-            className="mt-3 w-full"
-            disabled={feeBusy || fee.accrued <= 0}
-            onClick={withdrawFee}
-          >
-            {t('admin.feeWithdraw')}
-          </Button>
-        </div>
-      )}
-
       {items == null ? (
         <p className="py-8 text-center text-sm text-muted">{t('common.loading')}</p>
       ) : items.length === 0 ? (
@@ -157,6 +127,34 @@ export function WithdrawAdmin({ onBack }: { onBack: () => void }) {
       )}
 
       <p className="text-center text-xs text-muted">{t('admin.note')}</p>
+
+      {/* owner fee (accrued profit) — withdraw to FEE_TON_ADDRESS */}
+      {fee && (
+        <div className="mt-2 rounded-[var(--radius-card)] border border-line bg-surface p-4 shadow-[var(--shadow-soft)]">
+          <div className="flex items-end justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                {t('admin.feeAccrued')}
+              </p>
+              <div className="mt-1 flex items-end gap-1.5">
+                <span className="text-3xl font-extrabold tabular-nums">
+                  {fee.accrued.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
+                </span>
+                <span className="mb-0.5 font-bold text-muted">GRAM</span>
+              </div>
+            </div>
+            <Gem size={26} className="mb-1 text-gold" />
+          </div>
+          {fee.hot != null && (
+            <p className="mt-1 text-xs text-muted">
+              {t('admin.hotBalance')}: {fee.hot} GRAM
+            </p>
+          )}
+          <Button className="mt-3 w-full" disabled={feeBusy || fee.accrued <= 0} onClick={withdrawFee}>
+            {t('admin.feeWithdraw')}
+          </Button>
+        </div>
+      )}
 
       {notice && (
         <div
