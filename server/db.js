@@ -1,6 +1,7 @@
 // Postgres persistence (Neon). Optional: if DATABASE_URL is unset the server
 // runs exactly as before (in-memory only), so deploys never break.
 import pg from 'pg'
+import { randomBytes } from 'node:crypto'
 
 const url = process.env.DATABASE_URL
 export const dbEnabled = !!url
@@ -87,8 +88,37 @@ export async function initDb() {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS gram_ledger_ref ON gram_ledger (ref) WHERE ref IS NOT NULL;
     CREATE INDEX IF NOT EXISTS gram_ledger_user ON gram_ledger (tg_id, id);
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS deposit_tag TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS users_deposit_tag ON users (deposit_tag) WHERE deposit_tag IS NOT NULL;
   `)
   console.log('[db] ready')
+}
+
+/** Each player's personal deposit comment/tag (so incoming TON is attributed to them). */
+export async function getOrCreateDepositTag(tgId) {
+  if (!pool || !tgId) return null
+  try {
+    const { rows } = await pool.query('SELECT deposit_tag FROM users WHERE tg_id = $1', [tgId])
+    if (rows[0]?.deposit_tag) return rows[0].deposit_tag
+    const tag = 'GH' + randomBytes(4).toString('hex').toUpperCase() // e.g. GH9F3A1C7B
+    await pool.query('UPDATE users SET deposit_tag = $2 WHERE tg_id = $1', [tgId, tag])
+    return tag
+  } catch (e) {
+    console.error('[db] getOrCreateDepositTag failed:', e.message)
+    return null
+  }
+}
+
+/** Resolve a deposit comment/tag back to its owner (for crediting deposits). */
+export async function userByDepositTag(tag) {
+  if (!pool || !tag) return null
+  try {
+    const { rows } = await pool.query('SELECT tg_id FROM users WHERE deposit_tag = $1', [tag])
+    return rows[0] ? Number(rows[0].tg_id) : null
+  } catch (e) {
+    console.error('[db] userByDepositTag failed:', e.message)
+    return null
+  }
 }
 
 /** A player's GRAM transaction history (most recent first). */

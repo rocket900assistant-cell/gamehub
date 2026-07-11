@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, ArrowUp, Plus, Gem, Wallet as WalletIcon } from 'lucide-react'
+import QRCode from 'qrcode'
+import { ArrowLeft, ArrowUp, Plus, Gem, Wallet as WalletIcon, Copy, X, Check } from 'lucide-react'
 import { getSocket } from '../lib/socket'
 import { t } from '../lib/i18n'
 
@@ -37,6 +38,8 @@ interface WalletProps {
 export function Wallet({ balance, address, onBack }: WalletProps) {
   const [history, setHistory] = useState<GramTx[] | null>(null)
   const [notice, setNotice] = useState('')
+  const [deposit, setDeposit] = useState<{ address: string; tag: string; qr: string } | null>(null)
+  const [copied, setCopied] = useState('')
 
   useEffect(() => {
     const s = getSocket()
@@ -48,8 +51,25 @@ export function Wallet({ balance, address, onBack }: WalletProps) {
     }
   }, [])
 
-  // TON deposit/withdraw wiring lands next; for now show a heads-up.
-  const onDeposit = () => setNotice(t('wallet.soon'))
+  const copy = (text: string, which: string) => {
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopied(which)
+      setTimeout(() => setCopied(''), 1500)
+    })
+  }
+
+  // Personal deposit: platform address + this user's tag, shown as a QR.
+  const onDeposit = () => {
+    getSocket().emit('gram:deposit', {}, async (res: { address?: string | null; tag?: string | null }) => {
+      if (!res?.address || !res?.tag) {
+        setNotice(t('wallet.soon'))
+        return
+      }
+      const link = `ton://transfer/${res.address}?text=${encodeURIComponent(res.tag)}`
+      const qr = await QRCode.toDataURL(link, { margin: 1, width: 320 })
+      setDeposit({ address: res.address, tag: res.tag, qr })
+    })
+  }
   const onWithdraw = () => setNotice(t('wallet.soon'))
 
   return (
@@ -138,6 +158,36 @@ export function Wallet({ balance, address, onBack }: WalletProps) {
         )}
       </section>
 
+      {/* deposit sheet — personal QR + address + tag */}
+      {deposit && (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/45" onClick={() => setDeposit(null)}>
+          <div
+            className="mx-auto w-full max-w-md rounded-t-[24px] bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-lg font-extrabold">{t('wallet.depositTitle')}</p>
+              <button onClick={() => setDeposit(null)} aria-label="Закрыть">
+                <X size={20} className="text-muted" />
+              </button>
+            </div>
+
+            <div className="mx-auto w-fit rounded-2xl bg-white p-3">
+              <img src={deposit.qr} alt="QR" className="h-48 w-48" />
+            </div>
+
+            <p className="mt-3 text-center text-sm text-muted">{t('wallet.depositHint')}</p>
+
+            <div className="mt-4 space-y-2">
+              <CopyRow label={t('wallet.address')} value={deposit.address} copied={copied === 'addr'} onCopy={() => copy(deposit.address, 'addr')} />
+              <CopyRow label={t('wallet.comment')} value={deposit.tag} copied={copied === 'tag'} onCopy={() => copy(deposit.tag, 'tag')} />
+            </div>
+
+            <p className="mt-3 text-center text-xs text-danger">{t('wallet.commentWarn')}</p>
+          </div>
+        </div>
+      )}
+
       {notice && (
         <div
           className="fixed inset-x-0 bottom-24 z-50 mx-auto w-fit max-w-[90%] rounded-full bg-ink px-4 py-2 text-sm font-semibold text-bg shadow-lg"
@@ -147,5 +197,34 @@ export function Wallet({ balance, address, onBack }: WalletProps) {
         </div>
       )}
     </div>
+  )
+}
+
+function CopyRow({
+  label,
+  value,
+  copied,
+  onCopy,
+}: {
+  label: string
+  value: string
+  copied: boolean
+  onCopy: () => void
+}) {
+  return (
+    <button
+      onClick={onCopy}
+      className="flex w-full items-center gap-3 rounded-xl bg-bg px-3 py-2.5 text-left transition active:scale-[0.99]"
+    >
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</p>
+        <p className="truncate font-mono text-sm">{value}</p>
+      </div>
+      {copied ? (
+        <Check size={17} className="shrink-0 text-success" />
+      ) : (
+        <Copy size={16} className="shrink-0 text-muted" />
+      )}
+    </button>
   )
 }
