@@ -281,6 +281,7 @@ const BOT_TOKEN = process.env.BOT_TOKEN
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'gh_' + (BOT_TOKEN ? BOT_TOKEN.slice(-10).replace(/\W/g, '') : 'dev')
 const MINIAPP_URL = process.env.MINIAPP_URL || 'https://gamehub-mahr.pages.dev'
 const PLATFORM_TON_ADDRESS = process.env.PLATFORM_TON_ADDRESS || null // where GRAM deposits land
+const FEE_TON_ADDRESS = process.env.FEE_TON_ADDRESS || null // owner's wallet for withdrawing accrued fees
 const STAKE_FEE_RATE = Number(process.env.STAKE_FEE_RATE ?? 0.1) // owner fee = 10% of the loser's stake
 const MIN_STAKE = 0.1 // GRAM
 const WITHDRAW_FEE_RATE = Number(process.env.WITHDRAW_FEE_RATE ?? 0.001) // 0.1% gas fee
@@ -1633,6 +1634,36 @@ io.on('connection', (socket) => {
   socket.on('gram:withdrawals', async (_p, cb) => {
     if (!isOwner(userTg.get(socketUser.get(socket.id)))) return cb?.({ error: 'forbidden' })
     cb?.({ items: await listPendingWithdrawals() })
+  })
+
+  // ── Owner: accrued fee (HOUSE balance) + withdraw it to FEE_TON_ADDRESS ──
+  socket.on('gram:fee:status', async (_p, cb) => {
+    if (!isOwner(userTg.get(socketUser.get(socket.id)))) return cb?.({ error: 'forbidden' })
+    cb?.({
+      accrued: await getBalance(0),
+      feeAddress: FEE_TON_ADDRESS,
+      hot: senderReady() ? await hotBalance() : null,
+    })
+  })
+
+  socket.on('gram:fee:withdraw', async (_p, cb) => {
+    if (!isOwner(userTg.get(socketUser.get(socket.id)))) return cb?.({ error: 'forbidden' })
+    if (!FEE_TON_ADDRESS) return cb?.({ error: 'no-fee-address' })
+    if (!senderReady()) return cb?.({ error: 'no-hot' }) // set up the hot wallet first
+    const amt = Math.round((await getBalance(0)) * 100) / 100
+    if (!(amt > 0)) return cb?.({ error: 'empty' })
+    if ((await hotBalance()) < amt + 0.05) return cb?.({ error: 'hot-low' })
+    const ref = `feewd:${Date.now()}`
+    const newHouse = await adjustGram({ tgId: 0, delta: -amt, kind: 'fee_withdraw', ref, meta: { to: FEE_TON_ADDRESS } })
+    if (newHouse == null) return cb?.({ error: 'failed' })
+    try {
+      await sendTon(FEE_TON_ADDRESS, amt, 'GameHub fee')
+      cb?.({ ok: true, sent: amt })
+    } catch (e) {
+      await adjustGram({ tgId: 0, delta: amt, kind: 'fee', ref: `${ref}:revert` }) // give it back on send failure
+      console.error('[hot] fee send failed:', e.message)
+      cb?.({ error: 'send-failed' })
+    }
   })
 
   socket.on('gram:withdraw:approve', async ({ id } = {}, cb) => {
