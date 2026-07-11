@@ -14,27 +14,39 @@ export async function initSender() {
   try {
     const words = mnemonic.trim().split(/\s+/)
     const key = await mnemonicToPrivateKey(words)
-    const version = (process.env.HOT_WALLET_VERSION || 'v5r1').toLowerCase()
-    const wallet =
-      version === 'v4'
-        ? WalletContractV4.create({ workchain: 0, publicKey: key.publicKey })
-        : WalletContractV5R1.create({ workchain: 0, publicKey: key.publicKey })
-    const uq = wallet.address.toString({ bounceable: false })
-    const eq = wallet.address.toString({ bounceable: true })
 
-    // Safety: if the owner gave the hot address, refuse to run on a mismatch
-    // (wrong wallet version → would sign from an empty/other address).
+    // Candidate wallet versions (Tonkeeper uses W5 = v5r1 by default now, older = v4r2).
+    const candidates = [
+      ['v5r1', WalletContractV5R1.create({ workchain: 0, publicKey: key.publicKey })],
+      ['v4', WalletContractV4.create({ workchain: 0, publicKey: key.publicKey })],
+    ]
+    const addrs = (w) => [w.address.toString({ bounceable: false }), w.address.toString({ bounceable: true })]
+
+    let ver, wallet, address
     const expected = process.env.HOT_TON_ADDRESS?.trim()
-    if (expected && expected !== uq && expected !== eq) {
-      console.error(`[hot] derived ${uq} != HOT_TON_ADDRESS ${expected}. Check HOT_WALLET_VERSION. SENDER DISABLED.`)
-      return null
+    if (expected) {
+      // AUTO-DETECT the version by matching the address (no need to know v4 vs v5).
+      const hit = candidates.find(([, w]) => addrs(w).includes(expected))
+      if (!hit) {
+        console.error(`[hot] seed does not derive HOT_TON_ADDRESS ${expected} (tried v5r1, v4). Check the seed/address. SENDER DISABLED.`)
+        return null
+      }
+      ;[ver, wallet] = hit
+      address = wallet.address.toString({ bounceable: false })
+    } else {
+      // No address given → fall back to a forced/default version (less safe).
+      const forced = (process.env.HOT_WALLET_VERSION || 'v5r1').toLowerCase()
+      ;[ver, wallet] = candidates.find(([v]) => v === forced) || candidates[0]
+      address = wallet.address.toString({ bounceable: false })
+      console.warn(`[hot] HOT_TON_ADDRESS not set — assuming ${ver} → ${address}. Set HOT_TON_ADDRESS to be safe.`)
     }
+
     const client = new TonClient({
       endpoint: process.env.TON_RPC || 'https://toncenter.com/api/v2/jsonRPC',
       apiKey: process.env.TONCENTER_KEY || undefined,
     })
-    sender = { client, wallet, key, address: uq }
-    console.log(`[hot] sender ready: ${uq} (${version})`)
+    sender = { client, wallet, key, address }
+    console.log(`[hot] sender ready: ${address} (${ver}, auto-detected)`)
     return sender
   } catch (e) {
     console.error('[hot] init failed:', e.message)
