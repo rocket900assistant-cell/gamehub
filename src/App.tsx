@@ -726,6 +726,7 @@ export default function App() {
                       profile={profile}
                       eloTrend={eloTrend}
                       friendsCount={friends.length}
+                      requestCount={friendRequests.length}
                       onOpenFriends={() => setSub('friends')}
                       onOpenWallet={() => setSub('wallet')}
                       onOpenHistory={() => {
@@ -739,7 +740,7 @@ export default function App() {
             )}
           </main>
           {sub === null && !matchmaking && (
-            <BottomNav active={tab} onChange={setTab} />
+            <BottomNav active={tab} onChange={setTab} badges={{ profile: friendRequests.length }} />
           )}
         </>
       )}

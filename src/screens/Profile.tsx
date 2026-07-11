@@ -38,12 +38,13 @@ interface ProfileProps {
   profile: PlayerProfile | null
   eloTrend: EloTrend | null
   friendsCount: number
+  requestCount: number
   onOpenFriends: () => void
   onOpenHistory: () => void
   onOpenWallet: () => void
 }
 
-export function Profile({ user, profile, eloTrend, friendsCount, onOpenFriends, onOpenHistory, onOpenWallet }: ProfileProps) {
+export function Profile({ user, profile, eloTrend, friendsCount, requestCount, onOpenFriends, onOpenHistory, onOpenWallet }: ProfileProps) {
   const vip = isVip()
   const name = profile?.name ?? displayName(user)
   const [renameOpen, setRenameOpen] = useState(false)
@@ -206,6 +207,11 @@ export function Profile({ user, profile, eloTrend, friendsCount, onOpenFriends, 
         >
           <Users size={20} className="text-muted" />
           <span className="flex-1 font-medium">{t('profile.friends')}</span>
+          {requestCount > 0 && (
+            <span className="grid h-[20px] min-w-[20px] place-items-center rounded-full bg-danger px-1.5 text-[11px] font-bold leading-none text-white">
+              {requestCount > 9 ? '9+' : requestCount}
+            </span>
+          )}
           <span className="text-sm text-muted">{friendsCount}</span>
           <ChevronRight size={18} className="text-muted" />
         </button>
