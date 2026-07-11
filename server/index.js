@@ -376,7 +376,7 @@ async function handleTgUpdate(update) {
     await callTG('sendMessage', {
       chat_id: msg.chat.id,
       text:
-        '♟️ Добро пожаловать в GameHub!\n\nШахматы, Дурак и Нарды — играй онлайн с друзьями и соперниками, зарабатывай рейтинг.\n\nЖми «Играть» 👇',
+        '♟️ Добро пожаловать в GameHub!\n\nШахматы, Дурак и Нарды — играй онлайн с друзьями и соперниками. Собирай лобби и играй компанией, поднимай рейтинг и становись частью комьюнити.\n\nЖми «Играть» 👇',
       reply_markup: {
         inline_keyboard: [[{ text: '🎮 Играть', web_app: { url: MINIAPP_URL } }]],
       },
