@@ -40,9 +40,10 @@ interface ProfileProps {
   friendsCount: number
   onOpenFriends: () => void
   onOpenHistory: () => void
+  onOpenWallet: () => void
 }
 
-export function Profile({ user, profile, eloTrend, friendsCount, onOpenFriends, onOpenHistory }: ProfileProps) {
+export function Profile({ user, profile, eloTrend, friendsCount, onOpenFriends, onOpenHistory, onOpenWallet }: ProfileProps) {
   const vip = isVip()
   const name = profile?.name ?? displayName(user)
   const [renameOpen, setRenameOpen] = useState(false)
@@ -122,7 +123,7 @@ export function Profile({ user, profile, eloTrend, friendsCount, onOpenFriends, 
             )}
           </div>
         </div>
-        <StarBalance amount={balance} plus={false} />
+        <StarBalance amount={balance} plus={false} onTopUp={onOpenWallet} />
       </Card>
 
       {/* Elo + stats */}

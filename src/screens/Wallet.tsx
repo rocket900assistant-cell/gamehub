@@ -136,13 +136,15 @@ export function Wallet({ balance, address, owner, onOpenAdmin, onBack }: WalletP
         <h1 className="text-2xl font-extrabold">{t('wallet.title')}</h1>
       </div>
 
-      {/* balance card */}
-      <div className="relative overflow-hidden rounded-[var(--radius-card)] p-5 text-white shadow-[var(--shadow-soft)]"
-        style={{ background: 'linear-gradient(150deg,#2f6bd6,#1f3f86)' }}>
-        <div className="pointer-events-none absolute -right-8 -top-10 h-40 w-40 rounded-full bg-white/10" />
-        <div className="pointer-events-none absolute right-6 top-8 h-28 w-28 rounded-full bg-white/10" />
+      {/* balance card — warm cream / soft gold */}
+      <div
+        className="relative overflow-hidden rounded-[var(--radius-card)] p-5 shadow-[var(--shadow-soft)]"
+        style={{ background: 'linear-gradient(155deg,#f6ecd4,#e8d5a8)', color: '#4a3d1e' }}
+      >
+        <div className="pointer-events-none absolute -right-8 -top-10 h-40 w-40 rounded-full bg-white/35" />
+        <div className="pointer-events-none absolute right-6 top-8 h-28 w-28 rounded-full bg-white/30" />
 
-        <div className="relative flex items-center gap-1.5 text-sm text-white/80">
+        <div className="relative flex items-center gap-1.5 text-sm" style={{ color: '#4a3d1eaa' }}>
           <WalletIcon size={14} />
           {address ? (
             <span className="font-mono">{address.slice(0, 4)}…{address.slice(-4)}</span>
@@ -152,20 +154,23 @@ export function Wallet({ balance, address, owner, onOpenAdmin, onBack }: WalletP
         </div>
 
         <div className="relative mt-3 flex items-end gap-2">
-          <span className="text-4xl font-extrabold tabular-nums leading-none">{fmt(balance)}</span>
-          <span className="mb-0.5 text-lg font-bold text-white/80">GRAM</span>
+          <span className="text-4xl font-extrabold tabular-nums leading-none" style={{ color: '#2a2210' }}>
+            {fmt(balance)}
+          </span>
+          <span className="mb-0.5 text-lg font-bold" style={{ color: '#4a3d1eaa' }}>GRAM</span>
         </div>
 
         <div className="relative mt-5 grid grid-cols-2 gap-3">
           <button
             onClick={onDeposit}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-white py-3 font-bold text-[#1f3f86] transition active:scale-[0.98]"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-gold to-gold-dark py-3 font-bold text-white shadow-[var(--shadow-gold)] transition active:scale-[0.98]"
           >
             <Plus size={18} strokeWidth={2.5} /> {t('wallet.deposit')}
           </button>
           <button
             onClick={onWithdraw}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-white/15 py-3 font-bold text-white backdrop-blur transition active:scale-[0.98]"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-white/60 py-3 font-bold transition active:scale-[0.98]"
+            style={{ color: '#4a3d1e' }}
           >
             <ArrowUp size={18} strokeWidth={2.5} /> {t('wallet.withdraw')}
           </button>

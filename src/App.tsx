@@ -721,6 +721,7 @@ export default function App() {
                       eloTrend={eloTrend}
                       friendsCount={friends.length}
                       onOpenFriends={() => setSub('friends')}
+                      onOpenWallet={() => setSub('wallet')}
                       onOpenHistory={() => {
                         requestHistory()
                         setSub('history')
