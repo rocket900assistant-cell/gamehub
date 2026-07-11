@@ -254,6 +254,7 @@ const D: Record<string, Entry> = {
   'lobby.offline': { ru: 'Офлайн', en: 'Offline' },
   'nardy.you': { ru: 'Вы', en: 'You' },
   'nardy.off': { ru: 'вышло', en: 'off' },
+  'nardy.mars': { ru: 'Марс!', en: 'Gammon!' },
   'nardy.invite': { ru: 'Пригласить', en: 'Invite' },
   'reason.mate': { ru: 'Объявлен мат', en: 'Checkmate' },
   'reason.time': { ru: 'По времени', en: 'On time' },

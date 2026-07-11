@@ -747,8 +747,11 @@ function endGame(room, winnerColor, reason) {
   if (winnerColor && a && b) {
     const winner = a.color === winnerColor ? a : b
     const loser = a.color === winnerColor ? b : a
-    const dWin = eloDelta(winner.elo, loser.elo, true)
-    const dLoss = eloDelta(loser.elo, winner.elo, false)
+    // "Марс" (gammon): win by bearing off while the loser has borne off none → ×2 rating
+    room.mars = room.game === 'nardy' && reason === 'win' && room.nardy?.off?.[loser.color] === 0
+    const mult = room.mars ? 2 : 1
+    const dWin = eloDelta(winner.elo, loser.elo, true) * mult
+    const dLoss = eloDelta(loser.elo, winner.elo, false) * mult
     if (winner === a) [da, db] = [dWin, dLoss]
     else [da, db] = [dLoss, dWin]
     // persist the rated result, then push fresh profiles so the app updates now
@@ -784,6 +787,7 @@ function endGame(room, winnerColor, reason) {
       reason,
       youWon: winnerColor ? p.color === winnerColor : null,
       eloDelta: p === a ? da : db,
+      mars: !!room.mars,
       clocks: room.clocks,
     })
   }

@@ -167,6 +167,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
   })
   const [sel, setSel] = useState<number | null>(null)
   const [eloDelta, setEloDelta] = useState<number | null>(null)
+  const [mars, setMars] = useState(false)
   const vipMe = isVip()
   const [confirmResign, setConfirmResign] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
@@ -221,7 +222,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
       const oc = offW ? s.off.w : s.off.b
       const step = oc > 1 ? Math.min(5.4, 40 / (oc - 1)) : 0
       tx = TRAY_X
-      ty = movedColor === myColor ? 92 - (oc - 1) * step : 8 + (oc - 1) * step
+      ty = movedColor === myColor ? BOT_Y0 - (oc - 1) * step : TOP_Y0 + (oc - 1) * step
     } else {
       return
     }
@@ -294,8 +295,9 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
       deadline.current = p.deadline
       setSel(null)
     }
-    const onOver = (g: { youWon: boolean | null; eloDelta?: number }) => {
+    const onOver = (g: { youWon: boolean | null; eloDelta?: number; mars?: boolean }) => {
       if (typeof g.eloDelta === 'number') setEloDelta(g.eloDelta)
+      if (g.mars) setMars(true)
       setS((c) => (c.result ? c : { ...c, result: g.youWon ? myColor : other(myColor) }))
     }
     sock.on('nardy:state', onState)
@@ -614,6 +616,11 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
             <p className="text-2xl font-extrabold">
               {s.result === myColor ? t('match.youWon') : t('match.youLost')}
             </p>
+            {mars && (
+              <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-gradient-to-b from-gold to-gold-dark px-3 py-1 text-sm font-extrabold text-white">
+                {t('nardy.mars')} · ×2
+              </p>
+            )}
             <p className="mt-1 text-sm text-muted">
               {isOnline ? t('match.onlineGame') : t('match.botUnrated')}
             </p>
@@ -876,7 +883,8 @@ function Board({
             className="pointer-events-none absolute"
             style={{
               left: `${TRAY_X}%`,
-              top: `${fromTop ? 8 + k * step : 92 - k * step}%`,
+              // align the borne-off stack with the board's checker rows (was 8 / 92)
+              top: `${fromTop ? TOP_Y0 + k * step : BOT_Y0 - k * step}%`,
               width: `${TRAY_CD}%`,
               transform: 'translate(-50%,-50%)',
               zIndex: k,
