@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, debitIfAffordable, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes } from './db.js'
 import { settleStakes } from './gramStakes.js'
 import { initSender, senderReady, hotBalance, sendTon } from './tonSender.js'
 import { verifyInitData } from './telegram.js'
@@ -793,9 +793,23 @@ function durakFinish(room) {
 
 const ABORT_WINDOW_MS = 10000
 
-function startRoom(room) {
-  if (room.started) return
-  escrowStakes(room) // debit stakes into escrow (no-op for free games)
+/** Abort a staked game that couldn't collect every stake: stakes already taken were
+ *  refunded in escrowStakes; here we just tell the seated players and drop the room. */
+function cancelStakedRoom(room) {
+  clearInterval(room.timer)
+  for (const p of room.players) {
+    const sid = sidOf(p.userId)
+    if (sid) io.to(sid).emit('stake:error', { reason: 'balance' })
+  }
+  rooms.delete(room.id)
+  broadcastLobbies() // drop it from any open lobby lists
+}
+
+async function startRoom(room) {
+  if (room.started || room.starting) return
+  room.starting = true // sync guard: no double-start across the escrow await
+  const ok = await escrowStakes(room) // atomic stake debit (no-op for free games)
+  if (!ok) return cancelStakedRoom(room) // a stake couldn't be collected → abort, don't start
   if (room.game === 'durakn') {
     room.started = true
     room.startedAt = Date.now()
@@ -916,14 +930,41 @@ async function canAffordStake(userId, stake) {
   return (await getBalance(tgId)) >= stake
 }
 
-/** Debit each human player's stake into escrow when a staked game begins. Idempotent. */
-function escrowStakes(room) {
-  if (!(room.stake > 0) || !dbEnabled || room.escrowed) return
+/** Atomically debit each human's stake into escrow when a staked game begins.
+ *  Every debit is guarded (can't go negative / double-spend). If ANY player can't
+ *  cover it — e.g. they committed the same GRAM to two games at once — refund
+ *  everyone already debited and cancel: returns false so the game does NOT start
+ *  with a phantom (never-collected) stake. Returns true when the game may proceed. */
+async function escrowStakes(room) {
+  if (!(room.stake > 0) || !dbEnabled) return true
+  if (room.escrowed) return true
   room.escrowed = true
-  for (const p of room.players) {
-    if (!p.tgId) continue
-    adjustGram({ tgId: p.tgId, delta: -room.stake, kind: 'stake', ref: `stake:${room.id}:${p.tgId}` }).catch(() => {})
+  const humans = room.players.filter((p) => p.tgId)
+  const debited = []
+  for (const p of humans) {
+    const res = await debitIfAffordable({
+      tgId: p.tgId,
+      amount: room.stake,
+      kind: 'stake',
+      ref: `stake:${room.id}:${p.tgId}`,
+    })
+    if (res === 'ok' || res === 'dup') debited.push(p)
+    else {
+      // couldn't collect this stake → roll back everyone we already debited, abort.
+      // Refund under the `stalerefund:` namespace so the restart refunder (which sees
+      // these orphaned stake rows have no `settled` marker) won't refund them a 2nd time.
+      for (const q of debited) {
+        await adjustGram({
+          tgId: q.tgId,
+          delta: room.stake,
+          kind: 'refund',
+          ref: `stalerefund:stake:${room.id}:${q.tgId}`,
+        })
+      }
+      return false
+    }
   }
+  return true
 }
 
 /**

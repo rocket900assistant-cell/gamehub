@@ -307,6 +307,44 @@ export async function getGramHistory(tgId, limit = 30) {
   }
 }
 
+/** Atomic guarded debit: subtracts `amount` only if the balance can cover it, in one
+ *  transaction (so concurrent stakes can't double-spend / go negative). Idempotent on `ref`.
+ *  Returns 'ok' (debited now) | 'dup' (this ref already debited) | 'insufficient' | 'error'. */
+export async function debitIfAffordable({ tgId, amount, kind, ref = null, meta = null }) {
+  if (!pool || !tgId || !(amount > 0)) return 'error'
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    if (ref) {
+      const dup = await client.query('SELECT 1 FROM gram_ledger WHERE ref = $1', [ref])
+      if (dup.rowCount > 0) {
+        await client.query('ROLLBACK')
+        return 'dup' // already escrowed earlier — treat as success, don't debit twice
+      }
+    }
+    const { rows } = await client.query(
+      'UPDATE users SET balance_gram = balance_gram - $2 WHERE tg_id = $1 AND balance_gram >= $2 RETURNING balance_gram',
+      [tgId, amount],
+    )
+    if (rows.length === 0) {
+      await client.query('ROLLBACK')
+      return 'insufficient' // balance couldn't cover it (lost a race for the same funds)
+    }
+    await client.query(
+      'INSERT INTO gram_ledger (tg_id, kind, amount, status, ref, meta) VALUES ($1,$2,$3,$4,$5,$6)',
+      [tgId, kind, -amount, 'done', ref, meta],
+    )
+    await client.query('COMMIT')
+    return 'ok'
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {})
+    console.error('[db] debitIfAffordable failed:', e.message)
+    return 'error'
+  } finally {
+    client.release()
+  }
+}
+
 /** Adjust a player's GRAM balance and log a ledger entry atomically. Idempotent on `ref`.
  *  Returns the new balance, or null if a duplicate `ref` was already applied. */
 export async function adjustGram({ tgId, delta, kind, status = 'done', ref = null, meta = null }) {
