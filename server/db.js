@@ -157,6 +157,22 @@ export async function listPendingWithdrawals(limit = 50) {
   }
 }
 
+/** Approved withdrawals awaiting on-chain send (oldest first). */
+export async function listApprovedWithdrawals(limit = 20) {
+  if (!pool) return []
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, tg_id, (-amount) AS amount, meta FROM gram_ledger
+       WHERE kind = 'withdraw' AND status = 'approved' ORDER BY id ASC LIMIT $1`,
+      [limit],
+    )
+    return rows.map((r) => ({ id: Number(r.id), tgId: Number(r.tg_id), amount: Number(r.amount), meta: r.meta || {} }))
+  } catch (e) {
+    console.error('[db] listApprovedWithdrawals failed:', e.message)
+    return []
+  }
+}
+
 /** Read one withdrawal ledger row. */
 export async function getWithdrawal(id) {
   if (!pool) return null

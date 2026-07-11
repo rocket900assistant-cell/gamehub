@@ -71,6 +71,7 @@ const D: Record<string, Entry> = {
   'wallet.wdMin': { ru: 'Минимальный вывод — 1 GRAM', en: 'Minimum withdrawal is 1 GRAM' },
   'wallet.wdBadAddr': { ru: 'Неверный TON-адрес', en: 'Invalid TON address' },
   'wallet.wdRequested': { ru: 'Заявка создана, ждёт подтверждения', en: 'Request created, awaiting approval' },
+  'wallet.wdSent': { ru: 'Вывод отправлен', en: 'Withdrawal sent' },
   'wallet.wdReview': { ru: 'Вывод подтверждается вручную и приходит в течение некоторого времени', en: 'Withdrawals are reviewed and sent shortly' },
   'wallet.requests': { ru: 'Заявки на вывод', en: 'Withdrawal requests' },
   'admin.withdrawals': { ru: 'Заявки на вывод', en: 'Withdrawal requests' },

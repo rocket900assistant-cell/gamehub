@@ -1,8 +1,9 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, getWithdrawal, setWithdrawalStatus } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, getWithdrawal, setWithdrawalStatus } from './db.js'
 import { settleStakes } from './gramStakes.js'
+import { initSender, senderReady, hotBalance, sendTon } from './tonSender.js'
 import { verifyInitData } from './telegram.js'
 import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther } from './nardy.js'
 import * as durak from './durak.js'
@@ -494,6 +495,55 @@ if (PLATFORM_TON_ADDRESS) {
   setInterval(pollDeposits, 25000)
   console.log('[gram] deposit watcher on for', PLATFORM_TON_ADDRESS)
 }
+
+// ── Withdrawal sender: send approved payouts from the hot wallet ──
+const MAX_AUTO_WITHDRAW = Number(process.env.MAX_AUTO_WITHDRAW ?? 0) // 0 = no cap; above this stays manual
+let sendingWithdrawals = false
+
+async function processWithdrawals() {
+  if (!senderReady() || !dbEnabled || sendingWithdrawals) return
+  sendingWithdrawals = true
+  try {
+    const list = await listApprovedWithdrawals()
+    for (const w of list) {
+      const payout = Number(w.meta?.payout ?? 0)
+      const address = w.meta?.address
+      if (!(payout > 0) || !address) continue // malformed → leave for manual review
+      if (MAX_AUTO_WITHDRAW > 0 && payout > MAX_AUTO_WITHDRAW) continue // big payout → manual
+      const bal = await hotBalance()
+      if (bal < payout + 0.05) {
+        console.warn(`[hot] balance ${bal} < payout ${payout} — top up the hot wallet`)
+        break // queue the rest until topped up
+      }
+      // lock this row so it can't be picked twice; a crash mid-send leaves it
+      // 'sending' for MANUAL review (never auto-retried → no double-send)
+      if (!(await setWithdrawalStatus(w.id, 'approved', 'sending'))) continue
+      try {
+        await sendTon(address, payout, 'GameHub')
+        await setWithdrawalStatus(w.id, 'sending', 'sent')
+        const sid = tgSocket.get(w.tgId)
+        if (sid) {
+          io.to(sid).emit('gram:withdraw:sent', { amount: payout })
+          io.to(sid).emit('gram:history')
+        }
+        console.log(`[hot] sent ${payout} GRAM → ${address} (wd ${w.id})`)
+      } catch (e) {
+        console.error(`[hot] send failed (wd ${w.id}):`, e.message)
+        await setWithdrawalStatus(w.id, 'sending', 'approved') // pre-broadcast fail → retry next cycle
+      }
+    }
+  } catch (e) {
+    console.error('[hot] processWithdrawals:', e.message)
+  } finally {
+    sendingWithdrawals = false
+  }
+}
+initSender().then((s) => {
+  if (s) {
+    setInterval(processWithdrawals, 20000)
+    console.log('[hot] withdrawal sender on')
+  }
+})
 
 function emitToRoom(room, event, payload) {
   for (const p of room.players) {

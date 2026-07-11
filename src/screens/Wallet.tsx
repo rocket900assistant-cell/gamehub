@@ -60,12 +60,18 @@ export function Wallet({ balance, address, owner, onOpenAdmin, onBack }: WalletP
       setNotice(`${t('wallet.credited')} +${p.amount} GRAM`)
       s.emit('gram:history') // refresh the list
     }
+    const onSent = (p: { amount: number }) => {
+      setNotice(`${t('wallet.wdSent')} · ${p.amount} GRAM`)
+      s.emit('gram:history')
+    }
     s.on('gram:history', onHistory)
     s.on('gram:credited', onCredited)
+    s.on('gram:withdraw:sent', onSent)
     s.emit('gram:history')
     return () => {
       s.off('gram:history', onHistory)
       s.off('gram:credited', onCredited)
+      s.off('gram:withdraw:sent', onSent)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
