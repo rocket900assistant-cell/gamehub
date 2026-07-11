@@ -19,15 +19,9 @@ interface WdReq {
 export function WithdrawAdmin({ onBack }: { onBack: () => void }) {
   const [items, setItems] = useState<WdReq[] | null>(null)
   const [busy, setBusy] = useState<number | null>(null)
-  const [fee, setFee] = useState<{ accrued: number; feeAddress: string | null; hot: number | null } | null>(null)
-  const [feeBusy, setFeeBusy] = useState(false)
-  const [notice, setNotice] = useState('')
 
   const refresh = () => {
     getSocket().emit('gram:withdrawals', {}, (r: { items?: WdReq[] }) => setItems(r?.items ?? []))
-    getSocket().emit('gram:fee:status', {}, (r: { accrued?: number; feeAddress?: string | null; hot?: number | null }) =>
-      setFee({ accrued: r?.accrued ?? 0, feeAddress: r?.feeAddress ?? null, hot: r?.hot ?? null }),
-    )
   }
   useEffect(() => {
     const s = getSocket()
@@ -38,28 +32,6 @@ export function WithdrawAdmin({ onBack }: { onBack: () => void }) {
       s.off('gram:withdrawals', onList)
     }
   }, [])
-
-  const withdrawFee = () => {
-    setFeeBusy(true)
-    setNotice('')
-    getSocket().emit('gram:fee:withdraw', {}, (r: { ok?: boolean; sent?: number; error?: string }) => {
-      setFeeBusy(false)
-      if (r?.ok) setNotice(`${t('admin.feeSent')} · ${r.sent} GRAM`)
-      else
-        setNotice(
-          r?.error === 'no-hot'
-            ? t('admin.feeNoHot')
-            : r?.error === 'hot-low'
-              ? t('admin.feeHotLow')
-              : r?.error === 'empty'
-                ? t('admin.feeEmpty')
-                : r?.error === 'no-fee-address'
-                  ? t('admin.feeNoAddr')
-                  : t('admin.feeFail'),
-        )
-      refresh()
-    })
-  }
 
   const act = (id: number, event: 'gram:withdraw:approve' | 'gram:withdraw:reject') => {
     setBusy(id)
@@ -127,43 +99,6 @@ export function WithdrawAdmin({ onBack }: { onBack: () => void }) {
       )}
 
       <p className="text-center text-xs text-muted">{t('admin.note')}</p>
-
-      {/* owner fee (accrued profit) — withdraw to FEE_TON_ADDRESS */}
-      {fee && (
-        <div className="mt-2 rounded-[var(--radius-card)] border border-line bg-surface p-4 shadow-[var(--shadow-soft)]">
-          <div className="flex items-end justify-between">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                {t('admin.feeAccrued')}
-              </p>
-              <div className="mt-1 flex items-end gap-1.5">
-                <span className="text-3xl font-extrabold tabular-nums">
-                  {fee.accrued.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
-                </span>
-                <span className="mb-0.5 font-bold text-muted">GRAM</span>
-              </div>
-            </div>
-            <Gem size={26} className="mb-1 text-gold" />
-          </div>
-          {fee.hot != null && (
-            <p className="mt-1 text-xs text-muted">
-              {t('admin.hotBalance')}: {fee.hot} GRAM
-            </p>
-          )}
-          <Button className="mt-3 w-full" disabled={feeBusy || fee.accrued <= 0} onClick={withdrawFee}>
-            {t('admin.feeWithdraw')}
-          </Button>
-        </div>
-      )}
-
-      {notice && (
-        <div
-          className="fixed inset-x-0 bottom-24 z-50 mx-auto w-fit max-w-[90%] rounded-full bg-ink px-4 py-2 text-sm font-semibold text-bg shadow-lg"
-          onClick={() => setNotice('')}
-        >
-          {notice}
-        </div>
-      )}
     </div>
   )
 }

@@ -51,6 +51,35 @@ export function Wallet({ balance, address, owner, onOpenAdmin, onBack }: WalletP
   const [wdAddr, setWdAddr] = useState('')
   const [wdErr, setWdErr] = useState('')
   const [wdBusy, setWdBusy] = useState(false)
+  const [fee, setFee] = useState<{ accrued: number; hot: number | null } | null>(null)
+  const [feeBusy, setFeeBusy] = useState(false)
+
+  const loadFee = () => {
+    if (!owner) return
+    getSocket().emit('gram:fee:status', {}, (r: { accrued?: number; hot?: number | null }) =>
+      setFee({ accrued: r?.accrued ?? 0, hot: r?.hot ?? null }),
+    )
+  }
+  useEffect(loadFee, [owner])
+
+  const withdrawFee = () => {
+    setFeeBusy(true)
+    getSocket().emit('gram:fee:withdraw', {}, (r: { ok?: boolean; sent?: number; error?: string }) => {
+      setFeeBusy(false)
+      setNotice(
+        r?.ok
+          ? `${t('admin.feeSent')} · ${r.sent} GRAM`
+          : r?.error === 'no-hot'
+            ? t('admin.feeNoHot')
+            : r?.error === 'hot-low'
+              ? t('admin.feeHotLow')
+              : r?.error === 'empty'
+                ? t('admin.feeEmpty')
+                : t('admin.feeFail'),
+      )
+      loadFee()
+    })
+  }
 
   useEffect(() => {
     const s = getSocket()
@@ -178,9 +207,40 @@ export function Wallet({ balance, address, owner, onOpenAdmin, onBack }: WalletP
       </div>
 
       {owner && (
-        <Button variant="secondary" className="w-full" onClick={onOpenAdmin}>
-          {t('wallet.requests')}
-        </Button>
+        <div className="space-y-2">
+          <Button variant="secondary" className="w-full" onClick={onOpenAdmin}>
+            {t('wallet.requests')}
+          </Button>
+          {/* accrued owner fee + withdraw to FEE_TON_ADDRESS */}
+          <div className="rounded-[var(--radius-card)] border border-line bg-surface p-4 shadow-[var(--shadow-soft)]">
+            <div className="flex items-end justify-between">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                  {t('admin.feeAccrued')}
+                </p>
+                <div className="mt-1 flex items-end gap-1.5">
+                  <span className="text-2xl font-extrabold tabular-nums">
+                    {(fee?.accrued ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
+                  </span>
+                  <span className="mb-0.5 text-sm font-bold text-muted">GRAM</span>
+                </div>
+              </div>
+              <Gem size={24} className="mb-1 text-gold" />
+            </div>
+            {fee?.hot != null && (
+              <p className="mt-1 text-xs text-muted">
+                {t('admin.hotBalance')}: {fee.hot} GRAM
+              </p>
+            )}
+            <Button
+              className="mt-3 w-full"
+              disabled={feeBusy || (fee?.accrued ?? 0) <= 0}
+              onClick={withdrawFee}
+            >
+              {t('admin.feeWithdraw')}
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* history */}
