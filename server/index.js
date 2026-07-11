@@ -9,6 +9,11 @@ import * as durakN from './durakN.js'
 
 const PORT = process.env.PORT || 3001
 
+// Never let one bad packet or a stray async rejection kill the whole server
+// (that would drop every live game). Log loudly and keep running.
+process.on('uncaughtException', (e) => console.error('[fatal] uncaughtException:', e))
+process.on('unhandledRejection', (e) => console.error('[fatal] unhandledRejection:', e))
+
 // ── in-memory state (live sessions) ──────────────
 const users = new Map() // userId -> { socketId, name, elo }
 const socketUser = new Map() // socketId -> userId
@@ -793,8 +798,36 @@ function endGame(room, winnerColor, reason) {
   }
 }
 
+// Per-event minimum spacing for sensitive actions (ms). Everything else is
+// covered by the general token bucket below.
+const EVENT_MIN_MS = { 'shop:buy': 1500, quickMatch: 700, 'lobby:create': 800, register: 400 }
+
 io.on('connection', (socket) => {
+  // ── anti-flood + payload guard (runs before every event handler) ──
+  const rl = { tokens: 45, last: Date.now() }
+  const lastAt = new Map() // event -> last time it was allowed
+  socket.use(([event, payload], next) => {
+    // reject malformed payloads (null/primitive would crash handlers that destructure);
+    // allow undefined (events with no args) and real objects only
+    if (payload !== undefined && (payload === null || typeof payload !== 'object'))
+      return next(new Error('bad-payload'))
+    const now = Date.now()
+    rl.tokens = Math.min(45, rl.tokens + ((now - rl.last) / 1000) * 25) // refill 25/s, burst 45
+    rl.last = now
+    if (rl.tokens < 1) return next(new Error('rate-limited'))
+    rl.tokens -= 1
+    const min = EVENT_MIN_MS[event]
+    if (min) {
+      if (now - (lastAt.get(event) || 0) < min) return next(new Error('rate-limited'))
+      lastAt.set(event, now)
+    }
+    next()
+  })
+
   socket.on('register', async ({ userId, name, elo, initData, username, photoUrl, vip }) => {
+    if (typeof userId !== 'string' || !userId || userId.length > 120) return // invalid identity
+    name = typeof name === 'string' ? name.slice(0, 48) : 'Игрок'
+    username = typeof username === 'string' ? username.slice(0, 48) : undefined
     socketUser.set(socket.id, userId)
     users.set(userId, { ...users.get(userId), socketId: socket.id, name, elo, vip: !!vip, photoUrl })
 
