@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, debitIfAffordable, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, userByUsername, createFriendRequest, listIncomingRequests, acceptFriendRequest, declineFriendRequest, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, debitIfAffordable, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes } from './db.js'
 import { settleStakes } from './gramStakes.js'
 import { initSender, senderReady, hotBalance, sendTon } from './tonSender.js'
 import { verifyInitData } from './telegram.js'
@@ -278,6 +278,30 @@ async function pushFriends(tgId) {
   const sid = tgSocket.get(Number(tgId))
   if (!sid) return
   io.to(sid).emit('friends', await friendListFor(tgId))
+}
+
+/** Build the incoming friend-request list for a player: requester profile + online flag. */
+async function requestListFor(tgId) {
+  if (!tgId) return []
+  const rows = await listIncomingRequests(tgId)
+  return rows.map((r) => {
+    const id = Number(r.tg_id)
+    const info = tgInfo.get(id)
+    return {
+      id,
+      name: r.name ?? info?.name ?? 'Игрок',
+      username: r.username ?? info?.username ?? null,
+      photoUrl: r.photo_url ?? info?.photoUrl ?? null,
+      online: tgSocket.has(id),
+    }
+  })
+}
+
+/** Push the pending incoming-request list to a player if they're online. */
+async function pushRequests(tgId) {
+  const sid = tgSocket.get(Number(tgId))
+  if (!sid) return
+  io.to(sid).emit('friend:requests', await requestListFor(tgId))
 }
 
 // ── Telegram Stars payments ──
@@ -1135,6 +1159,7 @@ io.on('connection', (socket) => {
       tgSocket.set(tgId, socket.id)
       tgInfo.set(tgId, { name, username, photoUrl, elos: tgInfo.get(tgId)?.elos })
       pushFriends(tgId).catch(() => {})
+      pushRequests(tgId).catch(() => {}) // any friend requests waiting for me
       for (const f of await friendListFor(tgId)) pushFriends(f.id).catch(() => {})
       // owned skins (server = source of truth for paid items)
       getEntitlements(tgId).then((items) => socket.emit('shop:entitlements', { items })).catch(() => {})
@@ -1412,14 +1437,70 @@ io.on('connection', (socket) => {
   })
 
   // ── friends ──
+  /** Send a friend request. Target is `code` (a Telegram id, e.g. from an invite link)
+   *  or `username` (@handle typed by the user). Recipient must accept before it counts. */
+  socket.on('friend:request', async ({ code, username }) => {
+    const myTg = userTg.get(socketUser.get(socket.id))
+    if (!myTg) return
+    let targetTg = code != null ? Number(code) : null
+    if (!targetTg && username) {
+      const u = await userByUsername(username)
+      if (!u) return socket.emit('friend:request:result', { ok: false, reason: 'notfound' })
+      targetTg = Number(u.tg_id)
+    }
+    if (!targetTg) return socket.emit('friend:request:result', { ok: false, reason: 'notfound' })
+    if (targetTg === myTg) return socket.emit('friend:request:result', { ok: false, reason: 'self' })
+    const status = await createFriendRequest(myTg, targetTg)
+    if (status === 'accepted') {
+      // they had already requested me → we're friends now
+      pushFriends(myTg).catch(() => {})
+      pushFriends(targetTg).catch(() => {})
+      pushRequests(myTg).catch(() => {})
+    } else if (status === 'sent') {
+      pushRequests(targetTg).catch(() => {}) // let them see it live
+    }
+    socket.emit('friend:request:result', { ok: status !== 'self', reason: status })
+  })
+
+  socket.on('friend:requests', async () => {
+    const myTg = userTg.get(socketUser.get(socket.id))
+    socket.emit('friend:requests', await requestListFor(myTg))
+  })
+
+  socket.on('friend:accept', async ({ code }) => {
+    const myTg = userTg.get(socketUser.get(socket.id))
+    const fromTg = Number(code)
+    if (!myTg || !fromTg) return
+    const ok = await acceptFriendRequest(myTg, fromTg)
+    if (ok) {
+      pushFriends(myTg).catch(() => {})
+      pushFriends(fromTg).catch(() => {})
+    }
+    pushRequests(myTg).catch(() => {})
+  })
+
+  socket.on('friend:decline', async ({ code }) => {
+    const myTg = userTg.get(socketUser.get(socket.id))
+    const fromTg = Number(code)
+    if (!myTg || !fromTg) return
+    await declineFriendRequest(myTg, fromTg)
+    pushRequests(myTg).catch(() => {})
+  })
+
+  // Legacy invite-link handler: now sends a request instead of an instant mutual add.
   socket.on('friend:add', async ({ code }) => {
     const myTg = userTg.get(socketUser.get(socket.id))
-    const friendTg = Number(code)
-    if (!myTg || !friendTg || myTg === friendTg) return
-    await addFriendship(myTg, friendTg)
-    pushFriends(myTg).catch(() => {})
-    pushFriends(friendTg).catch(() => {})
-    socket.emit('friend:added', { id: friendTg, name: tgInfo.get(friendTg)?.name ?? null })
+    const targetTg = Number(code)
+    if (!myTg || !targetTg || myTg === targetTg) return
+    const status = await createFriendRequest(myTg, targetTg)
+    if (status === 'accepted') {
+      pushFriends(myTg).catch(() => {})
+      pushFriends(targetTg).catch(() => {})
+      pushRequests(myTg).catch(() => {})
+    } else if (status === 'sent') {
+      pushRequests(targetTg).catch(() => {})
+    }
+    socket.emit('friend:request:result', { ok: status !== 'self', reason: status })
   })
 
   socket.on('friend:list', async () => {

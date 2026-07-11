@@ -33,9 +33,33 @@ export interface ServerFriend {
   online: boolean
 }
 
-/** Add a friend by their telegram id (from a `friend_<id>` invite link). */
+/** A pending incoming friend request (someone who wants to add me). */
+export interface FriendRequest {
+  id: number
+  name: string
+  username?: string | null
+  photoUrl?: string | null
+  online: boolean
+}
+
+/** Add a friend by their telegram id (from a `friend_<id>` invite link) — sends a request. */
 export function addFriend(code: string | number) {
-  getSocket().emit('friend:add', { code })
+  getSocket().emit('friend:request', { code })
+}
+
+/** Send a friend request by @username. */
+export function sendFriendRequest(username: string) {
+  getSocket().emit('friend:request', { username })
+}
+
+/** Accept a pending incoming request (by the requester's telegram id). */
+export function acceptFriendRequest(code: string | number) {
+  getSocket().emit('friend:accept', { code })
+}
+
+/** Decline a pending incoming request. */
+export function declineFriendRequest(code: string | number) {
+  getSocket().emit('friend:decline', { code })
 }
 
 /** Remove a friend (mutual). */
@@ -46,6 +70,11 @@ export function removeFriend(code: string | number) {
 /** Ask the server for the current friend list (also pushed automatically). */
 export function requestFriends() {
   getSocket().emit('friend:list')
+}
+
+/** Ask the server for my pending incoming friend requests (also pushed automatically). */
+export function requestFriendRequests() {
+  getSocket().emit('friend:requests')
 }
 
 /** Change the player's display nickname (server persists + pushes fresh profile). */

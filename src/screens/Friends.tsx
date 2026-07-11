@@ -1,20 +1,72 @@
-import { useState } from 'react'
-import { ArrowLeft, Send, Trash2, UserPlus, Users } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ArrowLeft, AtSign, Check, Send, Trash2, UserPlus, Users, X } from 'lucide-react'
 import { Avatar } from '../components/ui/Avatar'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { shareFriendLink } from '../lib/telegram'
-import { removeFriend, type ServerFriend } from '../lib/socket'
+import {
+  getSocket,
+  removeFriend,
+  sendFriendRequest,
+  acceptFriendRequest,
+  declineFriendRequest,
+  type ServerFriend,
+  type FriendRequest,
+} from '../lib/socket'
 import { t } from '../lib/i18n'
 
 interface FriendsProps {
   friends: ServerFriend[]
+  requests: FriendRequest[]
   myId: number | string
   onBack: () => void
 }
 
-export function Friends({ friends, myId, onBack }: FriendsProps) {
+/** Map a server result reason to a localized message + tone. */
+function resultMessage(reason: string): { msg: string; tone: 'ok' | 'bad' | 'muted' } {
+  switch (reason) {
+    case 'sent':
+      return { msg: t('friends.res.sent'), tone: 'ok' }
+    case 'accepted':
+      return { msg: t('friends.res.accepted'), tone: 'ok' }
+    case 'exists':
+      return { msg: t('friends.res.exists'), tone: 'muted' }
+    case 'already-friends':
+      return { msg: t('friends.res.alreadyFriends'), tone: 'muted' }
+    case 'self':
+      return { msg: t('friends.res.self'), tone: 'bad' }
+    default:
+      return { msg: t('friends.res.notfound'), tone: 'bad' }
+  }
+}
+
+export function Friends({ friends, requests, myId, onBack }: FriendsProps) {
   const [confirm, setConfirm] = useState<ServerFriend | null>(null)
+  const [username, setUsername] = useState('')
+  const [sending, setSending] = useState(false)
+  const [feedback, setFeedback] = useState<{ msg: string; tone: 'ok' | 'bad' | 'muted' } | null>(null)
+
+  useEffect(() => {
+    const s = getSocket()
+    const onResult = ({ reason }: { ok: boolean; reason: string }) => {
+      setSending(false)
+      setFeedback(resultMessage(reason))
+      if (reason === 'sent' || reason === 'accepted') setUsername('')
+    }
+    s.on('friend:request:result', onResult)
+    return () => {
+      s.off('friend:request:result', onResult)
+    }
+  }, [])
+
+  const submitUsername = () => {
+    const name = username.trim().replace(/^@/, '')
+    if (!name || sending) return
+    setSending(true)
+    setFeedback(null)
+    sendFriendRequest(name)
+  }
+
   const sorted = [...friends].sort(
     (a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name),
   )
@@ -39,7 +91,7 @@ export function Friends({ friends, myId, onBack }: FriendsProps) {
         )}
       </div>
 
-      {/* Add a friend by sharing an invite link */}
+      {/* Add a friend: by username (request) or by invite link */}
       <Card className="space-y-3">
         <div className="flex items-center gap-3">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gold-light/50 text-gold-dark">
@@ -50,10 +102,96 @@ export function Friends({ friends, myId, onBack }: FriendsProps) {
             <p className="text-xs text-muted">{t('friends.addHint')}</p>
           </div>
         </div>
-        <Button className="w-full" onClick={() => shareFriendLink(myId)}>
+
+        {/* by username */}
+        <div className="flex items-center gap-2">
+          <div className="flex h-11 flex-1 items-center gap-1.5 rounded-[var(--radius-input)] border border-line bg-bg px-3">
+            <AtSign size={16} className="shrink-0 text-muted" />
+            <input
+              value={username}
+              onChange={(e) => {
+                setUsername(e.target.value.replace(/[^A-Za-z0-9_@]/g, ''))
+                if (feedback) setFeedback(null)
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && submitUsername()}
+              placeholder={t('friends.username')}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              className="w-full bg-transparent text-sm font-semibold outline-none"
+            />
+          </div>
+          <Button onClick={submitUsername} disabled={!username.trim() || sending}>
+            {t('friends.addBtn')}
+          </Button>
+        </div>
+
+        {feedback && (
+          <p
+            className={
+              'text-sm font-semibold ' +
+              (feedback.tone === 'ok'
+                ? 'text-success'
+                : feedback.tone === 'bad'
+                  ? 'text-danger'
+                  : 'text-muted')
+            }
+          >
+            {feedback.msg}
+          </p>
+        )}
+
+        {/* by link */}
+        <div className="flex items-center gap-3 pt-1">
+          <span className="h-px flex-1 bg-line" />
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            {t('friends.orLink')}
+          </span>
+          <span className="h-px flex-1 bg-line" />
+        </div>
+        <Button variant="secondary" className="w-full" onClick={() => shareFriendLink(myId)}>
           <Send size={16} /> {t('friends.shareLink')}
         </Button>
       </Card>
+
+      {/* Incoming friend requests */}
+      {requests.length > 0 && (
+        <div className="space-y-2">
+          <p className="px-1 text-xs font-bold uppercase tracking-wide text-muted">
+            {t('friends.requests')} · {requests.length}
+          </p>
+          <Card className="divide-y divide-line/70 overflow-hidden p-0">
+            {requests.map((r) => (
+              <div key={r.id} className="flex items-center gap-3 bg-surface p-3.5">
+                <div className="relative">
+                  <Avatar name={r.name} src={r.photoUrl ?? undefined} size={44} />
+                  {r.online && (
+                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface bg-success" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-bold leading-tight">{r.name}</p>
+                  {r.username && <p className="truncate text-xs text-muted">@{r.username}</p>}
+                </div>
+                <button
+                  onClick={() => acceptFriendRequest(r.id)}
+                  aria-label={t('friends.accept')}
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-success text-white transition active:scale-95"
+                >
+                  <Check size={20} strokeWidth={2.6} />
+                </button>
+                <button
+                  onClick={() => declineFriendRequest(r.id)}
+                  aria-label={t('friends.decline')}
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-line text-muted transition active:bg-bg"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            ))}
+          </Card>
+        </div>
+      )}
 
       {/* Friends list */}
       {sorted.length === 0 ? (

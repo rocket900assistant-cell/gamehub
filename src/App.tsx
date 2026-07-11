@@ -40,6 +40,7 @@ import {
   type MatchConfig,
   type Profile as PlayerProfile,
   type ServerFriend,
+  type FriendRequest,
   type HistoryEntry,
   type EloTrend,
 } from './lib/socket'
@@ -104,6 +105,7 @@ export default function App() {
   const [durakNOnline, setDurakNOnline] = useState<OnlineDurakN | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
   const [friends, setFriends] = useState<ServerFriend[]>([])
+  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([])
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [eloTrend, setEloTrend] = useState<EloTrend | null>(null)
   const [pendingInvite, setPendingInvite] = useState<PendingInvite | null>(null)
@@ -224,6 +226,7 @@ export default function App() {
       setJoinError(t('invite.notFound'))
     }
     const onFriends = (list: ServerFriend[]) => setFriends(list)
+    const onFriendRequests = (list: FriendRequest[]) => setFriendRequests(list)
     const onHistory = (list: HistoryEntry[]) => setHistory(list)
     const onEloTrend = (e: EloTrend) => setEloTrend(e)
     const onInviteOffline = () => {
@@ -270,6 +273,7 @@ export default function App() {
     s.on('invite:incoming', onInvite)
     s.on('room:notfound', onNotFound)
     s.on('friends', onFriends)
+    s.on('friend:requests', onFriendRequests)
     s.on('history', onHistory)
     s.on('elo:trend', onEloTrend)
     s.on('invite:offline', onInviteOffline)
@@ -285,7 +289,7 @@ export default function App() {
       s.emit('joinRoom', { roomId: sp.slice(5) })
       setMatchmaking({ minutes: 0, label: t('mm.joining'), subtitle: t('mm.connecting') })
     } else if (sp && sp.startsWith('friend_')) {
-      // friend-add link → become mutual friends (after register is sent).
+      // friend-add link → send a friend request to the link owner (they accept).
       addFriend(sp.slice(7))
     }
 
@@ -297,6 +301,7 @@ export default function App() {
       s.off('invite:incoming', onInvite)
       s.off('room:notfound', onNotFound)
       s.off('friends', onFriends)
+      s.off('friend:requests', onFriendRequests)
       s.off('history', onHistory)
       s.off('elo:trend', onEloTrend)
       s.off('invite:offline', onInviteOffline)
@@ -540,7 +545,7 @@ export default function App() {
                 onCancel={cancelMatchmaking}
               />
             ) : sub === 'friends' ? (
-              <Friends friends={friends} myId={user.id} onBack={() => setSub(null)} />
+              <Friends friends={friends} requests={friendRequests} myId={user.id} onBack={() => setSub(null)} />
             ) : sub === 'wallet' ? (
               <Wallet
                 balance={profile?.balance ?? 0}

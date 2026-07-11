@@ -53,6 +53,12 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       PRIMARY KEY (a, b)
     );
+    CREATE TABLE IF NOT EXISTS friend_requests (
+      from_tg    BIGINT NOT NULL,
+      to_tg      BIGINT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (from_tg, to_tg)
+    );
     ALTER TABLE users ADD COLUMN IF NOT EXISTS vip BOOLEAN NOT NULL DEFAULT false;
     CREATE TABLE IF NOT EXISTS elo_history (
       id         BIGSERIAL PRIMARY KEY,
@@ -464,6 +470,107 @@ export async function getFriends(tgId) {
     [tgId],
   )
   return rows
+}
+
+// ── friend requests (pending until the recipient accepts) ──
+const memReq = new Map() // toTg -> Set(fromTg): pending incoming requests (no-DB fallback)
+
+/** Find a registered player by their Telegram @username (case-insensitive). */
+export async function userByUsername(username) {
+  const clean = String(username ?? '').replace(/^@/, '').trim()
+  if (!clean || !pool) return null
+  const { rows } = await pool.query(
+    'SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1',
+    [clean],
+  )
+  return rows[0] ?? null
+}
+
+/** Send a friend request from → to. Returns a status:
+ *  'self' | 'already-friends' | 'accepted' (they'd already requested you) | 'sent' | 'exists'. */
+export async function createFriendRequest(fromTg, toTg) {
+  fromTg = Number(fromTg)
+  toTg = Number(toTg)
+  if (!fromTg || !toTg || fromTg === toTg) return 'self'
+  if (!pool) {
+    if (memFriends.get(fromTg)?.has(toTg)) return 'already-friends'
+    if (memReq.get(fromTg)?.has(toTg)) {
+      // they already requested me → accept immediately
+      await addFriendship(fromTg, toTg)
+      memReq.get(fromTg).delete(toTg)
+      memReq.get(toTg)?.delete(fromTg)
+      return 'accepted'
+    }
+    if (!memReq.has(toTg)) memReq.set(toTg, new Set())
+    if (memReq.get(toTg).has(fromTg)) return 'exists'
+    memReq.get(toTg).add(fromTg)
+    return 'sent'
+  }
+  const fr = await pool.query('SELECT 1 FROM friendships WHERE a=$1 AND b=$2', [fromTg, toTg])
+  if (fr.rowCount > 0) return 'already-friends'
+  const rev = await pool.query(
+    'SELECT 1 FROM friend_requests WHERE from_tg=$1 AND to_tg=$2',
+    [toTg, fromTg],
+  )
+  if (rev.rowCount > 0) {
+    await addFriendship(fromTg, toTg)
+    await pool.query(
+      'DELETE FROM friend_requests WHERE (from_tg=$1 AND to_tg=$2) OR (from_tg=$2 AND to_tg=$1)',
+      [fromTg, toTg],
+    )
+    return 'accepted'
+  }
+  const ins = await pool.query(
+    'INSERT INTO friend_requests (from_tg, to_tg) VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING 1',
+    [fromTg, toTg],
+  )
+  return ins.rowCount > 0 ? 'sent' : 'exists'
+}
+
+/** Incoming pending requests for a player (joined with the requester's profile). */
+export async function listIncomingRequests(toTg) {
+  toTg = Number(toTg)
+  if (!toTg) return []
+  if (!pool) return [...(memReq.get(toTg) ?? [])].map((id) => ({ tg_id: id }))
+  const { rows } = await pool.query(
+    `SELECT u.tg_id, u.name, u.username, u.photo_url, u.elo_chess FROM friend_requests r
+       JOIN users u ON u.tg_id = r.from_tg
+       WHERE r.to_tg = $1 ORDER BY r.created_at DESC`,
+    [toTg],
+  )
+  return rows
+}
+
+/** Accept the request from `fromTg` → creates the friendship. Returns true if a request existed. */
+export async function acceptFriendRequest(toTg, fromTg) {
+  toTg = Number(toTg)
+  fromTg = Number(fromTg)
+  if (!toTg || !fromTg) return false
+  if (!pool) {
+    if (!memReq.get(toTg)?.has(fromTg)) return false
+    memReq.get(toTg).delete(fromTg)
+    await addFriendship(toTg, fromTg)
+    return true
+  }
+  const del = await pool.query(
+    'DELETE FROM friend_requests WHERE from_tg=$1 AND to_tg=$2 RETURNING 1',
+    [fromTg, toTg],
+  )
+  if (del.rowCount === 0) return false
+  await addFriendship(toTg, fromTg)
+  return true
+}
+
+/** Decline / cancel a pending request (removes it, no friendship). */
+export async function declineFriendRequest(toTg, fromTg) {
+  toTg = Number(toTg)
+  fromTg = Number(fromTg)
+  if (!toTg || !fromTg) return
+  if (!pool) {
+    memReq.get(toTg)?.delete(fromTg)
+    return
+  }
+  await pool.query('DELETE FROM friend_requests WHERE from_tg=$1 AND to_tg=$2', [fromTg, toTg])
 }
 
 /** Create the player row if new, else refresh their profile fields. Returns the row. */
