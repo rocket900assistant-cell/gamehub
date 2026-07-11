@@ -274,6 +274,7 @@ async function pushFriends(tgId) {
 // ── Telegram Stars payments ──
 const BOT_TOKEN = process.env.BOT_TOKEN
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'gh_' + (BOT_TOKEN ? BOT_TOKEN.slice(-10).replace(/\W/g, '') : 'dev')
+const MINIAPP_URL = process.env.MINIAPP_URL || 'https://gamehub-mahr.pages.dev'
 const WEBHOOK_PATH = `/tg/${WEBHOOK_SECRET}`
 
 // HTTP server: health-check ("/") + the Telegram webhook (payments).
@@ -367,6 +368,19 @@ async function handleTgUpdate(update) {
   if (update.pre_checkout_query) {
     // must be answered within 10s or the charge is cancelled
     await callTG('answerPreCheckoutQuery', { pre_checkout_query_id: update.pre_checkout_query.id, ok: true })
+    return
+  }
+  // /start (or any plain message) → greet with a button that opens the mini app
+  const msg = update.message
+  if (msg?.text && !msg.successful_payment) {
+    await callTG('sendMessage', {
+      chat_id: msg.chat.id,
+      text:
+        '♟️ Добро пожаловать в GameHub!\n\nШахматы, Дурак и Нарды — играй онлайн с друзьями и соперниками, зарабатывай рейтинг.\n\nЖми «Играть» 👇',
+      reply_markup: {
+        inline_keyboard: [[{ text: '🎮 Играть', web_app: { url: MINIAPP_URL } }]],
+      },
+    })
     return
   }
   const sp = update.message?.successful_payment
