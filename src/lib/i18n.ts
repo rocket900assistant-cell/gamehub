@@ -83,6 +83,7 @@ const D: Record<string, Entry> = {
   'admin.feeAccrued': { ru: 'Твоя комиссия (прибыль)', en: 'Your fees (profit)' },
   'admin.hotBalance': { ru: 'Горячий кошелёк', en: 'Hot wallet' },
   'admin.feeWithdraw': { ru: 'Вывести комиссию', en: 'Withdraw fees' },
+  'admin.feeHistory': { ru: 'История выводов комиссии', en: 'Fee withdrawal history' },
   'admin.feeSent': { ru: 'Комиссия отправлена', en: 'Fees sent' },
   'admin.feeEmpty': { ru: 'Комиссии пока нет', en: 'No fees yet' },
   'admin.feeNoHot': { ru: 'Сначала настрой горячий кошелёк (HOT_TON_MNEMONIC)', en: 'Set up the hot wallet first' },

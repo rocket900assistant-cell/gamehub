@@ -200,6 +200,22 @@ export async function setWithdrawalStatus(id, from, to) {
   }
 }
 
+/** History of owner fee withdrawals (HOUSE account), most recent first. */
+export async function getFeeHistory(limit = 20) {
+  if (!pool) return []
+  try {
+    const { rows } = await pool.query(
+      `SELECT (-amount) AS amount, meta, created_at FROM gram_ledger
+       WHERE tg_id = 0 AND kind = 'fee_withdraw' ORDER BY id DESC LIMIT $1`,
+      [limit],
+    )
+    return rows.map((r) => ({ amount: Number(r.amount), to: r.meta?.to ?? null, at: r.created_at }))
+  } catch (e) {
+    console.error('[db] getFeeHistory failed:', e.message)
+    return []
+  }
+}
+
 /** Current GRAM balance (0 if no row / no DB). */
 export async function getBalance(tgId) {
   if (!pool || tgId == null) return 0

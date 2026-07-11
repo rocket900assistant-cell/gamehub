@@ -51,13 +51,20 @@ export function Wallet({ balance, address, owner, onOpenAdmin, onBack }: WalletP
   const [wdAddr, setWdAddr] = useState('')
   const [wdErr, setWdErr] = useState('')
   const [wdBusy, setWdBusy] = useState(false)
-  const [fee, setFee] = useState<{ accrued: number; hot: number | null } | null>(null)
+  const [fee, setFee] = useState<{
+    accrued: number
+    hot: number | null
+    history: { amount: number; at: string }[]
+  } | null>(null)
   const [feeBusy, setFeeBusy] = useState(false)
 
   const loadFee = () => {
     if (!owner) return
-    getSocket().emit('gram:fee:status', {}, (r: { accrued?: number; hot?: number | null }) =>
-      setFee({ accrued: r?.accrued ?? 0, hot: r?.hot ?? null }),
+    getSocket().emit(
+      'gram:fee:status',
+      {},
+      (r: { accrued?: number; hot?: number | null; history?: { amount: number; at: string }[] }) =>
+        setFee({ accrued: r?.accrued ?? 0, hot: r?.hot ?? null, history: r?.history ?? [] }),
     )
   }
   useEffect(loadFee, [owner])
@@ -239,6 +246,25 @@ export function Wallet({ balance, address, owner, onOpenAdmin, onBack }: WalletP
             >
               {t('admin.feeWithdraw')}
             </Button>
+
+            {fee?.history && fee.history.length > 0 && (
+              <div className="mt-4 border-t border-line pt-3">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                  {t('admin.feeHistory')}
+                </p>
+                <div className="space-y-1.5">
+                  {fee.history.map((h, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm">
+                      <span className="text-muted">{fmtDate(h.at)}</span>
+                      <span className="flex items-center gap-1 font-bold tabular-nums">
+                        {h.amount.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
+                        <Gem size={11} className="text-gold" />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
