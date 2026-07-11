@@ -3,6 +3,7 @@ import { ChevronLeft, Flag, Gem, MessageCircle, RotateCcw, Send, X } from 'lucid
 import { Button } from '../components/ui/Button'
 import { PlayingCard } from '../components/PlayingCard'
 import { Confetti } from '../components/Confetti'
+import { CountUp } from '../components/CountUp'
 import { equippedDurakFeltSrc, isVip } from '../lib/skins'
 import { t } from '../lib/i18n'
 import type { DurakConfig } from './DurakSetup'
@@ -27,7 +28,7 @@ import {
   type Player,
 } from '../lib/durak'
 import type { TgUser } from '../lib/telegram'
-import { displayName } from '../lib/telegram'
+import { displayName, haptic } from '../lib/telegram'
 import { getSocket } from '../lib/socket'
 import { player } from '../data/mock'
 
@@ -244,6 +245,13 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
   const youAttacker = s.attacker === 'you'
   const yourTurn = started && s.turn === 'you' && !s.result
 
+  // haptic when the game ends
+  useEffect(() => {
+    if (!s.result) return
+    haptic(s.result.loser === 'opp' ? 'success' : s.result.loser === null ? 'warning' : 'error')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.result])
+
   // Drop a card at a screen point — the engine validates; illegal = snap back.
   function playAt(card: Card, x: number, y: number) {
     const el = document.elementFromPoint(x, y)
@@ -264,15 +272,17 @@ export function DurakMatch({ user, config, resume, online, myName, onExit }: Dur
     if (next !== s) setS(next)
   }
   // Online sends the ACTION to the server (authoritative); local applies the engine.
-  const emitD = (event: string, payload: object = {}) =>
+  const emitD = (event: string, payload: object = {}) => {
+    haptic('light')
     getSocket().emit(event, { roomId: online!.roomId, ...payload })
+  }
   const doAttack = (card: Card) =>
-    isOnline ? emitD('durak:attack', { card }) : apply(playAttack(s, card))
+    isOnline ? emitD('durak:attack', { card }) : (haptic('light'), apply(playAttack(s, card)))
   const doDefend = (card: Card, pair: number) =>
-    isOnline ? emitD('durak:defend', { card, pair }) : apply(playDefend(s, card, pair))
+    isOnline ? emitD('durak:defend', { card, pair }) : (haptic('light'), apply(playDefend(s, card, pair)))
   const doTransfer = (card: Card) =>
-    isOnline ? emitD('durak:transfer', { card }) : apply(playTransfer(s, card))
-  const doTake = () => (isOnline ? emitD('durak:take') : apply(beginTake(s)))
+    isOnline ? emitD('durak:transfer', { card }) : (haptic('light'), apply(playTransfer(s, card)))
+  const doTake = () => (isOnline ? emitD('durak:take') : (haptic('light'), apply(beginTake(s))))
   const doDone = () => {
     if (isOnline) return emitD('durak:done')
     if (s.taking) apply(finishTake(s))
@@ -990,7 +1000,7 @@ function DurakOver({
   const showElo = rated && !draw && eloDelta != null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6">
-      <div className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
+      <div className="gh-pop-in w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
         <p className="text-2xl font-extrabold">{title}</p>
         <p className="mt-1 text-sm text-muted">
           {money ? t('match.onGram') : canRematch ? t('match.botUnrated') : t('match.onlineGame')}
@@ -1000,7 +1010,7 @@ function DurakOver({
             className={`mt-3 text-3xl font-extrabold ${eloDelta >= 0 ? 'text-success' : 'text-danger'}`}
           >
             {eloDelta >= 0 ? '+' : '−'}
-            {Math.abs(eloDelta)} Elo
+            <CountUp to={Math.abs(eloDelta)} /> Elo
           </p>
         )}
         <div className="mt-6 flex gap-2">

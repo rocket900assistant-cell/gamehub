@@ -3,12 +3,13 @@ import { ChevronLeft, Flag, Gem, MessageCircle, RotateCcw, Send, X } from 'lucid
 import { Button } from '../components/ui/Button'
 import { PlayingCard } from '../components/PlayingCard'
 import { Confetti } from '../components/Confetti'
+import { CountUp } from '../components/CountUp'
 import { HandFan, CardFan, PlayerTile, ConfirmDialog } from './DurakMatch'
 import { equippedDurakFeltSrc, isVip } from '../lib/skins'
 import { t } from '../lib/i18n'
 import { getSocket } from '../lib/socket'
 import { player } from '../data/mock'
-import { displayName, type TgUser } from '../lib/telegram'
+import { displayName, haptic, type TgUser } from '../lib/telegram'
 import {
   createGameN,
   botStep,
@@ -203,11 +204,18 @@ export function DurakMatchN({
     isOnline ? emitAction('defend', { card, pair }) : apply(playDefend(s, card, pair))
   const doTransfer = (card: Card) =>
     isOnline ? emitAction('transfer', { card }) : apply(playTransfer(s, card))
-  const doTake = () => (isOnline ? emitAction('take') : apply(beginTake(s)))
-  const doPass = () => (isOnline ? emitAction('pass') : apply(enginePass(s, me)))
+  const doTake = () => {
+    haptic('light')
+    return isOnline ? emitAction('take') : apply(beginTake(s))
+  }
+  const doPass = () => {
+    haptic('light')
+    return isOnline ? emitAction('pass') : apply(enginePass(s, me))
+  }
 
   // Drop a card at a screen point — the engine validates; illegal = snap back.
   function playAt(card: Card, x: number, y: number) {
+    haptic('light')
     if (!defendingNow) {
       doAttack(card) // attacker / thrower — a light flick plays it
       return
@@ -290,6 +298,13 @@ export function DurakMatchN({
   const draw = s.result != null && s.result.loser === null
   const iLost = s.result?.loser === me
   const iWon = s.result != null && !iLost && !draw
+
+  // haptic when the game ends
+  useEffect(() => {
+    if (!s.result) return
+    haptic(iWon ? 'success' : draw ? 'warning' : 'error')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.result])
 
   return (
     <div
@@ -551,15 +566,16 @@ export function DurakMatchN({
       {iWon && <Confetti />}
       {s.result && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6">
-          <div className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
+          <div className="gh-pop-in w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
             <p className="text-2xl font-extrabold">
               {draw ? t('match.draw') : iLost ? t('match.youLost') : t('match.youWon')}
             </p>
             {isOnline && eloDelta != null && eloDelta !== 0 ? (
               <p
-                className={`mt-1 text-sm font-extrabold ${eloDelta > 0 ? 'text-success' : 'text-danger'}`}
+                className={`mt-1 text-base font-extrabold ${eloDelta > 0 ? 'text-success' : 'text-danger'}`}
               >
-                {eloDelta > 0 ? `+${eloDelta}` : eloDelta} Elo
+                {eloDelta > 0 ? '+' : '−'}
+                <CountUp to={Math.abs(eloDelta)} /> Elo
               </p>
             ) : (
               <p className="mt-1 text-sm text-muted">

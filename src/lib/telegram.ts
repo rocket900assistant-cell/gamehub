@@ -22,6 +22,11 @@ interface TelegramWebApp {
   disableVerticalSwipes?: () => void
   onEvent?: (event: string, cb: () => void) => void
   openInvoice?: (url: string, callback?: (status: string) => void) => void
+  HapticFeedback?: {
+    impactOccurred?: (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft') => void
+    notificationOccurred?: (type: 'error' | 'success' | 'warning') => void
+    selectionChanged?: () => void
+  }
   viewportStableHeight?: number
   viewportHeight?: number
   initData?: string
@@ -47,6 +52,21 @@ export function openStarsBot() {
   const wa = getWebApp()
   if (wa?.openTelegramLink) wa.openTelegramLink(STARS_BOT_URL)
   else window.open(STARS_BOT_URL, '_blank')
+}
+
+/** Light haptic feedback via Telegram (no-op outside Telegram). */
+export function haptic(
+  kind: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft' | 'success' | 'error' | 'warning' | 'select',
+) {
+  const hf = getWebApp()?.HapticFeedback
+  if (!hf) return
+  try {
+    if (kind === 'success' || kind === 'error' || kind === 'warning') hf.notificationOccurred?.(kind)
+    else if (kind === 'select') hf.selectionChanged?.()
+    else hf.impactOccurred?.(kind)
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Open Telegram's native Stars payment sheet for an invoice link; resolves with the status. */

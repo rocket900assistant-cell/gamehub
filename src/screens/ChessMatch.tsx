@@ -28,7 +28,7 @@ import { Button } from '../components/ui/Button'
 import { Confetti } from '../components/Confetti'
 import { getSocket, type MatchConfig } from '../lib/socket'
 import type { TgUser } from '../lib/telegram'
-import { displayName } from '../lib/telegram'
+import { displayName, haptic } from '../lib/telegram'
 import { t } from '../lib/i18n'
 
 type Side = 'w' | 'b'
@@ -188,6 +188,13 @@ export function ChessMatch({ user, match, myName, onMinimize, onExit }: ChessMat
   const iWon = result ? (result.youWon ?? result.winner === myColor) : false
   const celebrate = !!result && (result.reason === 'mate' || iWon)
 
+  // haptic when the game ends
+  useEffect(() => {
+    if (!result) return
+    haptic(result.winner === null ? 'warning' : iWon ? 'success' : 'error')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result])
+
   // Online: sync state from the authoritative server.
   useEffect(() => {
     if (!online) return
@@ -263,6 +270,7 @@ export function ChessMatch({ user, match, myName, onMinimize, onExit }: ChessMat
     } catch {
       return false
     }
+    haptic('light')
     setFen(g.fen())
     setLastMove({ from, to })
     setSelected(null)
@@ -819,7 +827,7 @@ function GameOver({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6">
-      <div className="w-full max-w-xs overflow-hidden rounded-[var(--radius-card)] bg-surface text-center shadow-[var(--shadow-soft)]">
+      <div className="gh-pop-in w-full max-w-xs overflow-hidden rounded-[var(--radius-card)] bg-surface text-center shadow-[var(--shadow-soft)]">
         <div className="flex flex-col items-center px-6 pt-7">
           <div className={`grid h-20 w-20 place-items-center rounded-full ${iconWrap}`}>
             <Icon size={38} strokeWidth={youWon && !draw && !aborted ? 2 : 1.8} />

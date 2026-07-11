@@ -4,7 +4,7 @@ import { StarBalance } from '../components/ui/StarBalance'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { Button } from '../components/ui/Button'
 import { setVip, getSocket } from '../lib/socket'
-import { openStarsInvoice } from '../lib/telegram'
+import { openStarsInvoice, haptic } from '../lib/telegram'
 import { t, tf } from '../lib/i18n'
 import {
   BOARD_SKINS,
@@ -210,6 +210,7 @@ export function Store({ balance }: { balance: number }) {
       openStarsInvoice(res.link).then((status) => {
         setBusy(false)
         if (status === 'paid') {
+          haptic('success')
           grantLocal()
           refresh()
         } else if (status === 'failed') {

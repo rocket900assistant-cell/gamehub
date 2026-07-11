@@ -28,7 +28,8 @@ import {
   type NardyState,
   type NPlayer,
 } from '../lib/nardy'
-import { shareInvite, type TgUser } from '../lib/telegram'
+import { shareInvite, haptic, type TgUser } from '../lib/telegram'
+import { CountUp } from '../components/CountUp'
 import { getSocket } from '../lib/socket'
 
 export interface OnlineNardy {
@@ -316,6 +317,12 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s])
 
+  // haptic when the game ends
+  useEffect(() => {
+    if (s.result) haptic(s.result === myColor ? 'success' : 'error')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.result])
+
   // bot plays (rolls, then moves); auto-pass whoever is stuck after a roll — local only
   useEffect(() => {
     if (isOnline || s.result) return
@@ -353,11 +360,13 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
     sel != null && yourTurn ? reachTargets(s, sel) : new Map<number | 'off', number[]>()
 
   function doRoll() {
+    haptic('medium')
     if (isOnline) getSocket().emit('nardy:roll', { roomId: online!.roomId })
     else setS(roll(s))
   }
 
   function applySeq(from: number, seq: number[]) {
+    haptic('light')
     if (isOnline) {
       getSocket().emit('nardy:move', { roomId: online!.roomId, from, seq })
     }
@@ -612,7 +621,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
       {s.result === myColor && <Confetti />}
       {s.result && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6">
-          <div className="w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
+          <div className="gh-pop-in w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
             <p className="text-2xl font-extrabold">
               {s.result === myColor ? t('match.youWon') : t('match.youLost')}
             </p>
@@ -629,7 +638,7 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
                 className={`mt-3 text-3xl font-extrabold ${eloDelta >= 0 ? 'text-success' : 'text-danger'}`}
               >
                 {eloDelta >= 0 ? '+' : '−'}
-                {Math.abs(eloDelta)} Elo
+                <CountUp to={Math.abs(eloDelta)} /> Elo
               </p>
             )}
             <div className="mt-6 flex gap-2">
