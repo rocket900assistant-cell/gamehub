@@ -28,6 +28,7 @@ export interface DurakNState {
   taking: boolean // defender chose to take → attackers may throw in more
   passed: boolean[] // throwers who declined in the current throw-in window
   out: boolean[] // players who finished (escaped: safe, no more cards)
+  finishOrder: number[] // seats in the order they escaped (for N-player stake placement)
   discard: number
   neighborsOnly: boolean // "Соседи" mode: only the defender's neighbours may throw in
   transfer: boolean // "Переводной" mode enabled
@@ -113,6 +114,7 @@ export function createGameN(opts: GameNOptions = {}): DurakNState {
     taking: false,
     passed: Array(n).fill(false),
     out,
+    finishOrder: [],
     discard: 0,
     neighborsOnly: !!opts.neighborsOnly,
     transfer: !!opts.transfer,
@@ -221,6 +223,7 @@ function clone(s: DurakNState): DurakNState {
     table: s.table.map((p) => ({ ...p })),
     passed: [...s.passed],
     out: [...s.out],
+    finishOrder: [...s.finishOrder],
   }
 }
 
@@ -241,7 +244,11 @@ function refill(s: DurakNState) {
 /** Mark players who ran out of cards (deck empty) as out; set result if ≤1 remains. */
 function settle(s: DurakNState) {
   if (s.deck.length === 0) {
-    for (let p = 0; p < s.n; p++) if (!s.out[p] && s.hands[p].length === 0) s.out[p] = true
+    for (let p = 0; p < s.n; p++)
+      if (!s.out[p] && s.hands[p].length === 0) {
+        s.out[p] = true
+        s.finishOrder.push(p)
+      }
   }
   const alive = inPlayCount(s)
   if (alive <= 1) {

@@ -67,6 +67,7 @@ export function createGameN(opts = {}) {
     taking: false,
     passed: Array(n).fill(false),
     out,
+    finishOrder: [],
     discard: 0,
     neighborsOnly: !!opts.neighborsOnly,
     transfer: !!opts.transfer,
@@ -159,6 +160,7 @@ function clone(s) {
     table: s.table.map((p) => ({ ...p })),
     passed: [...s.passed],
     out: [...s.out],
+    finishOrder: [...s.finishOrder],
   }
 }
 function refill(s) {
@@ -175,7 +177,11 @@ function refill(s) {
 }
 function settle(s) {
   if (s.deck.length === 0) {
-    for (let p = 0; p < s.n; p++) if (!s.out[p] && s.hands[p].length === 0) s.out[p] = true
+    for (let p = 0; p < s.n; p++)
+      if (!s.out[p] && s.hands[p].length === 0) {
+        s.out[p] = true
+        s.finishOrder.push(p)
+      }
   }
   const alive = inPlayCount(s)
   if (alive <= 1) {
