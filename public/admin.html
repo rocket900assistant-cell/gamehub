@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<title>GameHub — Админка</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #f4f1ea; --surface: #ffffff; --ink: #201d17;
+    --muted-t: #756e62; --line: #e6e0d5; --gold: #b8912f; --accent: #8a6d1e;
+    --danger: #c0492f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #131109; --surface: #1e1b13; --ink: #ece7db;
+      --muted-t: #a49b88; --line: #2e2a20; --gold: #d8b14e; --accent: #e6c566;
+      --danger: #e8795f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 0 16px calc(40px + env(safe-area-inset-bottom));
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  header {
+    display: flex; align-items: center; gap: 10px;
+    padding: calc(20px + env(safe-area-inset-top)) 0 14px;
+  }
+  .brand { font-weight: 800; font-size: 20px; letter-spacing: -.01em; }
+  .brand span { color: var(--gold); }
+  .upd { margin-left: auto; font-size: 12px; color: var(--muted-t); }
+  button.refresh {
+    appearance: none; border: 1px solid var(--line); background: var(--surface);
+    color: var(--ink); border-radius: 12px; height: 38px; width: 38px; font-size: 17px;
+    cursor: pointer; transition: transform .1s;
+  }
+  button.refresh:active { transform: scale(.94); }
+  h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted-t); margin: 24px 0 10px;
+  }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  @media (min-width: 520px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+  .tile {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: 14px 15px; min-height: 78px; display: flex; flex-direction: column; justify-content: center;
+  }
+  .tile .label { font-size: 12px; color: var(--muted-t); font-weight: 600; }
+  .tile .value { font-size: 23px; font-weight: 800; letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .tile .sub { font-size: 11px; color: var(--muted-t); margin-top: 2px; }
+  .tile.accent { background: linear-gradient(155deg, color-mix(in srgb, var(--gold) 22%, var(--surface)), var(--surface)); border-color: color-mix(in srgb, var(--gold) 40%, var(--line)); }
+  .tile.accent .value { color: var(--accent); }
+  .tile.warn .value { color: var(--danger); }
+  .msg {
+    margin-top: 60px; text-align: center; color: var(--muted-t);
+  }
+  .msg .big { font-size: 40px; }
+  .msg p { margin: 10px 0 0; }
+  .skeleton { opacity: .5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="brand">🎮 GameHub <span>Админка</span></span>
+    <span class="upd" id="upd"></span>
+    <button class="refresh" id="refresh" title="Обновить">⟳</button>
+  </header>
+  <div id="root">
+    <div class="msg"><div class="big">⏳</div><p>Загрузка…</p></div>
+  </div>
+</div>
+
+<script>
+  const SERVER = 'https://gamehub-server-6ujx.onrender.com'
+  const tg = window.Telegram && window.Telegram.WebApp
+  if (tg) { try { tg.ready(); tg.expand() } catch (e) {} }
+
+  const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 })
+  const fmt = (n) => nf.format(Number(n || 0))
+  const gram = (n) => fmt(n) + ' GRAM'
+  const gameName = (g) => ({ chess: 'Шахматы', durak: 'Дурак 1×1', durakn: 'Дурак N', nardy: 'Нарды' }[g] || g)
+
+  function tile(t) {
+    const cls = 'tile' + (t.accent ? ' accent' : '') + (t.warn ? ' warn' : '')
+    return `<div class="${cls}"><div class="label">${t.label}</div><div class="value">${t.value}</div>${t.sub ? `<div class="sub">${t.sub}</div>` : ''}</div>`
+  }
+  function group(title, tiles) {
+    return `<h2>${title}</h2><div class="grid">${tiles.map(tile).join('')}</div>`
+  }
+
+  function render(d) {
+    const P = d.players || {}
+    const groups = [
+      group('👥 Игроки', [
+        { label: 'Всего', value: fmt(P.total) },
+        { label: 'Онлайн сейчас', value: fmt(d.onlineNow), accent: true },
+        { label: 'Активных партий', value: fmt(d.activeGames) },
+        { label: 'Новых за 24ч', value: '+' + fmt(P.new24h) },
+        { label: 'Новых за 7 дней', value: '+' + fmt(P.new7d) },
+      ]),
+      group('💰 Экономика GRAM', [
+        { label: 'В обороте', value: gram(d.gramInCirculation), accent: true },
+        { label: 'Депозиты всего', value: gram(d.deposits && d.deposits.v), sub: fmt(d.deposits && d.deposits.n) + ' операций' },
+        { label: 'Выведено', value: gram(d.withdrawalsSent && d.withdrawalsSent.v), sub: fmt(d.withdrawalsSent && d.withdrawalsSent.n) + ' операций' },
+        { label: 'Ожидают вывода', value: gram(d.withdrawalsPending && d.withdrawalsPending.v), sub: fmt(d.withdrawalsPending && d.withdrawalsPending.n) + ' заявок', warn: (d.withdrawalsPending && d.withdrawalsPending.n) > 0 },
+      ]),
+      group('📈 Доход', [
+        { label: 'Комиссия — накоплено', value: gram(d.houseFee), accent: true },
+        { label: 'Комиссия — за всё время', value: gram(d.feeTotal) },
+        { label: 'Объём ставок', value: gram(d.stakeVolume) },
+      ]),
+      group('🎮 Игры', [
+        { label: 'Всего партий', value: fmt(d.gamesTotal) },
+        ...(d.gamesByType || []).map((g) => ({ label: gameName(g.game), value: fmt(g.n) })),
+      ]),
+      group('⭐ Stars', [
+        { label: 'Покупок', value: fmt(d.stars && d.stars.n) },
+        { label: 'Звёзд всего', value: fmt(d.stars && d.stars.v) + ' ⭐' },
+      ]),
+      group('🔥 Кошельки', [
+        { label: 'Горячий баланс', value: d.hotBalance == null ? '—' : gram(d.hotBalance) },
+        { label: 'Отправка выводов', value: d.senderReady ? '✅ включена' : '⚠️ выключена', warn: !d.senderReady },
+      ]),
+    ]
+    document.getElementById('root').innerHTML = groups.join('')
+    const at = d.at ? new Date(d.at) : new Date()
+    document.getElementById('upd').textContent = 'обновлено ' + at.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  function message(emoji, text) {
+    document.getElementById('root').innerHTML = `<div class="msg"><div class="big">${emoji}</div><p>${text}</p></div>`
+    document.getElementById('upd').textContent = ''
+  }
+
+  async function load() {
+    const initData = tg && tg.initData
+    if (!initData) { message('🔒', 'Открой админку через своего админ-бота в Telegram.'); return }
+    try {
+      const r = await fetch(SERVER + '/admin/stats', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ initData }),
+      })
+      if (r.status === 403) { message('⛔', 'Доступ только для владельца.'); return }
+      if (!r.ok) { message('⚠️', 'Ошибка загрузки. Попробуй ещё раз.'); return }
+      render(await r.json())
+    } catch (e) {
+      message('📡', 'Сервер недоступен. Попробуй ещё раз через минуту.')
+    }
+  }
+
+  document.getElementById('refresh').addEventListener('click', () => {
+    document.getElementById('refresh').style.transform = 'rotate(360deg)'
+    setTimeout(() => (document.getElementById('refresh').style.transform = ''), 300)
+    load()
+  })
+  load()
+  setInterval(load, 60000) // gentle auto-refresh; server caches for 30s
+</script>
+</body>
+</html>

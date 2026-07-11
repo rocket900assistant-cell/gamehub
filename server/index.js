@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, userByUsername, createFriendRequest, listIncomingRequests, acceptFriendRequest, declineFriendRequest, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, debitIfAffordable, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, userByUsername, createFriendRequest, listIncomingRequests, acceptFriendRequest, declineFriendRequest, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, debitIfAffordable, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes, getAdminStats } from './db.js'
 import { settleStakes } from './gramStakes.js'
 import { initSender, senderReady, hotBalance, sendTon } from './tonSender.js'
 import { verifyInitData } from './telegram.js'
@@ -321,6 +321,31 @@ const isOwner = (tgId) => OWNER_TG_ID != null && Number(tgId) === OWNER_TG_ID
 const isTonAddress = (a) => typeof a === 'string' && /^[EU]Q[A-Za-z0-9_-]{46}$/.test(a.trim())
 const WEBHOOK_PATH = `/tg/${WEBHOOK_SECRET}`
 
+// Admin dashboard (separate private bot). Stats are cached so repeated opens
+// never hammer the DB or compete with the game for resources.
+const ADMIN_BOT_TOKEN = process.env.ADMIN_BOT_TOKEN || null
+const CORS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'POST, OPTIONS',
+  'access-control-allow-headers': 'content-type',
+}
+let statsCache = { at: 0, data: null }
+async function adminStats() {
+  if (Date.now() - statsCache.at < 30000 && statsCache.data) return statsCache.data
+  const db = await getAdminStats()
+  const activeGames = [...rooms.values()].filter((r) => r.started && !r.over).length
+  const data = {
+    ...(db ?? {}),
+    onlineNow: tgSocket.size,
+    activeGames,
+    hotBalance: senderReady() ? await hotBalance() : null,
+    senderReady: senderReady(),
+    at: new Date().toISOString(),
+  }
+  statsCache = { at: Date.now(), data }
+  return data
+}
+
 // HTTP server: health-check ("/") + the Telegram webhook (payments).
 const httpServer = createServer((req, res) => {
   if (req.method === 'POST' && req.url === WEBHOOK_PATH) {
@@ -344,6 +369,40 @@ const httpServer = createServer((req, res) => {
       }
     })
     return
+  }
+  // Admin dashboard stats — owner-only, verified via the ADMIN bot's initData.
+  if (req.url === '/admin/stats') {
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, CORS)
+      res.end()
+      return
+    }
+    if (req.method === 'POST') {
+      let body = ''
+      req.on('data', (c) => {
+        body += c
+        if (body.length > 1e5) req.destroy()
+      })
+      req.on('end', async () => {
+        try {
+          const { initData } = JSON.parse(body || '{}')
+          const user = verifyInitData(initData, ADMIN_BOT_TOKEN)
+          if (!user || !isOwner(user.id)) {
+            res.writeHead(403, { ...CORS, 'content-type': 'application/json' })
+            res.end(JSON.stringify({ error: 'forbidden' }))
+            return
+          }
+          const data = await adminStats()
+          res.writeHead(200, { ...CORS, 'content-type': 'application/json' })
+          res.end(JSON.stringify(data))
+        } catch (e) {
+          res.writeHead(500, { ...CORS, 'content-type': 'application/json' })
+          res.end(JSON.stringify({ error: 'failed' }))
+          console.error('[admin] stats:', e.message)
+        }
+      })
+      return
+    }
   }
   if (req.method === 'GET' && req.url === '/status') {
     // Non-sensitive readiness probe: exposes ONLY whether the payout sender

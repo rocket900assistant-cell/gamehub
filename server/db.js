@@ -253,6 +253,42 @@ export async function refundOrphanedStakes() {
   }
 }
 
+/** Aggregate stats for the owner admin dashboard. Read-only, lightweight aggregates. */
+export async function getAdminStats() {
+  if (!pool) return null
+  const q = (text) => pool.query(text)
+  const [players, circ, house, dep, wSent, wPend, stakeVol, feeTotal, games, byType, stars] =
+    await Promise.all([
+      q(`SELECT COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE created_at > now() - interval '24 hours')::int AS new24h,
+                COUNT(*) FILTER (WHERE created_at > now() - interval '7 days')::int  AS new7d
+           FROM users WHERE tg_id <> 0`),
+      q(`SELECT COALESCE(SUM(balance_gram),0)::float AS v FROM users WHERE tg_id <> 0`),
+      q(`SELECT COALESCE(SUM(balance_gram),0)::float AS v FROM users WHERE tg_id = 0`),
+      q(`SELECT COALESCE(SUM(amount),0)::float AS v, COUNT(*)::int AS n FROM gram_ledger WHERE kind='deposit'`),
+      q(`SELECT COALESCE(SUM(-amount),0)::float AS v, COUNT(*)::int AS n FROM gram_ledger WHERE kind='withdraw' AND status='sent'`),
+      q(`SELECT COALESCE(SUM(-amount),0)::float AS v, COUNT(*)::int AS n FROM gram_ledger WHERE kind='withdraw' AND status IN ('pending','approved','sending')`),
+      q(`SELECT COALESCE(SUM(stake),0)::float AS v FROM game_history WHERE stake > 0`),
+      q(`SELECT COALESCE(SUM(amount),0)::float AS v FROM gram_ledger WHERE kind='fee'`),
+      q(`SELECT COUNT(*)::int AS n FROM game_history`),
+      q(`SELECT game, COUNT(*)::int AS n FROM game_history GROUP BY game ORDER BY n DESC`),
+      q(`SELECT COUNT(*)::int AS n, COALESCE(SUM(stars),0)::int AS v FROM payments`),
+    ])
+  return {
+    players: players.rows[0],
+    gramInCirculation: circ.rows[0].v,
+    houseFee: house.rows[0]?.v ?? 0,
+    deposits: dep.rows[0],
+    withdrawalsSent: wSent.rows[0],
+    withdrawalsPending: wPend.rows[0],
+    stakeVolume: stakeVol.rows[0].v,
+    feeTotal: feeTotal.rows[0].v,
+    gamesTotal: games.rows[0].n,
+    gamesByType: byType.rows,
+    stars: stars.rows[0],
+  }
+}
+
 /** Current GRAM balance (0 if no row / no DB). */
 export async function getBalance(tgId) {
   if (!pool || tgId == null) return 0
