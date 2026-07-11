@@ -325,6 +325,7 @@ const SKIN_PRICE_STARS = 150
 function productInfo(product) {
   if (product === 'vip') return { title: 'VIP статус', description: 'VIP в GameHub: все скины и привилегии', stars: VIP_PRICE_STARS }
   if (typeof product === 'string' && product.startsWith('skin:')) return { title: 'Скин', description: 'Скин для GameHub', stars: SKIN_PRICE_STARS }
+  if (product === 'test') return { title: 'Тест оплаты', description: 'Тестовая покупка за 1 звезду', stars: 1 } // TEMP: remove after payment testing
   return null
 }
 
