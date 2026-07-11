@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, getOrCreateDepositTag, userByDepositTag, getBalance } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, getWithdrawal, setWithdrawalStatus } from './db.js'
 import { settleStakes } from './gramStakes.js'
 import { verifyInitData } from './telegram.js'
 import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther } from './nardy.js'
@@ -282,6 +282,13 @@ const MINIAPP_URL = process.env.MINIAPP_URL || 'https://gamehub-mahr.pages.dev'
 const PLATFORM_TON_ADDRESS = process.env.PLATFORM_TON_ADDRESS || null // where GRAM deposits land
 const STAKE_FEE_RATE = Number(process.env.STAKE_FEE_RATE ?? 0.1) // owner fee = 10% of the loser's stake
 const MIN_STAKE = 0.1 // GRAM
+const WITHDRAW_FEE_RATE = Number(process.env.WITHDRAW_FEE_RATE ?? 0.001) // 0.1% gas fee
+const WITHDRAW_FEE_MIN = Number(process.env.WITHDRAW_FEE_MIN ?? 0.05) // floor so gas is always covered
+const MIN_WITHDRAW = Number(process.env.MIN_WITHDRAW ?? 1) // must exceed the fee
+const withdrawFee = (amount) => Math.max(Math.round(amount * WITHDRAW_FEE_RATE * 100) / 100, WITHDRAW_FEE_MIN)
+const OWNER_TG_ID = process.env.OWNER_TG_ID ? Number(process.env.OWNER_TG_ID) : null // sees the withdrawals admin
+const isOwner = (tgId) => OWNER_TG_ID != null && Number(tgId) === OWNER_TG_ID
+const isTonAddress = (a) => typeof a === 'string' && /^[EU]Q[A-Za-z0-9_-]{46}$/.test(a.trim())
 const WEBHOOK_PATH = `/tg/${WEBHOOK_SECRET}`
 
 // HTTP server: health-check ("/") + the Telegram webhook (payments).
@@ -959,6 +966,13 @@ function endGame(room, winnerColor, reason) {
   }
 }
 
+/** Push the pending-withdrawals list to the owner if they're online. */
+async function notifyOwnerWithdrawals() {
+  if (OWNER_TG_ID == null || !dbEnabled) return
+  const sid = tgSocket.get(OWNER_TG_ID)
+  if (sid) io.to(sid).emit('gram:withdrawals', { items: await listPendingWithdrawals() })
+}
+
 // Per-event minimum spacing for sensitive actions (ms). Everything else is
 // covered by the general token bucket below.
 const EVENT_MIN_MS = { 'shop:buy': 1500, quickMatch: 700, 'lobby:create': 800, register: 400 }
@@ -1012,6 +1026,7 @@ io.on('connection', (socket) => {
       for (const f of await friendListFor(tgId)) pushFriends(f.id).catch(() => {})
       // owned skins (server = source of truth for paid items)
       getEntitlements(tgId).then((items) => socket.emit('shop:entitlements', { items })).catch(() => {})
+      if (isOwner(tgId)) socket.emit('owner:status', { owner: true }) // unlock the withdrawals admin
     }
 
     // Reconnect: cancel any pending abandon + resume an in-progress game.
@@ -1541,6 +1556,66 @@ io.on('connection', (socket) => {
     const tgId = userTg.get(socketUser.get(socket.id))
     const tag = tgId ? await getOrCreateDepositTag(tgId) : null
     if (typeof cb === 'function') cb({ address: PLATFORM_TON_ADDRESS, tag })
+  })
+
+  // ── GRAM withdrawal: player creates a request (funds held); owner approves/rejects ──
+  socket.on('gram:withdraw', async ({ amount, address } = {}, cb) => {
+    const uid = socketUser.get(socket.id)
+    const tgId = userTg.get(uid)
+    if (!tgId || !dbEnabled) return cb?.({ error: 'no-user' })
+    const amt = Math.round(Number(amount) * 100) / 100
+    if (!(amt >= MIN_WITHDRAW)) return cb?.({ error: 'min', min: MIN_WITHDRAW })
+    if (!isTonAddress(address)) return cb?.({ error: 'address' })
+    const fee = withdrawFee(amt)
+    const res = await createWithdrawal({ tgId, amount: amt, fee, address: String(address).trim() })
+    if (res.error) return cb?.({ error: res.error, balance: res.balance })
+    cb?.({ ok: true, balance: res.balance, fee, payout: Math.round((amt - fee) * 100) / 100 })
+    try {
+      const row = await getUser(tgId)
+      if (row) socket.emit('profile', dbProfile(row))
+    } catch {
+      /* ignore */
+    }
+    socket.emit('gram:history')
+    notifyOwnerWithdrawals()
+  })
+
+  socket.on('gram:withdrawals', async (_p, cb) => {
+    if (!isOwner(userTg.get(socketUser.get(socket.id)))) return cb?.({ error: 'forbidden' })
+    cb?.({ items: await listPendingWithdrawals() })
+  })
+
+  socket.on('gram:withdraw:approve', async ({ id } = {}, cb) => {
+    if (!isOwner(userTg.get(socketUser.get(socket.id)))) return cb?.({ error: 'forbidden' })
+    const w = await getWithdrawal(id)
+    if (!w || w.status !== 'pending') return cb?.({ error: 'gone' })
+    if (!(await setWithdrawalStatus(id, 'pending', 'approved'))) return cb?.({ error: 'gone' })
+    const fee = w.meta?.fee ?? 0
+    if (fee > 0) await adjustGram({ tgId: 0, delta: fee, kind: 'fee', ref: `wfee:${id}` }) // owner income
+    cb?.({ ok: true })
+    notifyOwnerWithdrawals()
+    // NOTE: the on-chain send runs once HOT_TON_MNEMONIC is configured; until then
+    // approved requests queue for payout.
+  })
+
+  socket.on('gram:withdraw:reject', async ({ id } = {}, cb) => {
+    if (!isOwner(userTg.get(socketUser.get(socket.id)))) return cb?.({ error: 'forbidden' })
+    const w = await getWithdrawal(id)
+    if (!w || w.status !== 'pending') return cb?.({ error: 'gone' })
+    if (!(await setWithdrawalStatus(id, 'pending', 'rejected'))) return cb?.({ error: 'gone' })
+    await adjustGram({ tgId: w.tgId, delta: -w.amount, kind: 'refund', ref: `wref:${id}` }) // give it back
+    const sid = tgSocket.get(w.tgId)
+    if (sid) {
+      try {
+        const row = await getUser(w.tgId)
+        if (row) io.to(sid).emit('profile', dbProfile(row))
+      } catch {
+        /* ignore */
+      }
+      io.to(sid).emit('gram:refunded', { amount: -w.amount })
+    }
+    cb?.({ ok: true })
+    notifyOwnerWithdrawals()
   })
 
   // ── Shop: create a Telegram Stars invoice for a product ──

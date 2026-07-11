@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import { ArrowLeft, ArrowUp, Plus, Gem, Wallet as WalletIcon, Copy, X, Check } from 'lucide-react'
+import { Button } from '../components/ui/Button'
 import { getSocket } from '../lib/socket'
 import { t } from '../lib/i18n'
 
@@ -32,14 +33,24 @@ function fmtDate(iso: string) {
 interface WalletProps {
   balance: number
   address?: string | null
+  owner?: boolean
+  onOpenAdmin?: () => void
   onBack: () => void
 }
 
-export function Wallet({ balance, address, onBack }: WalletProps) {
+const round2 = (x: number) => Math.round(x * 100) / 100
+const estFee = (amt: number) => (amt > 0 ? Math.max(round2(amt * 0.001), 0.05) : 0) // mirrors the server
+
+export function Wallet({ balance, address, owner, onOpenAdmin, onBack }: WalletProps) {
   const [history, setHistory] = useState<GramTx[] | null>(null)
   const [notice, setNotice] = useState('')
   const [deposit, setDeposit] = useState<{ address: string; tag: string; qr: string } | null>(null)
   const [copied, setCopied] = useState('')
+  const [wd, setWd] = useState(false) // withdraw sheet open
+  const [wdAmount, setWdAmount] = useState('')
+  const [wdAddr, setWdAddr] = useState('')
+  const [wdErr, setWdErr] = useState('')
+  const [wdBusy, setWdBusy] = useState(false)
 
   useEffect(() => {
     const s = getSocket()
@@ -78,7 +89,33 @@ export function Wallet({ balance, address, onBack }: WalletProps) {
       setDeposit({ address: res.address, tag: res.tag, qr })
     })
   }
-  const onWithdraw = () => setNotice(t('wallet.soon'))
+  const onWithdraw = () => {
+    setWdErr('')
+    setWdAmount('')
+    setWdAddr(address ?? '')
+    setWd(true)
+  }
+  const submitWithdraw = () => {
+    const amt = round2(parseFloat(wdAmount) || 0)
+    if (amt < 1) return setWdErr(t('wallet.wdMin'))
+    if (amt > balance) return setWdErr(t('stake.insufficient'))
+    if (!/^[EU]Q[A-Za-z0-9_-]{46}$/.test(wdAddr.trim())) return setWdErr(t('wallet.wdBadAddr'))
+    setWdBusy(true)
+    getSocket().emit(
+      'gram:withdraw',
+      { amount: amt, address: wdAddr.trim() },
+      (res: { ok?: boolean; error?: string; payout?: number }) => {
+        setWdBusy(false)
+        if (res?.ok) {
+          setWd(false)
+          setNotice(`${t('wallet.wdRequested')} · ${res.payout} GRAM`)
+          getSocket().emit('gram:history')
+        } else {
+          setWdErr(res?.error === 'balance' ? t('stake.insufficient') : res?.error === 'address' ? t('wallet.wdBadAddr') : t('wallet.wdMin'))
+        }
+      },
+    )
+  }
 
   return (
     <div className="space-y-5">
@@ -128,6 +165,12 @@ export function Wallet({ balance, address, onBack }: WalletProps) {
           </button>
         </div>
       </div>
+
+      {owner && (
+        <Button variant="secondary" className="w-full" onClick={onOpenAdmin}>
+          {t('wallet.requests')}
+        </Button>
+      )}
 
       {/* history */}
       <section>
@@ -192,6 +235,68 @@ export function Wallet({ balance, address, onBack }: WalletProps) {
             </div>
 
             <p className="mt-3 text-center text-xs text-danger">{t('wallet.commentWarn')}</p>
+          </div>
+        </div>
+      )}
+
+      {/* withdraw sheet */}
+      {wd && (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/45" onClick={() => setWd(false)}>
+          <div
+            className="mx-auto w-full max-w-md rounded-t-[24px] bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-lg font-extrabold">{t('wallet.withdraw')}</p>
+              <button onClick={() => setWd(false)} aria-label="Закрыть">
+                <X size={20} className="text-muted" />
+              </button>
+            </div>
+
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+              {t('wallet.wdAmount')} · {t('wallet.available')} {balance} GRAM
+            </label>
+            <input
+              value={wdAmount}
+              onChange={(e) => setWdAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+              inputMode="decimal"
+              placeholder="0"
+              className="mt-1 h-12 w-full rounded-[var(--radius-input)] border border-line bg-bg px-3 text-lg font-bold outline-none"
+            />
+            <label className="mt-3 block text-[11px] font-semibold uppercase tracking-wide text-muted">
+              {t('wallet.wdAddress')}
+            </label>
+            <input
+              value={wdAddr}
+              onChange={(e) => setWdAddr(e.target.value)}
+              placeholder="UQ… / EQ…"
+              className="mt-1 h-12 w-full rounded-[var(--radius-input)] border border-line bg-bg px-3 font-mono text-sm outline-none"
+            />
+
+            {(() => {
+              const amt = round2(parseFloat(wdAmount) || 0)
+              const fee = estFee(amt)
+              const net = amt > 0 ? round2(amt - fee) : 0
+              return amt > 0 ? (
+                <div className="mt-3 space-y-1 rounded-xl bg-bg p-3 text-sm">
+                  <div className="flex justify-between text-muted">
+                    <span>{t('wallet.wdFee')} (0.1%)</span>
+                    <span>−{fee} GRAM</span>
+                  </div>
+                  <div className="flex justify-between font-extrabold">
+                    <span>{t('wallet.wdReceive')}</span>
+                    <span>{net} GRAM</span>
+                  </div>
+                </div>
+              ) : null
+            })()}
+
+            {wdErr && <p className="mt-2 text-sm font-semibold text-danger">{wdErr}</p>}
+
+            <Button className="mt-4 w-full" size="lg" disabled={wdBusy} onClick={submitWithdraw}>
+              {t('wallet.withdraw')}
+            </Button>
+            <p className="mt-2 text-center text-xs text-muted">{t('wallet.wdReview')}</p>
           </div>
         </div>
       )}

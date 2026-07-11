@@ -96,6 +96,94 @@ export async function initDb() {
   console.log('[db] ready')
 }
 
+/** Create a withdrawal request: hold (debit) the amount and log a pending ledger row.
+ *  Returns { id, balance } or { error }. */
+export async function createWithdrawal({ tgId, amount, fee, address }) {
+  if (!pool || !tgId) return { error: 'no-db' }
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const bal = await client.query('SELECT balance_gram FROM users WHERE tg_id = $1 FOR UPDATE', [tgId])
+    const cur = bal.rows[0] ? Number(bal.rows[0].balance_gram) : 0
+    if (cur < amount) {
+      await client.query('ROLLBACK')
+      return { error: 'balance', balance: cur }
+    }
+    const payout = Math.round((amount - fee) * 100) / 100
+    const ins = await client.query(
+      `INSERT INTO gram_ledger (tg_id, kind, amount, status, meta)
+       VALUES ($1,'withdraw',$2,'pending',$3) RETURNING id`,
+      [tgId, -amount, { address, fee, payout }],
+    )
+    const upd = await client.query(
+      'UPDATE users SET balance_gram = balance_gram - $2 WHERE tg_id = $1 RETURNING balance_gram',
+      [tgId, amount],
+    )
+    await client.query('COMMIT')
+    return { id: ins.rows[0].id, balance: Number(upd.rows[0].balance_gram) }
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {})
+    console.error('[db] createWithdrawal failed:', e.message)
+    return { error: 'failed' }
+  } finally {
+    client.release()
+  }
+}
+
+/** Pending withdrawals for the owner admin. */
+export async function listPendingWithdrawals(limit = 50) {
+  if (!pool) return []
+  try {
+    const { rows } = await pool.query(
+      `SELECT g.id, g.tg_id, (-g.amount) AS amount, g.meta, g.created_at, u.name, u.username
+       FROM gram_ledger g LEFT JOIN users u ON u.tg_id = g.tg_id
+       WHERE g.kind = 'withdraw' AND g.status = 'pending' ORDER BY g.id ASC LIMIT $1`,
+      [limit],
+    )
+    return rows.map((r) => ({
+      id: Number(r.id),
+      tgId: Number(r.tg_id),
+      name: r.name,
+      username: r.username,
+      amount: Number(r.amount),
+      address: r.meta?.address ?? null,
+      fee: r.meta?.fee ?? 0,
+      payout: r.meta?.payout ?? 0,
+      at: r.created_at,
+    }))
+  } catch (e) {
+    console.error('[db] listPendingWithdrawals failed:', e.message)
+    return []
+  }
+}
+
+/** Read one withdrawal ledger row. */
+export async function getWithdrawal(id) {
+  if (!pool) return null
+  try {
+    const { rows } = await pool.query('SELECT id, tg_id, amount, status, meta FROM gram_ledger WHERE id = $1 AND kind = $2', [id, 'withdraw'])
+    return rows[0] ? { id: Number(rows[0].id), tgId: Number(rows[0].tg_id), amount: Number(rows[0].amount), status: rows[0].status, meta: rows[0].meta } : null
+  } catch (e) {
+    console.error('[db] getWithdrawal failed:', e.message)
+    return null
+  }
+}
+
+/** Move a withdrawal to a new status only if it is currently `from` (guards double-processing). */
+export async function setWithdrawalStatus(id, from, to) {
+  if (!pool) return false
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE gram_ledger SET status = $3 WHERE id = $1 AND kind = 'withdraw' AND status = $2`,
+      [id, from, to],
+    )
+    return rowCount > 0
+  } catch (e) {
+    console.error('[db] setWithdrawalStatus failed:', e.message)
+    return false
+  }
+}
+
 /** Current GRAM balance (0 if no row / no DB). */
 export async function getBalance(tgId) {
   if (!pool || tgId == null) return 0

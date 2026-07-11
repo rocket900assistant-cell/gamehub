@@ -5,6 +5,7 @@ import { InviteBanner } from './components/InviteBanner'
 import { Home } from './screens/Home'
 import { Store } from './screens/Store'
 import { Wallet } from './screens/Wallet'
+import { WithdrawAdmin } from './screens/WithdrawAdmin'
 import { Profile } from './screens/Profile'
 import { Friends } from './screens/Friends'
 import { FriendInvite } from './screens/FriendInvite'
@@ -55,6 +56,7 @@ type SubScreen =
   | 'invite'
   | 'history'
   | 'wallet'
+  | 'withdrawals-admin'
   | null
 
 interface PendingInvite {
@@ -72,6 +74,7 @@ export default function App() {
   const [durakCfg, setDurakCfg] = useState<DurakConfig | null>(null)
   const [durakNCfg, setDurakNCfg] = useState<{ players: number; deck: number; neighborsOnly: boolean; transfer: boolean; allowDraw: boolean } | null>(null)
   const [durakLobby, setDurakLobby] = useState<{ mode: 'browse' | 'create' | 'joined'; cfg: LobbyCfg; initial?: LobbyState } | null>(null)
+  const [owner, setOwner] = useState(false)
   const [nardyCfg, setNardyCfg] = useState<NardyConfig | null>(null)
   const [durakResume, setDurakResume] = useState(false)
   const [durakSaved, setDurakSaved] = useState(() => hasDurakSave())
@@ -227,6 +230,7 @@ export default function App() {
       setMatchmaking(null)
       setJoinError(t('invite.offline'))
     }
+    const onOwner = (o: { owner: boolean }) => setOwner(!!o.owner)
     const onStakeError = (e: { reason: string; balance?: number }) => {
       setMatchmaking(null)
       setJoinError(
@@ -269,6 +273,7 @@ export default function App() {
     s.on('elo:trend', onEloTrend)
     s.on('invite:offline', onInviteOffline)
     s.on('stake:error', onStakeError)
+    s.on('owner:status', onOwner)
     s.on('shop:entitlements', onEntitlements)
     s.on('shop:granted', onGranted)
 
@@ -295,6 +300,7 @@ export default function App() {
       s.off('elo:trend', onEloTrend)
       s.off('invite:offline', onInviteOffline)
       s.off('stake:error', onStakeError)
+      s.off('owner:status', onOwner)
       s.off('shop:entitlements', onEntitlements)
       s.off('shop:granted', onGranted)
     }
@@ -535,7 +541,14 @@ export default function App() {
             ) : sub === 'friends' ? (
               <Friends friends={friends} myId={user.id} onBack={() => setSub(null)} />
             ) : sub === 'wallet' ? (
-              <Wallet balance={profile?.balance ?? 0} onBack={() => setSub(null)} />
+              <Wallet
+                balance={profile?.balance ?? 0}
+                owner={owner}
+                onOpenAdmin={() => setSub('withdrawals-admin')}
+                onBack={() => setSub(null)}
+              />
+            ) : sub === 'withdrawals-admin' ? (
+              <WithdrawAdmin onBack={() => setSub('wallet')} />
             ) : sub === 'history' ? (
               <History list={history} onBack={() => setSub(null)} />
             ) : sub === 'invite' && pendingInvite ? (
