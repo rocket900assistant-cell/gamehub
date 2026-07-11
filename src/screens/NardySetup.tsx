@@ -12,7 +12,7 @@ export interface NardyConfig {
 interface NardySetupProps {
   onBack: () => void
   onCreate: (cfg: NardyConfig) => void
-  onQuickMatch: () => void
+  onQuickMatch: (stake: number) => void
   onInvite: () => void
 }
 
@@ -40,7 +40,7 @@ export function NardySetup({ onBack, onCreate, onQuickMatch, onInvite }: NardySe
       <p className="px-1 text-sm text-muted">{t('nardy.desc')}</p>
 
       <div className="space-y-3">
-        <Button size="lg" className="w-full" onClick={onQuickMatch}>
+        <Button size="lg" className="w-full" onClick={() => onQuickMatch(free ? 0 : Math.max(MIN_STAKE, num))}>
           <Swords size={18} /> {t('setup.quickOnline')}
         </Button>
         <Button size="lg" variant="secondary" className="w-full" onClick={onInvite}>

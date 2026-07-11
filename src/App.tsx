@@ -309,9 +309,9 @@ export default function App() {
   if (!user) return null
   const myName = profile?.name ?? displayName(user)
 
-  function startQuick(minutes: number) {
-    getSocket().emit('quickMatch', { game: 'chess', minutes })
-    setMatchmaking({ minutes })
+  function startQuick(minutes: number, stake = 0) {
+    getSocket().emit('quickMatch', { game: 'chess', minutes, stake })
+    setMatchmaking({ minutes, subtitle: stake > 0 ? `${t('game.chess')} · ${stake} GRAM` : undefined })
     setSub(null)
   }
   function inviteFriend(
@@ -653,12 +653,12 @@ export default function App() {
                   setNardyResume(false)
                   setSub('nardy')
                 }}
-                onQuickMatch={() => {
-                  getSocket().emit('quickMatch', { game: 'nardy', minutes: 2 })
+                onQuickMatch={(stake) => {
+                  getSocket().emit('quickMatch', { game: 'nardy', minutes: 2, stake })
                   setMatchmaking({
                     minutes: 2,
                     label: t('mm.searching'),
-                    subtitle: `${t('game.nardy')} · 2 ${t('unit.min')}`,
+                    subtitle: stake > 0 ? `${t('game.nardy')} · ${stake} GRAM` : `${t('game.nardy')} · 2 ${t('unit.min')}`,
                   })
                   setSub(null)
                 }}

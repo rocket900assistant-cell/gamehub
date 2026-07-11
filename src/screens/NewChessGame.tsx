@@ -18,7 +18,7 @@ const timeControls: { m: number; key: string; icon: LucideIcon }[] = [
 
 interface NewChessGameProps {
   onBack: () => void
-  onQuickMatch: (minutes: number) => void
+  onQuickMatch: (minutes: number, stake: number) => void
   onInvite: (friendTg: number, minutes: number) => void
   onBot: (minutes: number) => void
   friends: ServerFriend[]
@@ -129,7 +129,7 @@ export function NewChessGame({
           <Button
             className="w-full"
             size="lg"
-            onClick={() => onQuickMatch(minutes)}
+            onClick={() => onQuickMatch(minutes, stake)}
           >
             <Swords size={18} /> {t('setup.quick')}
           </Button>
