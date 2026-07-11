@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { StarBalance } from '../components/ui/StarBalance'
 import { comingGames, popularGames, resumeGames } from '../data/mock'
+import { useLivePlayers } from '../lib/livePlayers'
 import { t } from '../lib/i18n'
 import type { TgUser } from '../lib/telegram'
 import { displayName, shareInvite } from '../lib/telegram'
@@ -52,6 +53,7 @@ interface HomeProps {
 }
 
 export function Home({ user, profile, onOpenProfile, onOpenWallet, onPlay, resumeBanner }: HomeProps) {
+  const livePlayers = useLivePlayers()
   const eloFor = (id: string, fallback: number) => {
     const key = ELO_KEY[id]
     return profile && key ? profile.elo[key] : fallback
@@ -147,7 +149,7 @@ export function Home({ user, profile, onOpenProfile, onOpenWallet, onPlay, resum
                 <p className="font-bold leading-tight">{gname(g.id, g.name)}</p>
                 <p className="mt-0.5 flex items-center gap-1 text-xs text-muted">
                   <Users size={12} />
-                  {g.playing.toLocaleString()} {t('home.playing')}
+                  {(livePlayers[g.id] ?? g.playing).toLocaleString('ru-RU')} {t('home.playing')}
                 </p>
               </div>
               <ChevronRight size={18} className="text-muted" />
