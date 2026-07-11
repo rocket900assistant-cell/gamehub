@@ -82,6 +82,7 @@ interface ChessMatchProps {
   user: TgUser
   match: MatchConfig
   myName?: string
+  myElo: number
   onMinimize: () => void
   onExit: () => void
 }
@@ -115,7 +116,7 @@ export const clearChessSave = () => {
   }
 }
 
-export function ChessMatch({ user, match, myName, onMinimize, onExit }: ChessMatchProps) {
+export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: ChessMatchProps) {
   const online = match.mode === 'online'
   const isBot = match.mode === 'local' && !!match.bot
   const myColor: Side = match.mode === 'online' ? match.color : 'w'
@@ -499,7 +500,7 @@ export function ChessMatch({ user, match, myName, onMinimize, onExit }: ChessMat
       <PlayerBar
         name={myName ?? displayName(user)}
         src={user.photoUrl}
-        elo={match.mode === 'online' ? 0 : 2350}
+        elo={myElo}
         clock={fmt(myClock)}
         active={myActive}
         vip={vipMe}

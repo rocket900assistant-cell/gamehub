@@ -127,7 +127,7 @@ export default function App() {
       registerUser({
         userId,
         name: displayName(u),
-        elo: 2350,
+        elo: 1200,
         initData: getInitData(),
         username: u.username,
         photoUrl: u.photoUrl,
@@ -474,6 +474,7 @@ export default function App() {
             user={user}
             match={match}
             myName={myName}
+            myElo={profile?.elo.chess ?? 1200}
             onMinimize={() => setMinimized(true)}
             onExit={() => {
               setMatch(null)
