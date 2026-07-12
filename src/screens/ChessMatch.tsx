@@ -52,10 +52,10 @@ function fenAfter(sans: string[], k: number): string {
 }
 
 // ── captured-pieces display (Chess.com style) ──
-const PIECE_GLYPH: Record<string, string> = { p: '♟', n: '♞', b: '♝', r: '♜', q: '♛' }
 const START_COUNT: Record<string, number> = { p: 8, n: 2, b: 2, r: 2, q: 1 }
 const PIECE_VAL: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9 }
-type Cap = { pieces: Record<string, number>; adv: number }
+const CAP_SET_FALLBACK = 'reillycraig' // piece art for the tray when no skin is equipped
+type Cap = { pieces: Record<string, number>; color: 'w' | 'b'; adv: number; set: string }
 
 /** From a FEN, what each side has captured + the material advantage (+ = White ahead). */
 function capturedInfo(fen: string): { byWhite: Record<string, number>; byBlack: Record<string, number>; adv: number } {
@@ -80,15 +80,20 @@ function capturedInfo(fen: string): { byWhite: Record<string, number>; byBlack: 
   return { byWhite, byBlack, adv: val(byWhite) - val(byBlack) }
 }
 
-function CapturedRow({ pieces, adv }: Cap) {
-  const glyphs = ['q', 'r', 'b', 'n', 'p'].flatMap((t) => Array(pieces[t] ?? 0).fill(t))
-  if (glyphs.length === 0 && adv <= 0) return null
+function CapturedRow({ pieces, color, adv, set }: Cap) {
+  const items = ['p', 'n', 'b', 'r', 'q'].flatMap((t) => Array(pieces[t] ?? 0).fill(t))
+  if (items.length === 0 && adv <= 0) return null
   return (
-    <span className="flex items-center gap-[1px] text-[13px] leading-none text-muted">
-      {glyphs.map((t, i) => (
-        <span key={i}>{PIECE_GLYPH[t]}</span>
+    <span className="flex items-center">
+      {items.map((t, i) => (
+        <img
+          key={i}
+          src={`/piece/${set}/${color}${t.toUpperCase()}.svg`}
+          alt=""
+          className="-ml-[3px] h-[15px] w-[15px] first:ml-0 drop-shadow-[0_0_0.5px_rgba(0,0,0,0.45)]"
+        />
       ))}
-      {adv > 0 && <span className="ml-0.5 text-[11px] font-extrabold text-ink">+{adv}</span>}
+      {adv > 0 && <span className="ml-1 text-[11px] font-bold text-muted">+{adv}</span>}
     </span>
   )
 }
@@ -230,10 +235,23 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
   const sans = game.history()
   const reviewing = reviewIdx !== null
   const boardFen = reviewing ? fenAfter(sans, reviewIdx) : fen
-  // captured pieces + material edge (from the live position, not the review index)
+  // captured pieces + material edge (from the live position, not the review index).
+  // The pieces a player captured are the OPPONENT's colour (white took black, etc.).
   const cap = capturedInfo(fen)
-  const myCap: Cap = myColor === 'w' ? { pieces: cap.byWhite, adv: Math.max(0, cap.adv) } : { pieces: cap.byBlack, adv: Math.max(0, -cap.adv) }
-  const oppCap: Cap = myColor === 'w' ? { pieces: cap.byBlack, adv: Math.max(0, -cap.adv) } : { pieces: cap.byWhite, adv: Math.max(0, cap.adv) }
+  const capSet = equippedPieceDir() ?? CAP_SET_FALLBACK
+  const oColor: Side = myColor === 'w' ? 'b' : 'w'
+  const myCap: Cap = {
+    pieces: myColor === 'w' ? cap.byWhite : cap.byBlack,
+    color: oColor, // I capture opponent-coloured pieces
+    adv: Math.max(0, myColor === 'w' ? cap.adv : -cap.adv),
+    set: capSet,
+  }
+  const oppCap: Cap = {
+    pieces: oColor === 'w' ? cap.byWhite : cap.byBlack,
+    color: myColor, // opponent captures my-coloured pieces
+    adv: Math.max(0, oColor === 'w' ? cap.adv : -cap.adv),
+    set: capSet,
+  }
   const iWon = result ? (result.youWon ?? result.winner === myColor) : false
   const celebrate = !!result && (result.reason === 'mate' || iWon)
 
@@ -833,7 +851,7 @@ function PlayerBar({
         </div>
         <div className="mt-0.5 flex items-center gap-2">
           {elo > 0 && <p className="text-xs text-muted">Elo {elo}</p>}
-          {captured && <CapturedRow pieces={captured.pieces} adv={captured.adv} />}
+          {captured && <CapturedRow {...captured} />}
         </div>
       </div>
       <div
