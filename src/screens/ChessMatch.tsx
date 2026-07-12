@@ -86,10 +86,7 @@ function CapturedRow({ pieces, color, adv }: Cap) {
   return (
     <span className="flex items-center">
       {items.map((t, i) => (
-        <span
-          key={i}
-          className="-ml-[3px] block h-[15px] w-[15px] first:ml-0 [&_svg]:drop-shadow-[0_0_0.5px_rgba(0,0,0,0.45)]"
-        >
+        <span key={i} className="cap-piece -ml-[3px] block h-[15px] w-[15px] first:ml-0">
           {pieceRenderers[`${color}${t.toUpperCase()}`]?.()}
         </span>
       ))}
