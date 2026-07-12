@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { defaultPieces } from 'react-chessboard'
 import { Check, Star } from 'lucide-react'
 import { StarBalance } from '../components/ui/StarBalance'
 import { SectionHeader } from '../components/ui/SectionHeader'
@@ -73,8 +74,8 @@ function PiecePreview({ skin }: { skin: PieceSkin }) {
                 {skin.dir ? (
                   <img src={`/piece/${skin.dir}/${p.c}.svg`} alt="" className="h-12 w-12" />
                 ) : (
-                  <span style={{ fontSize: 32, lineHeight: 1, color: light ? '#3a3a3a' : '#f4f4f4' }}>
-                    {p.g}
+                  <span className="block h-12 w-12">
+                    {(defaultPieces as Record<string, (p?: object) => React.ReactNode>)[p.c]?.()}
                   </span>
                 )}
               </div>
