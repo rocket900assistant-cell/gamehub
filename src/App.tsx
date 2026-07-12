@@ -104,6 +104,12 @@ export default function App() {
   const [durakOnline, setDurakOnline] = useState<OnlineDurak | null>(null)
   const [durakNOnline, setDurakNOnline] = useState<OnlineDurakN | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
+  // Auto-dismiss the error toast after 3s.
+  useEffect(() => {
+    if (!joinError) return
+    const id = setTimeout(() => setJoinError(null), 3000)
+    return () => clearTimeout(id)
+  }, [joinError])
   const [friends, setFriends] = useState<ServerFriend[]>([])
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([])
   const [history, setHistory] = useState<HistoryEntry[]>([])
@@ -236,11 +242,7 @@ export default function App() {
     const onOwner = (o: { owner: boolean }) => setOwner(!!o.owner)
     const onStakeError = (e: { reason: string; balance?: number }) => {
       setMatchmaking(null)
-      setJoinError(
-        e.reason === 'balance'
-          ? `${t('stake.insufficient')} (${e.balance ?? 0} GRAM)`
-          : t('stake.min'),
-      )
+      setJoinError(e.reason === 'balance' ? t('stake.insufficient') : t('stake.min'))
     }
     // A durakn lobby invite was accepted (or we joined one) while not on the
     // lobby screen → open the waiting room seeded with this state.
@@ -315,7 +317,17 @@ export default function App() {
   if (!user) return null
   const myName = profile?.name ?? displayName(user)
 
+  // Enough GRAM to stake? If not, show the toast and stay on the current screen.
+  function affordStake(stake: number) {
+    if (stake > 0 && (profile?.balance ?? 0) < stake) {
+      setJoinError(t('stake.insufficient'))
+      return false
+    }
+    return true
+  }
+
   function startQuick(minutes: number, stake = 0) {
+    if (!affordStake(stake)) return
     getSocket().emit('quickMatch', { game: 'chess', minutes, stake })
     setMatchmaking({ minutes, subtitle: stake > 0 ? `${t('game.chess')} · ${stake} GRAM` : undefined })
     setSub(null)
@@ -455,7 +467,8 @@ export default function App() {
       {joinError && (
         <button
           onClick={() => setJoinError(null)}
-          className="fixed left-1/2 top-3 z-[60] -translate-x-1/2 rounded-2xl bg-danger px-4 py-2 text-sm font-bold text-white shadow-lg"
+          className="fixed left-1/2 top-3 z-[60] -translate-x-1/2 whitespace-nowrap rounded-full bg-danger/90 px-4 py-1.5 text-xs font-semibold text-white shadow-lg backdrop-blur-sm"
+          style={{ animation: 'gh-pop 0.25s ease-out' }}
         >
           {joinError}
         </button>
@@ -591,6 +604,7 @@ export default function App() {
                   }
                 }}
                 onQuickMatch={(deck, transfer, players, throwAll, draw, stake) => {
+                  if (!affordStake(stake)) return
                   if (players > 2) {
                     getSocket().emit('quickMatch', {
                       game: 'durakn',
@@ -667,6 +681,7 @@ export default function App() {
                   setSub('nardy')
                 }}
                 onQuickMatch={(stake) => {
+                  if (!affordStake(stake)) return
                   getSocket().emit('quickMatch', { game: 'nardy', minutes: 2, stake })
                   setMatchmaking({
                     minutes: 2,
