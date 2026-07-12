@@ -142,6 +142,7 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
   )
   const [result, setResult] = useState<Result | null>(null)
   const [showModal, setShowModal] = useState(false)
+  const [dismissed, setDismissed] = useState(false) // closed the result modal to review the board
   const [selected, setSelected] = useState<string | null>(null)
   const [reviewIdx, setReviewIdx] = useState<number | null>(null)
   const [showMoves, setShowMoves] = useState(false)
@@ -258,6 +259,7 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
   useEffect(() => {
     if (!result) {
       setShowModal(false)
+      setDismissed(false)
       return
     }
     const id = setTimeout(() => setShowModal(true), celebrate ? 1500 : 600)
@@ -586,8 +588,8 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
         <ToolBtn icon={ChevronRight} label={t('match.forward')} onClick={stepNext} />
       </div>
 
-      {/* mate / win animation before the modal */}
-      {result && !showModal && celebrate && (
+      {/* mate / win animation before the modal (not while reviewing the board) */}
+      {result && !showModal && !dismissed && celebrate && (
         <>
           {iWon && <Confetti />}
           <div className="pointer-events-none fixed inset-0 z-40 flex items-start justify-center pt-32">
@@ -606,9 +608,23 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
           result={result}
           youWhite={myColor === 'w'}
           rated={!isBot}
+          onClose={() => {
+            setShowModal(false)
+            setDismissed(true)
+          }}
           onExit={onExit}
           onRematch={match.mode === 'online' ? onExit : resetGame}
         />
+      )}
+
+      {/* after closing the result to review the board — a chip to bring it back */}
+      {result && !showModal && dismissed && (
+        <button
+          onClick={() => setShowModal(true)}
+          className="fixed bottom-24 left-1/2 z-40 -translate-x-1/2 rounded-full bg-ink/90 px-5 py-2.5 text-sm font-bold text-white shadow-lg backdrop-blur transition active:scale-95"
+        >
+          {t('match.showResult')}
+        </button>
       )}
 
       {/* chat bottom sheet */}
@@ -783,12 +799,14 @@ function GameOver({
   result,
   youWhite,
   rated,
+  onClose,
   onExit,
   onRematch,
 }: {
   result: Result
   youWhite: boolean
   rated: boolean
+  onClose: () => void
   onExit: () => void
   onRematch: () => void
 }) {
@@ -829,8 +847,18 @@ function GameOver({
         : 'bg-danger/10 text-danger'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6">
-      <div className="gh-pop-in w-full max-w-xs overflow-hidden rounded-[var(--radius-card)] bg-surface text-center shadow-[var(--shadow-soft)]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6" onClick={onClose}>
+      <div
+        className="gh-pop-in relative w-full max-w-xs overflow-hidden rounded-[var(--radius-card)] bg-surface text-center shadow-[var(--shadow-soft)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          aria-label={t('common.close')}
+          className="absolute right-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-full text-muted transition active:bg-bg"
+        >
+          <X size={18} />
+        </button>
         <div className="flex flex-col items-center px-6 pt-7">
           <div className={`grid h-20 w-20 place-items-center rounded-full ${iconWrap}`}>
             <Icon size={38} strokeWidth={youWon && !draw && !aborted ? 2 : 1.8} />

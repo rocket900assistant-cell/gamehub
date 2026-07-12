@@ -254,6 +254,8 @@ const D: Record<string, Entry> = {
   'match.messagePlaceholder': { ru: 'Сообщение…', en: 'Message…' },
   'match.checkmate': { ru: 'Шах и мат!', en: 'Checkmate!' },
   'match.victory': { ru: 'Победа!', en: 'Victory!' },
+  'match.showResult': { ru: 'Показать результат', en: 'Show result' },
+  'common.close': { ru: 'Закрыть', en: 'Close' },
   'match.youWon': { ru: 'Вы выиграли!', en: 'You won!' },
   'match.defeat': { ru: 'Поражение', en: 'Defeat' },
   'match.youLost': { ru: 'Вы проиграли', en: 'You lost' },
