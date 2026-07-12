@@ -54,7 +54,7 @@ function fenAfter(sans: string[], k: number): string {
 // ── captured-pieces display (Chess.com style) ──
 const START_COUNT: Record<string, number> = { p: 8, n: 2, b: 2, r: 2, q: 1 }
 const PIECE_VAL: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9 }
-const CAP_SET_FALLBACK = 'reillycraig' // piece art for the tray when no skin is equipped
+const CAP_SET = 'reillycraig' // captured tray always uses the classic set, ignoring board skin
 type Cap = { pieces: Record<string, number>; color: 'w' | 'b'; adv: number; set: string }
 
 /** From a FEN, what each side has captured + the material advantage (+ = White ahead). */
@@ -238,7 +238,7 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
   // captured pieces + material edge (from the live position, not the review index).
   // The pieces a player captured are the OPPONENT's colour (white took black, etc.).
   const cap = capturedInfo(fen)
-  const capSet = equippedPieceDir() ?? CAP_SET_FALLBACK
+  const capSet = CAP_SET // always classic pieces in the tray, whatever skin is on the board
   const oColor: Side = myColor === 'w' ? 'b' : 'w'
   const myCap: Cap = {
     pieces: myColor === 'w' ? cap.byWhite : cap.byBlack,
