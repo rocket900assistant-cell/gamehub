@@ -89,6 +89,13 @@ export function DurakMatchN({
   const [confirmResign, setConfirmResign] = useState(false)
   const [eloDelta, setEloDelta] = useState<number | null>(null)
   const [gram, setGram] = useState<number | null>(null)
+  // Rematch ready-up (stay at the table, «Готов» for a fresh deal)
+  const [rematch, setRematch] = useState<{ stake: number } | null>(null)
+  const [iReady, setIReady] = useState(false)
+  const [readyCount, setReadyCount] = useState<{ ready: number; total: number } | null>(null)
+  const [cantAfford, setCantAfford] = useState(false)
+  const [rematchDead, setRematchDead] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
 
   // ── chat ──
   const [chatOpen, setChatOpen] = useState(false)
@@ -122,9 +129,10 @@ export function DurakMatchN({
       setDeadline(p.deadline)
       if (p.seats) setSeats(p.seats)
     }
-    const onOver = (g: { youWon: boolean | null; draw?: boolean; eloDelta?: number; gram?: number }) => {
+    const onOver = (g: { youWon: boolean | null; draw?: boolean; eloDelta?: number; gram?: number; rematch?: boolean; stake?: number }) => {
       if (typeof g.eloDelta === 'number') setEloDelta(g.eloDelta)
       if (typeof g.gram === 'number' && g.gram !== 0) setGram(g.gram)
+      if (g.rematch) setRematch({ stake: g.stake ?? 0 })
       setS((cur) =>
         cur.result
           ? cur
@@ -135,15 +143,37 @@ export function DurakMatchN({
       setMessages((prev) => [...prev, { mine: false, text: m.text }])
       if (!chatOpenRef.current) setUnread((u) => u + 1)
     }
+    const onRematchStatus = (p: { ready: number; total: number }) => setReadyCount(p)
+    const onRematchCancelled = () => setRematchDead(true)
+    const onCantAfford = () => setCantAfford(true)
     sock.on('durakn:state', onState)
     sock.on('game:over', onOver)
     sock.on('chat:msg', onChat)
+    sock.on('rematch:status', onRematchStatus)
+    sock.on('rematch:cancelled', onRematchCancelled)
+    sock.on('rematch:cantAfford', onCantAfford)
     return () => {
       sock.off('durakn:state', onState)
       sock.off('game:over', onOver)
       sock.off('chat:msg', onChat)
+      sock.off('rematch:status', onRematchStatus)
+      sock.off('rematch:cancelled', onRematchCancelled)
+      sock.off('rematch:cantAfford', onCantAfford)
     }
   }, [isOnline, me])
+
+  const canRematch = !!rematch && !rematchDead
+  const rematchAffordable = !rematch || rematch.stake <= 0 || balance >= rematch.stake
+  const pressReady = () => {
+    if (!rematchAffordable) return
+    setIReady(true)
+    haptic('light')
+    getSocket().emit('durak:rematch')
+  }
+  const leaveTable = () => {
+    if (canRematch) getSocket().emit('durak:leaveRematch')
+    onExit()
+  }
 
   // tick the clock while a game is live
   useEffect(() => {
@@ -322,7 +352,7 @@ export function DurakMatchN({
       {/* top bar */}
       <div className="relative z-10 flex items-center gap-2 px-3 pt-[calc(0.4rem+env(safe-area-inset-top))]">
         <button
-          onClick={onExit}
+          onClick={leaveTable}
           aria-label="Выход"
           className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-white/90 backdrop-blur active:scale-95"
         >
@@ -455,7 +485,25 @@ export function DurakMatchN({
       {/* bottom menu bar */}
       <div className="relative z-10 -mt-1 flex items-center gap-2 rounded-t-3xl bg-surface px-4 pb-[calc(0.6rem+env(safe-area-inset-bottom))] pt-2.5 shadow-[0_-8px_24px_rgba(0,0,0,0.3)]">
         <div className="w-24 shrink-0">
-          {takeNow ? (
+          {s.result && canRematch ? (
+            !rematchAffordable || cantAfford ? (
+              <span className="block text-center text-[11px] font-semibold leading-tight text-danger">
+                {t('durak.rematchNoGram')}
+              </span>
+            ) : iReady ? (
+              <span className="block text-center text-[11px] font-bold leading-tight text-gold-dark">
+                {t('match.ready')} ✓{readyCount ? ` ${readyCount.ready}/${readyCount.total}` : ''}
+              </span>
+            ) : (
+              <Button size="sm" className="w-full" onClick={pressReady}>
+                {t('match.ready')}
+              </Button>
+            )
+          ) : s.result && rematchDead ? (
+            <span className="block text-center text-[11px] font-medium leading-tight text-muted">
+              {t('durak.tableClosed')}
+            </span>
+          ) : takeNow ? (
             <Button size="sm" variant="secondary" className="w-full" onClick={doTake}>
               {t('match.take')}
             </Button>
@@ -567,9 +615,24 @@ export function DurakMatchN({
 
       {/* game over */}
       {iWon && <Confetti />}
-      {s.result && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6">
-          <div className="gh-pop-in w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
+      {s.result && !dismissed && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6"
+          onClick={isOnline ? () => setDismissed(true) : undefined}
+        >
+          <div
+            className="gh-pop-in relative w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {isOnline && (
+              <button
+                onClick={() => setDismissed(true)}
+                aria-label={t('common.close')}
+                className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full text-muted transition active:bg-bg"
+              >
+                <X size={18} />
+              </button>
+            )}
             <p className="text-2xl font-extrabold">
               {draw ? t('match.draw') : iLost ? t('match.youLost') : t('match.youWon')}
             </p>
@@ -593,14 +656,7 @@ export function DurakMatchN({
             )}
             <div className="mt-6 flex gap-2">
               {isOnline ? (
-                <Button
-                  variant="secondary"
-                  className="flex-1"
-                  onClick={() => {
-                    getSocket().emit('lobby:leave', { roomId: online!.roomId })
-                    onExit()
-                  }}
-                >
+                <Button variant="secondary" className="flex-1" onClick={leaveTable}>
                   {t('lobby.leave')}
                 </Button>
               ) : (
@@ -618,10 +674,22 @@ export function DurakMatchN({
               )}
             </div>
             {isOnline && (
-              <p className="mt-3 text-xs text-muted">{t('durakN.backToLobby')}</p>
+              <p className="mt-3 text-xs text-muted">
+                {canRematch ? t('durak.rematchHint') : t('durakN.backToLobby')}
+              </p>
             )}
           </div>
         </div>
+      )}
+
+      {/* dismissed the result to review the table → chip to bring it back */}
+      {s.result && dismissed && (
+        <button
+          onClick={() => setDismissed(false)}
+          className="fixed bottom-24 left-1/2 z-30 -translate-x-1/2 rounded-full bg-ink/90 px-5 py-2.5 text-sm font-bold text-white shadow-lg backdrop-blur active:scale-95"
+        >
+          {t('match.showResult')}
+        </button>
       )}
     </div>
   )

@@ -501,6 +501,7 @@ export default function App() {
       {durakOnline && (
         <main className="flex flex-1 flex-col overflow-y-auto px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-6">
           <DurakMatch
+            key={durakOnline.roomId}
             user={user}
             config={null}
             balance={profile?.balance ?? 0}
@@ -515,6 +516,7 @@ export default function App() {
       {durakNOnline && (
         <main className="flex flex-1 flex-col overflow-y-auto px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-6">
           <DurakMatchN
+            key={durakNOnline.roomId}
             user={user}
             players={durakNOnline.players}
             balance={profile?.balance ?? 0}

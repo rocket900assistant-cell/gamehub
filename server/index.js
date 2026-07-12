@@ -77,6 +77,7 @@ function createRoom(game, minutes, opts = {}) {
     over: false,
     timer: null,
     stake: opts.stake > 0 ? Math.round(opts.stake * 100) / 100 : 0, // GRAM per player (0 = free)
+    transfer: !!opts.transfer, // remembered so a rematch can rebuild the same config
   }
   if (game === 'nardy') {
     room.nardy = createNardy()
@@ -776,6 +777,7 @@ function durakNFinish(room) {
       const loserTg = loser != null ? tgAt(loser) : null
       gram = await settleRoomStakes(room, loser == null ? { draw: true } : { order, loser: loserTg })
     }
+    const canRematch = tableHumans(room).length >= 2
     for (let seat = 0; seat < n; seat++) {
       const uid = seatUser[seat]
       const sid = uid && sidOf(uid)
@@ -786,9 +788,12 @@ function durakNFinish(room) {
           reason: 'durak',
           eloDelta: deltas[seat] ?? 0,
           gram: gram.get(userTg.get(uid)) ?? 0,
+          rematch: canRematch,
+          stake: room.stake || 0,
         })
     }
-    revertDurakNRoom(room)
+    room.finishing = false
+    if (!canRematch || !offerRematch(room)) revertDurakNRoom(room) // solo human → back to lobby as before
   }
 
   // ── rating: only when the дурак is a HUMAN with ≥1 human winner (no bot-farming).
@@ -906,6 +911,95 @@ function cancelStakedRoom(room) {
   }
   rooms.delete(room.id)
   broadcastLobbies() // drop it from any open lobby lists
+}
+
+// ── Rematch: after a durak game ends, keep the table so players can ready up for a
+//    fresh deal (same people, same stake) without rebuilding a lobby. Each rematch is
+//    a NEW room, so the proven escrow/settle/refund logic is reused untouched. ──
+const REMATCH_MS = 30000
+
+/** Connected human players at this table (for rematch eligibility). */
+function tableHumans(room) {
+  return room.players.filter((p) => p.tgId && sidOf(p.userId)).map((p) => p.userId)
+}
+
+/** Open the ready-up window on a finished durak room. Returns true if offered. */
+function offerRematch(room) {
+  const humans = tableHumans(room)
+  if (humans.length < 2) return false // need at least two humans to rematch
+  room.rematchOpen = true
+  room.rematchReady = new Set()
+  room.rematchHumans = humans
+  room.rematchTimer = setTimeout(() => cancelRematch(room), REMATCH_MS)
+  return true
+}
+
+function broadcastRematch(room) {
+  for (const uid of room.rematchHumans || []) {
+    const sid = sidOf(uid)
+    if (sid) io.to(sid).emit('rematch:status', { ready: room.rematchReady.size, total: room.rematchHumans.length })
+  }
+}
+
+/** Dissolve a rematch window (timeout / someone left): tell the table and drop the room. */
+function cancelRematch(room) {
+  if (!room.rematchOpen) return
+  room.rematchOpen = false
+  clearTimeout(room.rematchTimer)
+  for (const uid of room.rematchHumans || []) {
+    const sid = sidOf(uid)
+    if (sid) io.to(sid).emit('rematch:cancelled')
+  }
+  rooms.delete(room.id)
+}
+
+/** All ready → spin up a fresh room with the same config + players and deal. */
+async function startRematch(room) {
+  room.rematchOpen = false
+  clearTimeout(room.rematchTimer)
+  const humanIds = room.rematchHumans.filter((uid) => sidOf(uid))
+  let newId
+  if (room.game === 'durakn') {
+    newId = createRoom('durakn', room.minutes, {
+      players: room.seats,
+      neighborsOnly: room.durakN.neighborsOnly,
+      transfer: room.durakN.transfer,
+      allowDraw: room.durakN.allowDraw,
+      stake: room.stake,
+    })
+  } else {
+    newId = createRoom('durak', room.minutes, { transfer: room.transfer, stake: room.stake })
+  }
+  const next = rooms.get(newId)
+  for (const uid of humanIds) addPlayer(next, uid)
+  rooms.delete(room.id) // retire the old table
+  await startRoom(next) // escrows stakes (double-spend-safe) + deals + match:found
+}
+
+/** A player pressed «Готов» for a rematch. */
+async function readyRematch(userId) {
+  const room = [...rooms.values()].find((r) => r.rematchOpen && r.rematchHumans?.includes(userId))
+  if (!room) return
+  const sid = sidOf(userId)
+  if (room.stake > 0) {
+    const tg = userTg.get(userId)
+    const bal = tg && dbEnabled ? await getBalance(tg) : 0
+    if (bal < room.stake) {
+      if (sid) io.to(sid).emit('rematch:cantAfford')
+      return
+    }
+  }
+  room.rematchReady.add(userId)
+  broadcastRematch(room)
+  const connected = room.rematchHumans.filter((uid) => sidOf(uid))
+  if (room.stake > 0) {
+    // staked: every original human must be present AND ready (no bots can cover a stake)
+    if (connected.length === room.rematchHumans.length && room.rematchHumans.every((uid) => room.rematchReady.has(uid)))
+      await startRematch(room)
+  } else {
+    // free: the still-connected humans ready up; empty seats refill with bots
+    if (connected.length >= 2 && connected.every((uid) => room.rematchReady.has(uid))) await startRematch(room)
+  }
 }
 
 async function startRoom(room) {
@@ -1153,6 +1247,7 @@ function endGame(room, winnerColor, reason) {
       })()
     }
   }
+  const canRematch = room.game === 'durak' && tableHumans(room).length >= 2
   const emitOver = (gram) => {
     for (const p of room.players) {
       const sid = sidOf(p.userId)
@@ -1165,8 +1260,11 @@ function endGame(room, winnerColor, reason) {
         mars: !!room.mars,
         gram: gram?.get(p.tgId) ?? 0,
         clocks: room.clocks,
+        rematch: canRematch,
+        stake: room.stake || 0,
       })
     }
+    if (canRematch) offerRematch(room) // keep the table alive for a ready-up rematch
   }
   // ── GRAM stakes payout (1v1 human games): winner takes 1.9×, draw/abort refunds ──
   if (room.stake > 0 && a && b && dbEnabled) {
@@ -1795,6 +1893,17 @@ io.on('connection', (socket) => {
     else if (durak.canPass(room.durak)) durakCommit(room, durak.endBout(room.durak))
   })
 
+  // Rematch ready-up (durak 1v1 + N). «Готов» → ready; leaving the table cancels it.
+  socket.on('durak:rematch', () => {
+    const userId = socketUser.get(socket.id)
+    if (userId) readyRematch(userId).catch(() => {})
+  })
+  socket.on('durak:leaveRematch', () => {
+    const userId = socketUser.get(socket.id)
+    const room = [...rooms.values()].find((r) => r.rematchOpen && r.rematchHumans?.includes(userId))
+    if (room) cancelRematch(room) // one player bailed → dissolve for everyone
+  })
+
   socket.on('chat', ({ roomId, text }) => {
     const room = rooms.get(roomId)
     if (!room || !text) return
@@ -1960,6 +2069,9 @@ io.on('connection', (socket) => {
     for (const [k, q] of queues) queues.set(k, q.filter((id) => id !== userId))
     leaveNQueues(userId)
     leaveLobby(userId) // drop out of any open lobby (started games use the abandon timer)
+    // If they were in an open rematch window, dissolve it for the table.
+    const rmRoom = [...rooms.values()].find((r) => r.rematchOpen && r.rematchHumans?.includes(userId))
+    if (rmRoom) cancelRematch(rmRoom)
     // Presence: go offline + tell my friends (only if THIS socket was the live one).
     const tgId = userTg.get(userId)
     if (tgId && tgSocket.get(tgId) === socket.id) {
