@@ -277,7 +277,7 @@ const D: Record<string, Entry> = {
   'match.opponentMove': { ru: 'Ход соперника', en: "Opponent's move" },
   'match.ready': { ru: 'Готов', en: 'Ready' },
   'match.readyPrompt': { ru: 'Нажмите «Готов»', en: 'Press “Ready”' },
-  'match.done': { ru: 'Готово', en: 'Done' },
+  'match.done': { ru: 'Пас', en: 'Pass' },
   'match.beat': { ru: 'Бито', en: 'Beat' },
   'match.take': { ru: 'Взять', en: 'Take' },
   'match.yourTurnAttack': { ru: 'Ваш ход — атакуйте', en: 'Your turn — attack' },
