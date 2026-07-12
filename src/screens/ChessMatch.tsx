@@ -51,6 +51,48 @@ function fenAfter(sans: string[], k: number): string {
   return c.fen()
 }
 
+// ── captured-pieces display (Chess.com style) ──
+const PIECE_GLYPH: Record<string, string> = { p: '♟', n: '♞', b: '♝', r: '♜', q: '♛' }
+const START_COUNT: Record<string, number> = { p: 8, n: 2, b: 2, r: 2, q: 1 }
+const PIECE_VAL: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9 }
+type Cap = { pieces: Record<string, number>; adv: number }
+
+/** From a FEN, what each side has captured + the material advantage (+ = White ahead). */
+function capturedInfo(fen: string): { byWhite: Record<string, number>; byBlack: Record<string, number>; adv: number } {
+  const cnt = { w: { p: 0, n: 0, b: 0, r: 0, q: 0 } as Record<string, number>, b: { p: 0, n: 0, b: 0, r: 0, q: 0 } as Record<string, number> }
+  try {
+    for (const row of new Chess(fen).board())
+      for (const sq of row) if (sq && sq.type !== 'k') cnt[sq.color][sq.type]++
+  } catch {
+    /* invalid fen → empty */
+  }
+  const missing = (c: 'w' | 'b') => {
+    const m: Record<string, number> = {}
+    for (const t of ['q', 'r', 'b', 'n', 'p']) {
+      const g = START_COUNT[t] - cnt[c][t]
+      if (g > 0) m[t] = g
+    }
+    return m
+  }
+  const byWhite = missing('b') // black pieces White has taken
+  const byBlack = missing('w') // white pieces Black has taken
+  const val = (m: Record<string, number>) => Object.entries(m).reduce((s, [t, n]) => s + PIECE_VAL[t] * n, 0)
+  return { byWhite, byBlack, adv: val(byWhite) - val(byBlack) }
+}
+
+function CapturedRow({ pieces, adv }: Cap) {
+  const glyphs = ['q', 'r', 'b', 'n', 'p'].flatMap((t) => Array(pieces[t] ?? 0).fill(t))
+  if (glyphs.length === 0 && adv <= 0) return null
+  return (
+    <span className="flex items-center gap-[1px] text-[13px] leading-none text-muted">
+      {glyphs.map((t, i) => (
+        <span key={i}>{PIECE_GLYPH[t]}</span>
+      ))}
+      {adv > 0 && <span className="ml-0.5 text-[11px] font-extrabold text-ink">+{adv}</span>}
+    </span>
+  )
+}
+
 function kingSquare(chess: Chess, color: Side): string | null {
   for (const row of chess.board()) {
     for (const cell of row) {
@@ -188,6 +230,10 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
   const sans = game.history()
   const reviewing = reviewIdx !== null
   const boardFen = reviewing ? fenAfter(sans, reviewIdx) : fen
+  // captured pieces + material edge (from the live position, not the review index)
+  const cap = capturedInfo(fen)
+  const myCap: Cap = myColor === 'w' ? { pieces: cap.byWhite, adv: Math.max(0, cap.adv) } : { pieces: cap.byBlack, adv: Math.max(0, -cap.adv) }
+  const oppCap: Cap = myColor === 'w' ? { pieces: cap.byBlack, adv: Math.max(0, -cap.adv) } : { pieces: cap.byWhite, adv: Math.max(0, cap.adv) }
   const iWon = result ? (result.youWon ?? result.winner === myColor) : false
   const celebrate = !!result && (result.reason === 'mate' || iWon)
 
@@ -262,7 +308,7 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
       setDismissed(false)
       return
     }
-    const id = setTimeout(() => setShowModal(true), celebrate ? 1500 : 600)
+    const id = setTimeout(() => setShowModal(true), celebrate ? 2500 : 600)
     return () => clearTimeout(id)
   }, [result, celebrate])
 
@@ -440,7 +486,9 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
     onSquareClick,
     boardOrientation: (myColor === 'b' ? 'black' : 'white') as 'white' | 'black',
     allowDragging: !result && !reviewing,
-    animationDurationInMs: 180,
+    // Stepping through past moves must snap instantly — animating a backward jump
+    // makes react-chessboard fade every piece out then in (the "flicker" bug).
+    animationDurationInMs: reviewing ? 0 : 180,
     ...skinBoard,
     squareStyles,
     ...(skinPieces ? { pieces: skinPieces } : {}),
@@ -493,6 +541,7 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
         clock={fmt(oppClock)}
         active={oppActive}
         vip={match.mode === 'online' ? match.opponent.vip : false}
+        captured={oppCap}
       />
 
       <div className="my-2 w-full">
@@ -506,6 +555,7 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
         clock={fmt(myClock)}
         active={myActive}
         vip={vipMe}
+        captured={myCap}
       />
 
       {/* move list (toggled) */}
@@ -759,6 +809,7 @@ function PlayerBar({
   clock,
   active,
   vip,
+  captured,
 }: {
   name: string
   src?: string
@@ -766,11 +817,12 @@ function PlayerBar({
   clock: string
   active: boolean
   vip?: boolean
+  captured?: Cap
 }) {
   return (
     <div className="flex items-center gap-3 py-1">
       <Avatar name={name} src={src} size={40} vip={vip} />
-      <div className="flex-1">
+      <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <p className="font-bold leading-tight">{name}</p>
           {vip && (
@@ -779,7 +831,10 @@ function PlayerBar({
             </span>
           )}
         </div>
-        {elo > 0 && <p className="text-xs text-muted">Elo {elo}</p>}
+        <div className="mt-0.5 flex items-center gap-2">
+          {elo > 0 && <p className="text-xs text-muted">Elo {elo}</p>}
+          {captured && <CapturedRow pieces={captured.pieces} adv={captured.adv} />}
+        </div>
       </div>
       <div
         className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 font-bold tabular-nums ${
