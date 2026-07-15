@@ -403,7 +403,7 @@ export async function debitIfAffordable({ tgId, amount, kind, ref = null, meta =
 /** Adjust a player's GRAM balance and log a ledger entry atomically. Idempotent on `ref`.
  *  Returns the new balance, or null if a duplicate `ref` was already applied. */
 export async function adjustGram({ tgId, delta, kind, status = 'done', ref = null, meta = null }) {
-  if (!pool || !tgId) return null
+  if (!pool || tgId == null) return null // tgId 0 = HOUSE account (fees/settled markers) — must be allowed
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
