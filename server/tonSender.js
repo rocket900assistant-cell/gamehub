@@ -1,6 +1,7 @@
 // Hot-wallet sender: signs + broadcasts GRAM (native TON) payouts for approved
 // withdrawals. Dormant unless HOT_TON_MNEMONIC is set. The seed lives ONLY in env.
 import { TonClient, WalletContractV4, WalletContractV5R1, internal, toNano } from '@ton/ton'
+import { getHttpEndpoint } from '@orbs-network/ton-access'
 import { mnemonicToPrivateKey } from '@ton/crypto'
 
 let sender = null // { client, wallet, key, address }
@@ -41,10 +42,25 @@ export async function initSender() {
       console.warn(`[hot] HOT_TON_ADDRESS not set — assuming ${ver} → ${address}. Set HOT_TON_ADDRESS to be safe.`)
     }
 
-    const client = new TonClient({
-      endpoint: process.env.TON_RPC || 'https://toncenter.com/api/v2/jsonRPC',
-      apiKey: process.env.TONCENTER_KEY || undefined,
-    })
+    // Pick an RPC endpoint. Public toncenter WITHOUT an API key rate-limits (429),
+    // so default to Orbs ton-access (key-free, toncenter-v2 compatible). Explicit
+    // TON_RPC or a TONCENTER_KEY still win.
+    let endpoint = process.env.TON_RPC
+    const apiKey = process.env.TONCENTER_KEY || undefined
+    if (!endpoint) {
+      if (apiKey) {
+        endpoint = 'https://toncenter.com/api/v2/jsonRPC'
+      } else {
+        try {
+          endpoint = await getHttpEndpoint()
+        } catch (e) {
+          console.warn('[hot] orbs endpoint failed, using toncenter:', e.message)
+          endpoint = 'https://toncenter.com/api/v2/jsonRPC'
+        }
+      }
+    }
+    const client = new TonClient({ endpoint, apiKey })
+    console.log(`[hot] RPC endpoint: ${endpoint}`)
     sender = { client, wallet, key, address }
     console.log(`[hot] sender ready: ${address} (${ver}, auto-detected)`)
     return sender
