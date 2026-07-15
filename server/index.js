@@ -88,6 +88,46 @@ function seedChessBot(userId, minutes) {
   })
   startRoom(room) // deals + emits match:found (bot has no socket → only the human is notified)
 }
+
+/** If it's the durak fill-in bot's turn (seat 'opp'), play one action after a pause.
+ *  durakCommit re-invokes this after each move, so multi-card throw-ins chain naturally. */
+function scheduleDurakBot(room) {
+  if (!room || room.over || room.game !== 'durak') return
+  if (!room.players[1]?.isBot) return
+  if (room.durak.result || room.durak.turn !== 'opp') return
+  clearTimeout(room.botTimer)
+  const delay = 700 + Math.floor(Math.random() * 1800) // human-like pause
+  room.botTimer = setTimeout(() => {
+    if (room.over || room.durak.result || room.durak.turn !== 'opp') return
+    const next = durak.botStep(room.durak)
+    if (next !== room.durak) durakCommit(room, next) // applies + broadcasts + re-schedules
+  }, delay)
+}
+
+/** No human found in time → start a FREE 1v1 durak game vs a disguised fill-in bot. */
+function seedDurakBot(userId, minutes, transfer) {
+  botFallbackTimers.delete(userId)
+  const key = `durak:${minutes}:${transfer ? 't' : 'c'}`
+  const q = queues.get(key) ?? []
+  if (!q.includes(userId)) return // already matched or cancelled
+  queues.set(key, q.filter((id) => id !== userId))
+  if (!sidOf(userId)) return
+  const room = rooms.get(createRoom('durak', minutes, { transfer }))
+  addPlayer(room, userId) // human = players[0] = seat 'you'
+  const op = fakeChessOpponent(room.players[0]?.elo ?? 1200)
+  room.players.push({
+    userId: `bot:${room.id}`,
+    tgId: null,
+    name: op.name,
+    elo: op.elo,
+    vip: false,
+    photoUrl: op.photoUrl,
+    color: 'b',
+    isBot: true, // seat 'opp'
+  })
+  startRoom(room)
+}
+
 const nQueues = new Map() // durakn config key -> { ids: [], timer } (fills with bots on timeout)
 const DURAKN_FILL_MS = 20000 // wait this long for humans, then fill remaining seats with (disguised) bots
 const rooms = new Map() // roomId -> room
@@ -958,6 +998,7 @@ function durakCommit(room, next) {
   room.deadline = Date.now() + room.moveMs
   durakBroadcast(room)
   if (room.durak.result) durakFinish(room)
+  else scheduleDurakBot(room) // if the opponent is the fill-in bot, let it act next
 }
 
 function durakFinish(room) {
@@ -1153,6 +1194,7 @@ async function startRoom(room) {
     }
   }
   scheduleChessBot(room) // fill-in bot opens if it drew White (no-op otherwise)
+  scheduleDurakBot(room) // durak fill-in bot opens if it's the attacker (no-op otherwise)
   // clock handled by the shared tick loop
 }
 
@@ -1582,10 +1624,14 @@ io.on('connection', (socket) => {
       q.push(userId)
       queues.set(key, q)
       socket.emit('queue:waiting')
-      // FREE chess only: if no human joins within 20s, seed a disguised fill-in bot.
-      if (game === 'chess' && st === 0) {
+      // FREE games only: if no human joins within 20s, seed a disguised fill-in bot.
+      if (st === 0 && (game === 'chess' || game === 'durak')) {
         clearBotFallback(userId)
-        botFallbackTimers.set(userId, setTimeout(() => seedChessBot(userId, minutes), BOT_FALLBACK_MS))
+        const seed =
+          game === 'chess'
+            ? () => seedChessBot(userId, minutes)
+            : () => seedDurakBot(userId, minutes, !!transfer)
+        botFallbackTimers.set(userId, setTimeout(seed, BOT_FALLBACK_MS))
       }
     }
   })

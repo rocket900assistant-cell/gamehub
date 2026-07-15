@@ -259,3 +259,36 @@ export function viewFor(s, seat) {
       : null,
   }
 }
+
+// ── 1v1 fill-in bot (plays the 'opp' seat) — same simple heuristic as the offline UI bot ──
+const value = (c, trump) => c.rank + (c.suit === trump ? 100 : 0)
+
+/** One bot action for the 'opp' seat. Returns the next state, or the same state if idle. */
+export function botStep(s) {
+  if (s.result) return s
+  const bot = 'opp'
+  const cheapest = (cs) => [...cs].sort((a, b) => value(a, s.trump) - value(b, s.trump))[0]
+  // attacker while the defender is taking → throw in cheap cards, then finish
+  if (s.taking && s.turn === bot && bot === s.attacker) {
+    const atk = legalAttacks(s)
+    if (atk.length) return playAttack(s, cheapest(atk))
+    return finishTake(s)
+  }
+  // defending
+  if (s.turn === bot && bot === other(s.attacker)) {
+    if (canTransfer(s)) {
+      const t = legalTransfers(s).filter((c) => c.suit !== s.trump)
+      if (t.length) return playTransfer(s, cheapest(t))
+    }
+    const { cards, pair } = legalDefends(s)
+    if (cards.length === 0) return beginTake(s)
+    return playDefend(s, cheapest(cards), pair)
+  }
+  // attacking
+  if (s.turn === bot && bot === s.attacker) {
+    const atk = legalAttacks(s)
+    if (atk.length === 0) return canPass(s) ? endBout(s) : s
+    return playAttack(s, cheapest(atk))
+  }
+  return s
+}
