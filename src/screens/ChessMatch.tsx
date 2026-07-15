@@ -172,6 +172,14 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
         : (match.restoreFen ?? undefined),
     ),
   )
+  // Online play syncs by loading server FENs, which wipes chess.js's move history.
+  // This second board only ever gets moves applied, so it keeps the FULL history
+  // that the "back/forward" review needs.
+  const histRef = useRef(
+    new Chess(
+      match.mode === 'online' ? match.fen : (match.restoreFen ?? undefined),
+    ),
+  )
   const [fen, setFen] = useState(gameRef.current.fen())
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(
     null,
@@ -229,7 +237,7 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
 
   const game = gameRef.current
   const turn = game.turn() as Side
-  const sans = game.history()
+  const sans = histRef.current.history() // full move list (survives online FEN loads)
   const reviewing = reviewIdx !== null
   const boardFen = reviewing ? fenAfter(sans, reviewIdx) : fen
   // captured pieces + material edge (from the live position, not the review index).
@@ -266,6 +274,19 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
       lastMove: { from: string; to: string }
     }) => {
       gameRef.current.load(st.fen)
+      // Keep the history board in sync. If it's already at this position (my own
+      // move, applied optimistically) skip; otherwise append the incoming move.
+      const h = histRef.current
+      const pos = (f: string) => f.split(' ')[0]
+      if (pos(h.fen()) !== pos(st.fen)) {
+        let ok = false
+        try {
+          ok = !!h.move({ from: st.lastMove.from, to: st.lastMove.to, promotion: 'q' })
+        } catch {
+          ok = false
+        }
+        if (!ok || pos(h.fen()) !== pos(st.fen)) h.load(st.fen) // fell out of sync → resync (loses prior history)
+      }
       setFen(st.fen)
       setClocks(st.clocks)
       setLastMove(st.lastMove)
@@ -332,6 +353,11 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
       if (!g.move({ from, to, promotion: 'q' })) return false
     } catch {
       return false
+    }
+    try {
+      histRef.current.move({ from, to, promotion: 'q' }) // mirror into the history board
+    } catch {
+      /* keep going even if the history board rejects it */
     }
     haptic('light')
     setFen(g.fen())
@@ -400,6 +426,7 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
 
   function resetGame() {
     gameRef.current = new Chess()
+    histRef.current = new Chess()
     setFen(gameRef.current.fen())
     setClocks({ w: match.minutes * 60000, b: match.minutes * 60000 })
     setResult(null)
