@@ -1093,8 +1093,7 @@ async function startRoom(room) {
         seats: info,
       })
     }
-    room.timer = setInterval(() => tick(room), 250)
-    scheduleDurakNBot(room)
+    scheduleDurakNBot(room) // clock handled by the shared tick loop
     return
   }
   // randomize sides for fairness (50/50 who plays white)
@@ -1143,8 +1142,8 @@ async function startRoom(room) {
       })
     }
   }
-  room.timer = setInterval(() => tick(room), 250)
   scheduleChessBot(room) // fill-in bot opens if it drew White (no-op otherwise)
+  // clock handled by the shared tick loop
 }
 
 function tick(room) {
@@ -1178,12 +1177,23 @@ function tick(room) {
     return
   }
   const now = Date.now()
+  if (!room.lastTick) {
+    room.lastTick = now // first tick after start → establish the baseline, no drain
+    return
+  }
   const dt = now - room.lastTick
   room.lastTick = now
   const t = room.chess.turn()
   room.clocks[t] = Math.max(0, room.clocks[t] - dt)
   if (room.clocks[t] === 0) endGame(room, t === 'w' ? 'b' : 'w', 'time')
 }
+
+// One shared clock loop for every active room, instead of a setInterval per game.
+// tick() itself skips rooms that aren't running, so this scales to many tables
+// with a single timer. (250ms keeps time-outs snappy; clocks display client-side.)
+setInterval(() => {
+  for (const room of rooms.values()) tick(room)
+}, 250)
 
 // ── GRAM stakes: escrow at start, settle at end (human-vs-human only) ──
 /** Does this player (human) have enough GRAM to cover a stake? */
