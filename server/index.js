@@ -5,7 +5,7 @@ import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFrie
 import { settleStakes } from './gramStakes.js'
 import { initSender, senderReady, hotBalance, sendTon } from './tonSender.js'
 import { verifyInitData } from './telegram.js'
-import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther } from './nardy.js'
+import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther, legalMoves as nardyLegalMoves, pass as nardyPass } from './nardy.js'
 import * as durak from './durak.js'
 import * as durakN from './durakN.js'
 import { levelForElo, botChessMove, fakeChessOpponent } from './chessBot.js'
@@ -124,6 +124,63 @@ function seedDurakBot(userId, minutes, transfer) {
     photoUrl: op.photoUrl,
     color: 'b',
     isBot: true, // seat 'opp'
+  })
+  startRoom(room)
+}
+
+/** Pick one nardy move (long nardy): bear off if possible, else play the biggest die. */
+function pickNardyMove(st) {
+  const moves = nardyLegalMoves(st)
+  if (moves.length === 0) return null
+  moves.sort((a, b) => {
+    const off = (a.dest === 'off' ? 1 : 0) - (b.dest === 'off' ? 1 : 0)
+    return off !== 0 ? -off : b.die - a.die // bear-off first, then bigger die (more progress)
+  })
+  return moves[0]
+}
+
+/** Drive the nardy fill-in bot: roll → play dice one at a time → turn passes. */
+function scheduleNardyBot(room) {
+  if (!room || room.over || room.game !== 'nardy') return
+  const bot = room.players.find((p) => p.isBot)
+  if (!bot) return
+  if (room.nardy.result || room.nardy.turn !== bot.color) return
+  clearTimeout(room.botTimer)
+  const delay = 800 + Math.floor(Math.random() * 1500) // human-like pause per action
+  room.botTimer = setTimeout(() => {
+    if (room.over || room.nardy.result || room.nardy.turn !== bot.color) return
+    if (room.nardy.awaitingRoll) {
+      room.nardy = nardyRoll(room.nardy) // rolls (auto-passes if no move)
+    } else {
+      const mv = pickNardyMove(room.nardy)
+      room.nardy = mv ? nardyMove(room.nardy, mv.from, mv.die) : nardyPass(room.nardy)
+    }
+    emitToRoom(room, 'nardy:state', { nardy: room.nardy, deadline: room.deadline })
+    if (room.nardy.result) return endGame(room, room.nardy.result, 'win')
+    scheduleNardyBot(room) // keep going: another die, or the roll if a new turn
+  }, delay)
+}
+
+/** No human found in time → start a FREE nardy game vs a disguised fill-in bot. */
+function seedNardyBot(userId, minutes) {
+  botFallbackTimers.delete(userId)
+  const key = qkey('nardy', minutes)
+  const q = queues.get(key) ?? []
+  if (!q.includes(userId)) return
+  queues.set(key, q.filter((id) => id !== userId))
+  if (!sidOf(userId)) return
+  const room = rooms.get(createRoom('nardy', minutes, {}))
+  addPlayer(room, userId)
+  const op = fakeChessOpponent(room.players[0]?.elo ?? 1200)
+  room.players.push({
+    userId: `bot:${room.id}`,
+    tgId: null,
+    name: op.name,
+    elo: op.elo,
+    vip: false,
+    photoUrl: op.photoUrl,
+    color: 'b',
+    isBot: true,
   })
   startRoom(room)
 }
@@ -1195,6 +1252,7 @@ async function startRoom(room) {
   }
   scheduleChessBot(room) // fill-in bot opens if it drew White (no-op otherwise)
   scheduleDurakBot(room) // durak fill-in bot opens if it's the attacker (no-op otherwise)
+  scheduleNardyBot(room) // nardy fill-in bot opens if it moves first (no-op otherwise)
   // clock handled by the shared tick loop
 }
 
@@ -1625,12 +1683,14 @@ io.on('connection', (socket) => {
       queues.set(key, q)
       socket.emit('queue:waiting')
       // FREE games only: if no human joins within 20s, seed a disguised fill-in bot.
-      if (st === 0 && (game === 'chess' || game === 'durak')) {
+      if (st === 0 && (game === 'chess' || game === 'durak' || game === 'nardy')) {
         clearBotFallback(userId)
         const seed =
           game === 'chess'
             ? () => seedChessBot(userId, minutes)
-            : () => seedDurakBot(userId, minutes, !!transfer)
+            : game === 'durak'
+              ? () => seedDurakBot(userId, minutes, !!transfer)
+              : () => seedNardyBot(userId, minutes)
         botFallbackTimers.set(userId, setTimeout(seed, BOT_FALLBACK_MS))
       }
     }
@@ -1966,6 +2026,7 @@ io.on('connection', (socket) => {
     if (room.nardy.turn !== before) room.deadline = Date.now() + room.moveMs
     emitToRoom(room, 'nardy:state', { nardy: room.nardy, deadline: room.deadline })
     if (room.nardy.result) endGame(room, room.nardy.result, 'win')
+    else scheduleNardyBot(room) // if the turn is now the bot's, let it play
   })
 
   socket.on('nardy:move', ({ roomId, from, seq }) => {
@@ -1993,6 +2054,7 @@ io.on('connection', (socket) => {
     if (turnChanged && !st.result) room.deadline = Date.now() + room.moveMs
     emitToRoom(room, 'nardy:state', { nardy: room.nardy, deadline: room.deadline })
     if (room.nardy.result) endGame(room, room.nardy.result, 'win')
+    else scheduleNardyBot(room) // if the turn passed to the bot, let it play
   })
 
   // ── Durak (online) actions ──
