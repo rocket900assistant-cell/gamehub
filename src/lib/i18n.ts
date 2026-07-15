@@ -68,7 +68,7 @@ const D: Record<string, Entry> = {
   'wallet.wdAddress': { ru: 'TON-адрес кошелька', en: 'TON wallet address' },
   'wallet.wdFee': { ru: 'Комиссия за газ', en: 'Gas fee' },
   'wallet.wdReceive': { ru: 'Получишь', en: "You'll receive" },
-  'wallet.wdMin': { ru: 'Минимальный вывод — 1 GRAM', en: 'Minimum withdrawal is 1 GRAM' },
+  'wallet.wdMin': { ru: 'Минимальный вывод — 0.5 GRAM', en: 'Minimum withdrawal is 0.5 GRAM' },
   'wallet.insufficient': { ru: 'Недостаточно GRAM', en: 'Not enough GRAM' },
   'wallet.wdBadAddr': { ru: 'Неверный TON-адрес', en: 'Invalid TON address' },
   'wallet.wdRequested': { ru: 'Заявка принята. Средства поступят в течение часа', en: 'Request accepted. Funds arrive within an hour' },

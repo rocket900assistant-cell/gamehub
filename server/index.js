@@ -477,7 +477,7 @@ const STAKE_FEE_RATE = Number(process.env.STAKE_FEE_RATE ?? 0.1) // owner fee = 
 const MIN_STAKE = 0.1 // GRAM
 const WITHDRAW_FEE_RATE = Number(process.env.WITHDRAW_FEE_RATE ?? 0.001) // 0.1% gas fee
 const WITHDRAW_FEE_MIN = Number(process.env.WITHDRAW_FEE_MIN ?? 0.05) // floor so gas is always covered
-const MIN_WITHDRAW = Number(process.env.MIN_WITHDRAW ?? 1) // must exceed the fee
+const MIN_WITHDRAW = Number(process.env.MIN_WITHDRAW ?? 0.5) // must exceed the fee
 const withdrawFee = (amount) => Math.max(Math.round(amount * WITHDRAW_FEE_RATE * 100) / 100, WITHDRAW_FEE_MIN)
 const OWNER_TG_ID = process.env.OWNER_TG_ID ? Number(process.env.OWNER_TG_ID) : null // sees the withdrawals admin
 const isOwner = (tgId) => OWNER_TG_ID != null && Number(tgId) === OWNER_TG_ID
@@ -734,6 +734,10 @@ async function pollDeposits() {
     }
     const data = await tonapi(`/v2/accounts/${PLATFORM_TON_ADDRESS}/events?limit=50`)
     for (const ev of data.events || []) {
+      // Skip traces that aren't finalized yet: their event_id can change once the
+      // trace settles, which would make the same transfer credit twice under two
+      // different refs. Finalized events reappear on a later poll (every 25s).
+      if (ev.in_progress) continue
       const actions = ev.actions || []
       for (let i = 0; i < actions.length; i++) {
         const a = actions[i]
