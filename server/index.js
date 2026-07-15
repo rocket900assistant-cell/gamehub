@@ -592,7 +592,7 @@ const httpServer = createServer((req, res) => {
     // initialised (true iff the seed matched HOT_TON_ADDRESS). No address, no
     // balance, no secrets — safe to be public.
     res.writeHead(200, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ ok: true, senderReady: senderReady() }))
+    res.end(JSON.stringify({ ok: true, senderReady: senderReady(), lastHotError }))
     return
   }
   res.writeHead(200, { 'content-type': 'text/plain' })
@@ -778,6 +778,7 @@ if (PLATFORM_TON_ADDRESS) {
 // ── Withdrawal sender: send approved payouts from the hot wallet ──
 const MAX_AUTO_WITHDRAW = Number(process.env.MAX_AUTO_WITHDRAW ?? 0) // 0 = no cap; above this stays manual
 let sendingWithdrawals = false
+let lastHotError = null // last withdrawal-send problem, surfaced on /status for diagnostics
 
 async function processWithdrawals() {
   if (!senderReady() || !dbEnabled || sendingWithdrawals) return
@@ -789,8 +790,15 @@ async function processWithdrawals() {
       const address = w.meta?.address
       if (!(payout > 0) || !address) continue // malformed → leave for manual review
       if (MAX_AUTO_WITHDRAW > 0 && payout > MAX_AUTO_WITHDRAW) continue // big payout → manual
-      const bal = await hotBalance()
+      let bal
+      try {
+        bal = await hotBalance()
+      } catch (e) {
+        lastHotError = `hotBalance: ${e.message}`
+        break
+      }
       if (bal < payout + 0.05) {
+        lastHotError = `low balance ${bal} < ${payout + 0.05}`
         console.warn(`[hot] balance ${bal} < payout ${payout} — top up the hot wallet`)
         break // queue the rest until topped up
       }
@@ -805,8 +813,10 @@ async function processWithdrawals() {
           io.to(sid).emit('gram:withdraw:sent', { amount: payout })
           io.to(sid).emit('gram:history')
         }
+        lastHotError = null // success clears the last error
         console.log(`[hot] sent ${payout} GRAM → ${address} (wd ${w.id})`)
       } catch (e) {
+        lastHotError = `send wd ${w.id}: ${e.message}`
         console.error(`[hot] send failed (wd ${w.id}):`, e.message)
         await setWithdrawalStatus(w.id, 'sending', 'approved') // pre-broadcast fail → retry next cycle
       }
