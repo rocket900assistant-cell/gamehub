@@ -170,6 +170,9 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
   const [eloDelta, setEloDelta] = useState<number | null>(null)
   const [mars, setMars] = useState(false)
   const [gram, setGram] = useState<number | null>(null)
+  const [rematchWaiting, setRematchWaiting] = useState(false) // I offered, waiting
+  const [rematchOffer, setRematchOffer] = useState<{ stake: number; from: string } | null>(null) // offered to me
+  const [rematchNote, setRematchNote] = useState<string | null>(null) // "opponent declined"
   const vipMe = isVip()
   const [confirmResign, setConfirmResign] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
@@ -303,11 +306,24 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
       if (g.mars) setMars(true)
       setS((c) => (c.result ? c : { ...c, result: g.youWon ? myColor : other(myColor) }))
     }
+    const onOffered = (p: { stake: number; from: string }) => setRematchOffer(p)
+    const onDeclined = () => {
+      setRematchWaiting(false)
+      setRematchNote(t('match.rematchDeclined'))
+      setTimeout(() => setRematchNote(null), 3000)
+    }
+    const onWithdrawn = () => setRematchOffer(null)
     sock.on('nardy:state', onState)
     sock.on('game:over', onOver)
+    sock.on('rematch:offered', onOffered)
+    sock.on('rematch:declined', onDeclined)
+    sock.on('rematch:withdrawn', onWithdrawn)
     return () => {
       sock.off('nardy:state', onState)
       sock.off('game:over', onOver)
+      sock.off('rematch:offered', onOffered)
+      sock.off('rematch:declined', onDeclined)
+      sock.off('rematch:withdrawn', onWithdrawn)
     }
   }, [isOnline, myColor])
 
@@ -650,10 +666,28 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
               </p>
             )}
             <div className="mt-6 flex gap-2">
-              <Button variant="secondary" className="flex-1" onClick={onExit}>
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => {
+                  if (rematchWaiting) getSocket().emit('rematch:cancelOffer')
+                  onExit()
+                }}
+              >
                 В меню
               </Button>
-              {!isOnline && (
+              {isOnline ? (
+                <Button
+                  className="flex-1"
+                  disabled={rematchWaiting}
+                  onClick={() => {
+                    getSocket().emit('rematch:offer')
+                    setRematchWaiting(true)
+                  }}
+                >
+                  <RotateCcw size={16} /> {rematchWaiting ? t('match.rematchWaiting') : t('match.rematch')}
+                </Button>
+              ) : (
                 <Button
                   className="flex-1"
                   onClick={() => {
@@ -666,6 +700,41 @@ export function NardyMatch({ user, config, resume, online, onExit }: NardyMatchP
                   <RotateCcw size={16} /> Ещё раз
                 </Button>
               )}
+            </div>
+            {rematchNote && <p className="mt-3 text-sm font-medium text-muted">{rematchNote}</p>}
+          </div>
+        </div>
+      )}
+
+      {/* opponent offered ME a rematch → yes/no */}
+      {rematchOffer && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 p-6">
+          <div className="gh-pop-in w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
+            <p className="text-lg font-extrabold">{t('match.rematchOffered')}</p>
+            <p className="mt-1 text-sm text-muted">
+              {rematchOffer.from}
+              {rematchOffer.stake > 0 ? ` · ${rematchOffer.stake} GRAM` : ''}
+            </p>
+            <div className="mt-6 flex gap-2">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => {
+                  getSocket().emit('rematch:respond', { accept: false })
+                  setRematchOffer(null)
+                }}
+              >
+                {t('common.no')}
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  getSocket().emit('rematch:respond', { accept: true })
+                  setRematchOffer(null)
+                }}
+              >
+                {t('common.yes')}
+              </Button>
             </div>
           </div>
         </div>

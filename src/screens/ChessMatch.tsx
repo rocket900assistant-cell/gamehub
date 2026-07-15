@@ -195,6 +195,8 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
   const [result, setResult] = useState<Result | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [dismissed, setDismissed] = useState(false) // closed the result modal to review the board
+  const [rematchWaiting, setRematchWaiting] = useState(false) // I offered a rematch, waiting
+  const [rematchOffer, setRematchOffer] = useState<{ stake: number; from: string } | null>(null) // offered to me
   const [selected, setSelected] = useState<string | null>(null)
   const [reviewIdx, setReviewIdx] = useState<number | null>(null)
   const [showMoves, setShowMoves] = useState(false)
@@ -300,11 +302,23 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
       eloDelta: number
       gram?: number
     }) => setResult(o)
+    const onOffered = (p: { stake: number; from: string }) => setRematchOffer(p)
+    const onDeclined = () => {
+      setRematchWaiting(false)
+      setToast(t('match.rematchDeclined'))
+    }
+    const onWithdrawn = () => setRematchOffer(null)
     s.on('game:state', onState)
     s.on('game:over', onOver)
+    s.on('rematch:offered', onOffered)
+    s.on('rematch:declined', onDeclined)
+    s.on('rematch:withdrawn', onWithdrawn)
     return () => {
       s.off('game:state', onState)
       s.off('game:over', onOver)
+      s.off('rematch:offered', onOffered)
+      s.off('rematch:declined', onDeclined)
+      s.off('rematch:withdrawn', onWithdrawn)
     }
   }, [online])
 
@@ -697,13 +711,58 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
           result={result}
           youWhite={myColor === 'w'}
           rated={!isBot}
+          rematchWaiting={rematchWaiting}
           onClose={() => {
             setShowModal(false)
             setDismissed(true)
           }}
-          onExit={onExit}
-          onRematch={match.mode === 'online' ? onExit : resetGame}
+          onExit={() => {
+            if (rematchWaiting) getSocket().emit('rematch:cancelOffer')
+            onExit()
+          }}
+          onRematch={
+            match.mode === 'online'
+              ? () => {
+                  getSocket().emit('rematch:offer')
+                  setRematchWaiting(true)
+                }
+              : resetGame
+          }
         />
+      )}
+
+      {/* opponent offered ME a rematch → yes/no */}
+      {rematchOffer && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 p-6">
+          <div className="gh-pop-in w-full max-w-xs rounded-[var(--radius-card)] bg-surface p-6 text-center shadow-[var(--shadow-soft)]">
+            <p className="text-lg font-extrabold">{t('match.rematchOffered')}</p>
+            <p className="mt-1 text-sm text-muted">
+              {rematchOffer.from}
+              {rematchOffer.stake > 0 ? ` · ${rematchOffer.stake} GRAM` : ''}
+            </p>
+            <div className="mt-6 flex gap-2">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => {
+                  getSocket().emit('rematch:respond', { accept: false })
+                  setRematchOffer(null)
+                }}
+              >
+                {t('common.no')}
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  getSocket().emit('rematch:respond', { accept: true })
+                  setRematchOffer(null)
+                }}
+              >
+                {t('common.yes')}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* after closing the result to review the board — a chip to bring it back */}
@@ -893,6 +952,7 @@ function GameOver({
   result,
   youWhite,
   rated,
+  rematchWaiting,
   onClose,
   onExit,
   onRematch,
@@ -900,6 +960,7 @@ function GameOver({
   result: Result
   youWhite: boolean
   rated: boolean
+  rematchWaiting?: boolean
   onClose: () => void
   onExit: () => void
   onRematch: () => void
@@ -985,8 +1046,8 @@ function GameOver({
             {t('match.toMenu')}
           </Button>
           {!aborted && (
-            <Button className="flex-1" onClick={onRematch}>
-              <RotateCcw size={16} /> {t('match.rematch')}
+            <Button className="flex-1" onClick={onRematch} disabled={rematchWaiting}>
+              <RotateCcw size={16} /> {rematchWaiting ? t('match.rematchWaiting') : t('match.rematch')}
             </Button>
           )}
         </div>

@@ -2117,6 +2117,70 @@ io.on('connection', (socket) => {
     if (room) cancelRematch(room) // one player bailed → dissolve for everyone
   })
 
+  // ── Rematch offer/accept for chess & nardy (1v1). One player offers, the
+  //    opponent gets a yes/no; on accept a fresh room (same config + stake) deals. ──
+  const finishedRoomOf = (userId) =>
+    [...rooms.values()]
+      .reverse() // newest room first — avoid targeting a stale earlier game
+      .find(
+        (r) => (r.game === 'chess' || r.game === 'nardy') && r.over && r.players.some((p) => p.userId === userId),
+      )
+
+  socket.on('rematch:offer', () => {
+    const userId = socketUser.get(socket.id)
+    const room = finishedRoomOf(userId)
+    if (!room) return
+    const opp = room.players.find((p) => p.userId !== userId)
+    const me = room.players.find((p) => p.userId === userId)
+    if (!opp || !sidOf(opp.userId)) return socket.emit('rematch:declined') // opponent already left
+    room.rematchBy = userId
+    clearTimeout(room.rematchTimer)
+    room.rematchTimer = setTimeout(() => {
+      if (room.rematchBy === userId) {
+        room.rematchBy = null
+        if (sidOf(userId)) io.to(sidOf(userId)).emit('rematch:declined')
+      }
+    }, 30000)
+    io.to(sidOf(opp.userId)).emit('rematch:offered', { stake: room.stake || 0, from: me?.name ?? 'Соперник' })
+  })
+
+  socket.on('rematch:respond', async ({ accept } = {}) => {
+    const userId = socketUser.get(socket.id)
+    const room = [...rooms.values()].find(
+      (r) => r.rematchBy && r.rematchBy !== userId && r.players.some((p) => p.userId === userId),
+    )
+    if (!room) return
+    const offererId = room.rematchBy
+    room.rematchBy = null
+    clearTimeout(room.rematchTimer)
+    if (!accept) {
+      if (sidOf(offererId)) io.to(sidOf(offererId)).emit('rematch:declined')
+      return
+    }
+    const ids = [offererId, userId].filter((uid) => sidOf(uid))
+    if (ids.length < 2) {
+      if (sidOf(offererId)) io.to(sidOf(offererId)).emit('rematch:declined')
+      return
+    }
+    const newId =
+      room.game === 'chess'
+        ? createRoom('chess', room.minutes, { stake: room.stake })
+        : createRoom('nardy', room.minutes, { stake: room.stake })
+    const next = rooms.get(newId)
+    for (const uid of ids) addPlayer(next, uid)
+    await startRoom(next) // escrows stakes (double-spend-safe) + emits match:found to both
+  })
+
+  socket.on('rematch:cancelOffer', () => {
+    const userId = socketUser.get(socket.id)
+    const room = [...rooms.values()].find((r) => r.rematchBy === userId)
+    if (!room) return
+    room.rematchBy = null
+    clearTimeout(room.rematchTimer)
+    const opp = room.players.find((p) => p.userId !== userId)
+    if (opp && sidOf(opp.userId)) io.to(sidOf(opp.userId)).emit('rematch:withdrawn')
+  })
+
   socket.on('chat', ({ roomId, text }) => {
     const room = rooms.get(roomId)
     if (!room || !text) return
@@ -2291,6 +2355,14 @@ io.on('connection', (socket) => {
     // If they were in an open rematch window, dissolve it for the table.
     const rmRoom = [...rooms.values()].find((r) => r.rematchOpen && r.rematchHumans?.includes(userId))
     if (rmRoom) cancelRematch(rmRoom)
+    // If they had a pending chess/nardy rematch offer out, retract it.
+    const offRoom = [...rooms.values()].find((r) => r.rematchBy === userId)
+    if (offRoom) {
+      offRoom.rematchBy = null
+      clearTimeout(offRoom.rematchTimer)
+      const opp = offRoom.players.find((p) => p.userId !== userId)
+      if (opp && sidOf(opp.userId)) io.to(sidOf(opp.userId)).emit('rematch:withdrawn')
+    }
     // Presence: go offline + tell my friends (only if THIS socket was the live one).
     const tgId = userTg.get(userId)
     if (tgId && tgSocket.get(tgId) === socket.id) {

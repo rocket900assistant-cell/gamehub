@@ -484,6 +484,7 @@ export default function App() {
           }
         >
           <ChessMatch
+            key={match.mode === 'online' ? match.roomId : 'offline'}
             user={user}
             match={match}
             myName={myName}
@@ -502,6 +503,7 @@ export default function App() {
       {nardyOnline && (
         <main className="flex flex-1 flex-col overflow-y-auto px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-6">
           <NardyMatch
+            key={nardyOnline.roomId}
             user={user}
             config={null}
             online={nardyOnline}
