@@ -8,6 +8,7 @@ import { verifyInitData } from './telegram.js'
 import { createNardy, roll as nardyRoll, move as nardyMove, destOf as nardyDest, other as nardyOther } from './nardy.js'
 import * as durak from './durak.js'
 import * as durakN from './durakN.js'
+import { levelForElo, botChessMove, fakeChessOpponent } from './chessBot.js'
 
 const PORT = process.env.PORT || 3001
 
@@ -23,6 +24,70 @@ const userTg = new Map() // composite userId -> verified telegram id (for DB)
 const tgSocket = new Map() // telegram id -> socketId (presence: online friends)
 const tgInfo = new Map() // telegram id -> { name, username, photoUrl, elos } (last seen)
 const queues = new Map() // "game:minutes" -> [userId]
+const botFallbackTimers = new Map() // userId -> timer: seed a chess bot if no human matches
+const BOT_FALLBACK_MS = 20000 // wait this long for a real opponent before a fill-in bot
+function clearBotFallback(userId) {
+  const tm = botFallbackTimers.get(userId)
+  if (tm) {
+    clearTimeout(tm)
+    botFallbackTimers.delete(userId)
+  }
+}
+
+/** If it's the fill-in bot's turn in a chess room, play its move after a human-like pause. */
+function scheduleChessBot(room) {
+  if (!room || room.over || room.game !== 'chess') return
+  const bot = room.players.find((p) => p.isBot)
+  if (!bot || room.chess.turn() !== bot.color) return
+  clearTimeout(room.botTimer)
+  const delay = 900 + Math.floor(Math.random() * 2600) // ~1–3.5s "thinking"
+  room.botTimer = setTimeout(() => {
+    if (room.over || room.chess.turn() !== bot.color) return
+    const mv = botChessMove(room.chess.fen(), bot.botLevel)
+    if (!mv) return
+    try {
+      if (!room.chess.move({ from: mv.from, to: mv.to, promotion: 'q' })) return
+    } catch {
+      return
+    }
+    emitToRoom(room, 'game:state', {
+      fen: room.chess.fen(),
+      turn: room.chess.turn(),
+      clocks: room.clocks,
+      lastMove: { from: mv.from, to: mv.to },
+    })
+    if (room.chess.isGameOver()) {
+      if (room.chess.isCheckmate()) endGame(room, room.chess.turn() === 'w' ? 'b' : 'w', 'mate')
+      else endGame(room, null, 'draw')
+    }
+  }, delay)
+}
+
+/** No human found in time → start a FREE chess game vs a disguised fill-in bot. */
+function seedChessBot(userId, minutes) {
+  botFallbackTimers.delete(userId)
+  const key = qkey('chess', minutes)
+  const q = queues.get(key) ?? []
+  if (!q.includes(userId)) return // already matched or cancelled
+  queues.set(key, q.filter((id) => id !== userId))
+  if (!sidOf(userId)) return // player disconnected while waiting
+  const room = rooms.get(createRoom('chess', minutes, {}))
+  addPlayer(room, userId) // human = players[0]
+  const humanElo = room.players[0]?.elo ?? 1200
+  const op = fakeChessOpponent(humanElo)
+  room.players.push({
+    userId: `bot:${room.id}`,
+    tgId: null,
+    name: op.name,
+    elo: op.elo,
+    vip: false,
+    photoUrl: null,
+    color: 'b', // second seat; startRoom may still flip who is white
+    isBot: true,
+    botLevel: levelForElo(humanElo),
+  })
+  startRoom(room) // deals + emits match:found (bot has no socket → only the human is notified)
+}
 const nQueues = new Map() // durakn config key -> { ids: [], timer } (fills with bots on timeout)
 const DURAKN_FILL_MS = 6000 // wait this long for humans, then fill remaining seats with bots
 const rooms = new Map() // roomId -> room
@@ -1079,6 +1144,7 @@ async function startRoom(room) {
     }
   }
   room.timer = setInterval(() => tick(room), 250)
+  scheduleChessBot(room) // fill-in bot opens if it drew White (no-op otherwise)
 }
 
 function tick(room) {
@@ -1487,6 +1553,7 @@ io.on('connection', (socket) => {
     if (q.length > 0) {
       const oppId = q.shift()
       queues.set(key, q)
+      clearBotFallback(oppId) // a real human showed up → cancel the pending fill-in bot
       const room = rooms.get(createRoom(game, minutes, { transfer, stake: st }))
       addPlayer(room, oppId)
       addPlayer(room, userId)
@@ -1495,11 +1562,17 @@ io.on('connection', (socket) => {
       q.push(userId)
       queues.set(key, q)
       socket.emit('queue:waiting')
+      // FREE chess only: if no human joins within 20s, seed a disguised fill-in bot.
+      if (game === 'chess' && st === 0) {
+        clearBotFallback(userId)
+        botFallbackTimers.set(userId, setTimeout(() => seedChessBot(userId, minutes), BOT_FALLBACK_MS))
+      }
     }
   })
 
   socket.on('cancelQuick', () => {
     const userId = socketUser.get(socket.id)
+    clearBotFallback(userId)
     for (const [k, q] of queues) queues.set(k, q.filter((id) => id !== userId))
     leaveNQueues(userId)
   })
@@ -1791,6 +1864,8 @@ io.on('connection', (socket) => {
       if (room.chess.isCheckmate())
         endGame(room, room.chess.turn() === 'w' ? 'b' : 'w', 'mate')
       else endGame(room, null, 'draw')
+    } else {
+      scheduleChessBot(room) // if the opponent is the fill-in bot, let it reply
     }
   })
 
@@ -2066,6 +2141,7 @@ io.on('connection', (socket) => {
     const userId = socketUser.get(socket.id)
     socketUser.delete(socket.id)
     lobbyWatchers.delete(socket.id)
+    clearBotFallback(userId)
     for (const [k, q] of queues) queues.set(k, q.filter((id) => id !== userId))
     leaveNQueues(userId)
     leaveLobby(userId) // drop out of any open lobby (started games use the abandon timer)

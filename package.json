@@ -17,6 +17,7 @@
     "@ton/ton": "^16.3.0",
     "@types/qrcode": "^1.5.6",
     "chess.js": "^1.4.0",
+    "js-chess-engine": "^2.4.6",
     "lucide-react": "^1.23.0",
     "pg": "^8.22.0",
     "qrcode": "^1.5.4",
