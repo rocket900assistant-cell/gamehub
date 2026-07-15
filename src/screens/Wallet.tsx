@@ -363,13 +363,22 @@ export function Wallet({ balance, address, owner, onOpenAdmin, onBack }: WalletP
             <label className="text-[11px] font-semibold uppercase tracking-wide text-muted">
               {t('wallet.wdAmount')} · {t('wallet.available')} {balance} GRAM
             </label>
-            <input
-              value={wdAmount}
-              onChange={(e) => setWdAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-              inputMode="decimal"
-              placeholder="0"
-              className="mt-1 h-12 w-full rounded-[var(--radius-input)] border border-line bg-bg px-3 text-lg font-bold outline-none"
-            />
+            <div className="mt-1 flex gap-2">
+              <input
+                value={wdAmount}
+                // accept a comma too: the RU decimal keyboard types ',' not '.'
+                onChange={(e) => setWdAmount(e.target.value.replace(',', '.').replace(/[^0-9.]/g, ''))}
+                inputMode="decimal"
+                placeholder="0"
+                className="h-12 flex-1 rounded-[var(--radius-input)] border border-line bg-bg px-3 text-lg font-bold outline-none"
+              />
+              <button
+                onClick={() => setWdAmount(String(round2(balance)))}
+                className="h-12 shrink-0 rounded-[var(--radius-input)] border border-line bg-surface px-4 text-sm font-bold text-gold-dark active:scale-95"
+              >
+                Всё
+              </button>
+            </div>
             <label className="mt-3 block text-[11px] font-semibold uppercase tracking-wide text-muted">
               {t('wallet.wdAddress')}
             </label>

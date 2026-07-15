@@ -243,7 +243,7 @@ export function DurakSetup({ onBack, onCreate, onQuickMatch, onInvite, onLobby }
               value={stakeText}
               inputMode="decimal"
               onChange={(e) =>
-                setStakeText(e.target.value.replace(/[^\d.]/g, ''))
+                setStakeText(e.target.value.replace(',', '.').replace(/[^\d.]/g, ''))
               }
               onBlur={() => setNum(num)}
               className="w-full bg-transparent text-center text-lg font-extrabold outline-none"
