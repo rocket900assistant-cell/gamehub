@@ -35,12 +35,10 @@ const BOT_NAMES = [
 
 const randInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1))
 
-// Illustrated avatar styles (the kind of pictures real users pick). Random per
-// game for variety; served by DiceBear. If it ever fails to load the client
-// falls back to initials, so it's a safe dependency.
-const AVATAR_STYLES = ['avataaars', 'personas', 'micah', 'adventurer', 'open-peeps']
-const avatarUrl = (seed) =>
-  `https://api.dicebear.com/7.x/${AVATAR_STYLES[randInt(0, AVATAR_STYLES.length - 1)]}/svg?seed=${encodeURIComponent(seed)}`
+// Real portrait photos bundled with the app (public/assets/bots/1..N.jpg), served
+// from the frontend origin. Random per game. If one fails to load the client
+// falls back to initials, so it's safe.
+const BOT_PHOTO_COUNT = 39
 
 /** A disguised opponent identity near the player's Elo (looks like a real user). */
 export function fakeChessOpponent(playerElo) {
@@ -49,7 +47,7 @@ export function fakeChessOpponent(playerElo) {
   return {
     name,
     elo: Math.max(700, Math.min(2600, base + randInt(-70, 70))),
-    photoUrl: avatarUrl(`${name}${randInt(1, 99999)}`),
+    photoUrl: `/assets/bots/${randInt(1, BOT_PHOTO_COUNT)}.jpg`,
     vip: false,
   }
 }
