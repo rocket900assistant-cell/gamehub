@@ -806,7 +806,7 @@ async function processWithdrawals() {
       // 'sending' for MANUAL review (never auto-retried → no double-send)
       if (!(await setWithdrawalStatus(w.id, 'approved', 'sending'))) continue
       try {
-        await sendTon(address, payout, 'GameHub')
+        await sendTon(address, payout, 'GameHub - Online')
         await setWithdrawalStatus(w.id, 'sending', 'sent')
         const sid = tgSocket.get(w.tgId)
         if (sid) {
