@@ -89,7 +89,7 @@ function seedChessBot(userId, minutes) {
   startRoom(room) // deals + emits match:found (bot has no socket → only the human is notified)
 }
 const nQueues = new Map() // durakn config key -> { ids: [], timer } (fills with bots on timeout)
-const DURAKN_FILL_MS = 6000 // wait this long for humans, then fill remaining seats with bots
+const DURAKN_FILL_MS = 20000 // wait this long for humans, then fill remaining seats with (disguised) bots
 const rooms = new Map() // roomId -> room
 const abandonTimers = new Map() // "userId:roomId" -> timeout (reconnect grace)
 const RECONNECT_GRACE_MS = 120000 // 2 min to reconnect before a started game abandons you
@@ -739,8 +739,12 @@ const seatOf = (room, userId) => room.seatUser.indexOf(userId)
 
 /** Names/vip/bot per seat, for the client to render opponents. */
 function durakNSeatInfo(room) {
-  return room.seatUser.map((uid) => {
-    if (!uid) return { name: 'Бот', vip: false, bot: true, photoUrl: null, offline: false }
+  return room.seatUser.map((uid, seat) => {
+    if (!uid) {
+      // fill-in bot, disguised as an ordinary player (stable identity per seat)
+      const b = room.botSeats?.[seat]
+      return { name: b?.name ?? 'Игрок', vip: false, bot: false, photoUrl: b?.photoUrl ?? null, offline: false }
+    }
     const u = users.get(uid)
     return {
       name: u?.name ?? 'Игрок',
@@ -1077,6 +1081,12 @@ async function startRoom(room) {
     room.startedAt = Date.now()
     // seat i = the i-th human that joined; remaining seats are bots (null)
     room.seatUser = Array.from({ length: room.durakN.n }, (_, i) => room.players[i]?.userId ?? null)
+    // give each bot seat a stable disguised identity (name + avatar), near a human's Elo
+    const refElo = room.players[0]?.elo ?? 1200
+    room.botSeats = {}
+    for (let seat = 0; seat < room.durakN.n; seat++) {
+      if (!room.seatUser[seat]) room.botSeats[seat] = fakeChessOpponent(refElo)
+    }
     room.deadline = Date.now() + room.moveMs
     const info = durakNSeatInfo(room)
     for (let seat = 0; seat < room.durakN.n; seat++) {
