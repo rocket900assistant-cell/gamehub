@@ -163,6 +163,32 @@ export async function listPendingWithdrawals(limit = 50) {
   }
 }
 
+/** Processed withdrawals (not pending) for the owner's history — newest first. */
+export async function listWithdrawalHistory(limit = 40) {
+  if (!pool) return []
+  try {
+    const { rows } = await pool.query(
+      `SELECT g.id, g.tg_id, (-g.amount) AS amount, g.status, g.meta, g.created_at, u.name, u.username
+       FROM gram_ledger g LEFT JOIN users u ON u.tg_id = g.tg_id
+       WHERE g.kind = 'withdraw' AND g.status <> 'pending' ORDER BY g.id DESC LIMIT $1`,
+      [limit],
+    )
+    return rows.map((r) => ({
+      id: Number(r.id),
+      name: r.name,
+      username: r.username,
+      amount: Number(r.amount),
+      status: r.status,
+      address: r.meta?.address ?? null,
+      payout: r.meta?.payout ?? 0,
+      at: r.created_at,
+    }))
+  } catch (e) {
+    console.error('[db] listWithdrawalHistory failed:', e.message)
+    return []
+  }
+}
+
 /** Approved withdrawals awaiting on-chain send (oldest first). */
 export async function listApprovedWithdrawals(limit = 20) {
   if (!pool) return []

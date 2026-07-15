@@ -16,12 +16,35 @@ interface WdReq {
   at: string
 }
 
+interface WdHist {
+  id: number
+  name?: string
+  username?: string
+  amount: number
+  status: string
+  address?: string | null
+  payout: number
+  at: string
+}
+
+const STATUS: Record<string, { label: string; cls: string }> = {
+  sent: { label: 'Отправлено', cls: 'text-success' },
+  approved: { label: 'В отправке', cls: 'text-gold-dark' },
+  sending: { label: 'В отправке', cls: 'text-gold-dark' },
+  rejected: { label: 'Отклонено', cls: 'text-danger' },
+}
+const shortAddr = (a?: string | null) => (a && a.length > 12 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a || '')
+const histDate = (iso: string) =>
+  new Date(iso).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+
 export function WithdrawAdmin({ onBack }: { onBack: () => void }) {
   const [items, setItems] = useState<WdReq[] | null>(null)
+  const [history, setHistory] = useState<WdHist[]>([])
   const [busy, setBusy] = useState<number | null>(null)
 
   const refresh = () => {
     getSocket().emit('gram:withdrawals', {}, (r: { items?: WdReq[] }) => setItems(r?.items ?? []))
+    getSocket().emit('gram:withdrawals:history', {}, (r: { items?: WdHist[] }) => setHistory(r?.items ?? []))
   }
   useEffect(() => {
     const s = getSocket()
@@ -99,6 +122,38 @@ export function WithdrawAdmin({ onBack }: { onBack: () => void }) {
       )}
 
       <p className="text-center text-xs text-muted">{t('admin.note')}</p>
+
+      {/* history of processed requests */}
+      {history.length > 0 && (
+        <div className="space-y-2">
+          <p className="px-1 text-xs font-bold uppercase tracking-wide text-muted">История заявок</p>
+          <div className="divide-y divide-line/70 overflow-hidden rounded-[var(--radius-card)] bg-surface shadow-[var(--shadow-soft)]">
+            {history.map((w) => {
+              const st = STATUS[w.status] ?? { label: w.status, cls: 'text-muted' }
+              return (
+                <div key={w.id} className="flex items-center gap-3 p-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold leading-tight">
+                      {w.name ?? (w.username ? `@${w.username}` : `id ${w.id}`)}
+                    </p>
+                    <p className="text-[11px] text-muted">
+                      {histDate(w.at)}
+                      {w.address ? ` · → ${shortAddr(w.address)}` : ''}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="flex items-center justify-end gap-1 font-extrabold tabular-nums">
+                      {w.amount}
+                      <Gem size={11} className="text-gold" />
+                    </p>
+                    <p className={`text-[11px] font-bold ${st.cls}`}>{st.label}</p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
