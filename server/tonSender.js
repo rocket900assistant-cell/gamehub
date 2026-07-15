@@ -73,7 +73,16 @@ export async function hotBalance() {
 export async function sendTon(toAddress, amountGram, comment = '') {
   if (!sender) throw new Error('sender not ready')
   const contract = sender.client.open(sender.wallet)
-  const seqno = await contract.getSeqno()
+  // A hot wallet that has only ever RECEIVED TON isn't deployed yet, so its
+  // seqno get-method throws. Treat that as seqno 0 — the first transfer deploys
+  // it. (A wrong-low seqno on an already-deployed wallet is simply rejected by
+  // the contract, so this can't cause a double-send.)
+  let seqno = 0
+  try {
+    seqno = await contract.getSeqno()
+  } catch {
+    seqno = 0
+  }
   await contract.sendTransfer({
     seqno,
     secretKey: sender.key.secretKey,
