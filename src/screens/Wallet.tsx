@@ -10,8 +10,12 @@ interface GramTx {
   amount: number
   status: string
   ref?: string | null
+  address?: string | null // withdraw destination / deposit source
   at: string
 }
+
+/** Shorten a TON address for display: UQAB…wXyz */
+const shortAddr = (a?: string | null) => (a && a.length > 12 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a || '')
 
 const KIND_LABEL: Record<string, string> = {
   deposit: 'Пополнение',
@@ -150,7 +154,7 @@ export function Wallet({ balance, address, owner, onOpenAdmin, onBack }: WalletP
         setWdBusy(false)
         if (res?.ok) {
           setWd(false)
-          setNotice(`${t('wallet.wdRequested')} · ${res.payout} GRAM`)
+          setNotice(t('wallet.wdRequested'))
           getSocket().emit('gram:history')
         } else {
           setWdErr(res?.error === 'balance' ? t('wallet.insufficient') : res?.error === 'address' ? t('wallet.wdBadAddr') : t('wallet.wdMin'))
@@ -294,6 +298,12 @@ export function Wallet({ balance, address, owner, onOpenAdmin, onBack }: WalletP
                       {fmtDate(tx.at)}
                       {tx.status === 'pending' && ` · ${t('wallet.pending')}`}
                     </p>
+                    {tx.address && (
+                      <p className="mt-0.5 truncate font-mono text-[11px] text-muted">
+                        {tx.kind === 'withdraw' ? '→ ' : '← '}
+                        {shortAddr(tx.address)}
+                      </p>
+                    )}
                   </div>
                   <span className={`shrink-0 font-extrabold tabular-nums ${positive ? 'text-success' : 'text-danger'}`}>
                     {positive ? '+' : '−'}{fmt(Math.abs(tx.amount))}
@@ -400,7 +410,7 @@ export function Wallet({ balance, address, owner, onOpenAdmin, onBack }: WalletP
 
       {notice && (
         <div
-          className="fixed inset-x-0 bottom-24 z-50 mx-auto w-fit max-w-[90%] rounded-full bg-ink px-4 py-2 text-sm font-semibold text-bg shadow-lg"
+          className="fixed inset-x-0 bottom-24 z-50 mx-auto w-fit max-w-[94%] whitespace-nowrap rounded-full bg-success px-4 py-2.5 text-center text-xs font-bold text-white shadow-lg"
           onClick={() => setNotice('')}
         >
           {notice}

@@ -344,7 +344,7 @@ export async function getGramHistory(tgId, limit = 30) {
   if (!pool || !tgId) return []
   try {
     const { rows } = await pool.query(
-      'SELECT kind, amount, status, ref, created_at FROM gram_ledger WHERE tg_id = $1 ORDER BY id DESC LIMIT $2',
+      'SELECT kind, amount, status, ref, meta, created_at FROM gram_ledger WHERE tg_id = $1 ORDER BY id DESC LIMIT $2',
       [tgId, limit],
     )
     return rows.map((r) => ({
@@ -352,6 +352,8 @@ export async function getGramHistory(tgId, limit = 30) {
       amount: Number(r.amount),
       status: r.status,
       ref: r.ref,
+      // where the money went (withdraw) / came from (deposit) — for the history UI
+      address: r.meta?.address ?? r.meta?.from ?? null,
       at: r.created_at,
     }))
   } catch (e) {
