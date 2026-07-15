@@ -373,7 +373,7 @@ async function pushRequests(tgId) {
 // ── Telegram Stars payments ──
 const BOT_TOKEN = process.env.BOT_TOKEN
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'gh_' + (BOT_TOKEN ? BOT_TOKEN.slice(-10).replace(/\W/g, '') : 'dev')
-const MINIAPP_URL = process.env.MINIAPP_URL || 'https://gamehub-mahr.pages.dev'
+const MINIAPP_URL = process.env.MINIAPP_URL || 'https://gamehub-teleplay.online'
 const PLATFORM_TON_ADDRESS = process.env.PLATFORM_TON_ADDRESS || null // where GRAM deposits land
 const FEE_TON_ADDRESS = process.env.FEE_TON_ADDRESS || null // owner's wallet for withdrawing accrued fees
 const STAKE_FEE_RATE = Number(process.env.STAKE_FEE_RATE ?? 0.1) // owner fee = 10% of the loser's stake
