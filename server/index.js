@@ -81,7 +81,7 @@ function seedChessBot(userId, minutes) {
     name: op.name,
     elo: op.elo,
     vip: false,
-    photoUrl: null,
+    photoUrl: op.photoUrl, // disguised avatar (falls back to initials if it fails to load)
     color: 'b', // second seat; startRoom may still flip who is white
     isBot: true,
     botLevel: levelForElo(humanElo),

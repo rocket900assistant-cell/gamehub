@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { cn } from '../../lib/cn'
 
 interface AvatarProps {
@@ -10,6 +11,7 @@ interface AvatarProps {
 }
 
 export function Avatar({ name, src, size = 44, vip, className }: AvatarProps) {
+  const [failed, setFailed] = useState(false)
   const initials = name
     .split(' ')
     .map((p) => p[0])
@@ -27,8 +29,13 @@ export function Avatar({ name, src, size = 44, vip, className }: AvatarProps) {
       style={{ width: size, height: size }}
     >
       <div className="h-full w-full overflow-hidden rounded-full bg-gold-light/40 flex items-center justify-center">
-        {src ? (
-          <img src={src} alt={name} className="h-full w-full object-cover" />
+        {src && !failed ? (
+          <img
+            src={src}
+            alt={name}
+            onError={() => setFailed(true)}
+            className="h-full w-full object-cover"
+          />
         ) : (
           <span
             className="font-bold text-ink/70"
