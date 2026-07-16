@@ -190,16 +190,16 @@
           <div class="puser">${p.username ? '@' + esc(p.username) : 'id ' + p.id} · ${fmt(p.games)} партий</div>
         </div>
         <div class="pbal">${fmt(p.balance)} <span>GRAM</span></div>
-        ${p.balance > 0 ? `<button class="zbtn" data-user="${esc(p.username || '')}" data-id="${p.id}">Обнулить</button>` : ''}
+        <button class="zbtn" data-user="${esc(p.username || '')}" data-id="${p.id}">Сбросить</button>
       </div>`).join('')
     document.getElementById('players').innerHTML =
       `<h2>👤 Игроки (${list.length})</h2><div class="plist">${rows}</div>` +
-      `<button id="zeroall" class="zall">Обнулить баланс всем</button>`
+      `<button id="zeroall" class="zall">Сбросить баланс и историю всем</button>`
     document.querySelectorAll('.zbtn').forEach((b) =>
       b.addEventListener('click', () => zeroBalance({ username: b.dataset.user, id: b.dataset.id }, b)),
     )
     document.getElementById('zeroall').addEventListener('click', () => {
-      if (confirm('Обнулить баланс у ВСЕХ игроков? Действие необратимо.')) zeroBalance({ all: true })
+      if (confirm('Обнулить баланс И историю у ВСЕХ игроков? Действие необратимо.')) zeroBalance({ all: true })
     })
   }
 

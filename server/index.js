@@ -605,17 +605,23 @@ const httpServer = createServer((req, res) => {
         await raiseDepositFloor() // deleted deposit refs must not re-credit
         return { ok: true, cleared }
       }
-      const row = await userByUsername(body?.username)
+      // target by username, or fall back to tg_id (for accounts with no @username)
+      const row = body?.username
+        ? await userByUsername(body.username)
+        : body?.id != null
+          ? await getUser(Number(body.id))
+          : null
       if (!row) return { error: 'not-found' }
-      await zeroUserBalance(Number(row.tg_id))
+      const tgId = Number(row.tg_id)
+      await zeroUserBalance(tgId)
       await raiseDepositFloor() // deleted deposit refs must not re-credit
       // push a fresh profile so the player's app updates immediately if they're online
-      const sid = tgSocket.get(Number(row.tg_id))
+      const sid = tgSocket.get(tgId)
       if (sid) {
         try {
-          const fresh = await getUser(row.tg_id)
+          const fresh = await getUser(tgId)
           if (fresh) io.to(sid).emit('profile', dbProfile(fresh))
-          io.to(sid).emit('gram:history', { items: await getGramHistory(row.tg_id) }) // now empty
+          io.to(sid).emit('gram:history', { items: await getGramHistory(tgId) }) // now empty
         } catch {
           /* ignore */
         }
