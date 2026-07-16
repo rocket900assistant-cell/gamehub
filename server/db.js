@@ -502,9 +502,16 @@ export async function zeroUserBalance(tgId) {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    await client.query('UPDATE users SET balance_gram = 0 WHERE tg_id = $1', [tgId])
+    // balance + career stats (games/wins/losses + Elo back to the 1200 default)
+    await client.query(
+      `UPDATE users SET balance_gram = 0, games = 0, wins = 0, losses = 0,
+              elo_chess = 1200, elo_durak = 1200, elo_nardy = 1200
+       WHERE tg_id = $1`,
+      [tgId],
+    )
     await client.query('DELETE FROM gram_ledger WHERE tg_id = $1', [tgId])
     await client.query('DELETE FROM game_history WHERE p1 = $1 OR p2 = $1', [tgId]) // clears their stake volume
+    await client.query('DELETE FROM elo_history WHERE tg_id = $1', [tgId])
     await client.query('COMMIT')
     return 0
   } catch (e) {
@@ -523,9 +530,15 @@ export async function zeroAllBalances() {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    const { rowCount } = await client.query('UPDATE users SET balance_gram = 0 WHERE balance_gram <> 0')
+    // balance + career stats (games/wins/losses + Elo back to the 1200 default) for everyone
+    const { rowCount } = await client.query(
+      `UPDATE users SET balance_gram = 0, games = 0, wins = 0, losses = 0,
+              elo_chess = 1200, elo_durak = 1200, elo_nardy = 1200
+       WHERE tg_id <> 0`,
+    )
     await client.query('DELETE FROM gram_ledger')
     await client.query('DELETE FROM game_history') // clears the stake-volume + games stats
+    await client.query('DELETE FROM elo_history')
     await client.query('COMMIT')
     return rowCount
   } catch (e) {
@@ -535,6 +548,17 @@ export async function zeroAllBalances() {
   } finally {
     client.release()
   }
+}
+
+/** One-time FULL reset for everyone (balance + games/wins/losses + Elo + all history).
+ *  Idempotent via an app_flags marker — runs at most once. Reuses zeroAllBalances. */
+export async function fullResetAllOnce(flag) {
+  if (!pool) return false
+  const done = await pool.query('SELECT 1 FROM app_flags WHERE key = $1', [flag])
+  if (done.rowCount > 0) return false
+  await zeroAllBalances()
+  await pool.query('INSERT INTO app_flags (key) VALUES ($1) ON CONFLICT DO NOTHING', [flag])
+  return true
 }
 
 /** One-time wipe of game_history (leftover test games) so the dashboard's stake-volume
