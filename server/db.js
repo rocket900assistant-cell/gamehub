@@ -493,6 +493,30 @@ export async function resetAllBalancesOnce(flag) {
   }
 }
 
+/** Zero one user's balance (by tg_id), logging a ledger adjustment for audit.
+ *  Returns the new balance (0), or null if the user/DB is missing. */
+export async function zeroUserBalance(tgId) {
+  if (!pool || tgId == null) return null
+  const bal = await getBalance(tgId)
+  if (bal !== 0) {
+    await adjustGram({
+      tgId,
+      delta: -bal,
+      kind: 'adjust',
+      ref: `zero:${tgId}:${Date.now()}`,
+      meta: { reason: 'admin zero balance' },
+    })
+  }
+  return 0
+}
+
+/** Zero EVERY user's balance (including house). Bulk test-reset — returns rows changed. */
+export async function zeroAllBalances() {
+  if (!pool) return 0
+  const { rowCount } = await pool.query('UPDATE users SET balance_gram = 0 WHERE balance_gram <> 0')
+  return rowCount
+}
+
 /** Read a value from the app_flags key/value store (null if unset). */
 export async function getFlag(key) {
   if (!pool) return null

@@ -79,6 +79,20 @@
   .puser { font-size: 12px; color: var(--muted-t); }
   .pbal { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .pbal span { font-size: 11px; color: var(--muted-t); font-weight: 600; }
+  .zbtn {
+    appearance: none; border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--line));
+    background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger);
+    border-radius: 10px; height: 32px; padding: 0 12px; font-size: 12px; font-weight: 700;
+    cursor: pointer; flex-shrink: 0;
+  }
+  .zbtn:active { opacity: .7; }
+  .zbtn:disabled { opacity: .5; }
+  .zall {
+    width: 100%; margin-top: 12px; appearance: none; border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--line));
+    background: transparent; color: var(--danger); border-radius: 14px; height: 44px;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  .zall:active { background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
   .msg {
     margin-top: 60px; text-align: center; color: var(--muted-t);
   }
@@ -176,8 +190,38 @@
           <div class="puser">${p.username ? '@' + esc(p.username) : 'id ' + p.id} · ${fmt(p.games)} партий</div>
         </div>
         <div class="pbal">${fmt(p.balance)} <span>GRAM</span></div>
+        ${p.balance > 0 ? `<button class="zbtn" data-user="${esc(p.username || '')}" data-id="${p.id}">Обнулить</button>` : ''}
       </div>`).join('')
-    document.getElementById('players').innerHTML = `<h2>👤 Игроки (${list.length})</h2><div class="plist">${rows}</div>`
+    document.getElementById('players').innerHTML =
+      `<h2>👤 Игроки (${list.length})</h2><div class="plist">${rows}</div>` +
+      `<button id="zeroall" class="zall">Обнулить баланс всем</button>`
+    document.querySelectorAll('.zbtn').forEach((b) =>
+      b.addEventListener('click', () => zeroBalance({ username: b.dataset.user, id: b.dataset.id }, b)),
+    )
+    document.getElementById('zeroall').addEventListener('click', () => {
+      if (confirm('Обнулить баланс у ВСЕХ игроков? Действие необратимо.')) zeroBalance({ all: true })
+    })
+  }
+
+  async function zeroBalance(target, btn) {
+    const initData = tg && tg.initData
+    if (!initData) return
+    if (btn) { btn.disabled = true; btn.textContent = '…' }
+    try {
+      const r = await fetch(SERVER + '/admin/zero-balance', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ initData, ...target }),
+      })
+      const res = await r.json().catch(() => ({}))
+      if (!r.ok || res.error) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Ошибка'; }
+        return
+      }
+      loadPlayers() // refresh the list from the DB
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Сеть?'; }
+    }
   }
 
   async function loadPlayers() {

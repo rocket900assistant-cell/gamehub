@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, userByUsername, createFriendRequest, listIncomingRequests, acceptFriendRequest, declineFriendRequest, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, debitIfAffordable, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, listWithdrawalHistory, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes, getAdminStats, listUsers, resetAllBalancesOnce, getFlag, setFlag } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, userByUsername, createFriendRequest, listIncomingRequests, acceptFriendRequest, declineFriendRequest, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, debitIfAffordable, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, listWithdrawalHistory, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes, getAdminStats, listUsers, resetAllBalancesOnce, getFlag, setFlag, zeroUserBalance, zeroAllBalances } from './db.js'
 import { settleStakes } from './gramStakes.js'
 import { initSender, senderReady, hotBalance, sendTon } from './tonSender.js'
 import { verifyInitData } from './telegram.js'
@@ -535,14 +535,14 @@ function adminRoute(req, res, produce) {
   })
   req.on('end', async () => {
     try {
-      const { initData } = JSON.parse(body || '{}')
-      const user = verifyInitData(initData, ADMIN_BOT_TOKEN)
+      const payload = JSON.parse(body || '{}')
+      const user = verifyInitData(payload.initData, ADMIN_BOT_TOKEN)
       if (!user || !isOwner(user.id)) {
         res.writeHead(403, { ...CORS, 'content-type': 'application/json' })
         res.end(JSON.stringify({ error: 'forbidden' }))
         return
       }
-      const data = await produce()
+      const data = await produce(payload)
       res.writeHead(200, { ...CORS, 'content-type': 'application/json' })
       res.end(JSON.stringify(data))
     } catch (e) {
@@ -610,6 +610,24 @@ const httpServer = createServer((req, res) => {
   // Admin dashboard — owner-only, verified via the ADMIN bot's initData.
   if (req.url === '/admin/stats') return adminRoute(req, res, adminStats)
   if (req.url === '/admin/players') return adminRoute(req, res, adminPlayers)
+  if (req.url === '/admin/zero-balance')
+    return adminRoute(req, res, async (body) => {
+      if (body?.all) return { ok: true, cleared: await zeroAllBalances() }
+      const row = await userByUsername(body?.username)
+      if (!row) return { error: 'not-found' }
+      await zeroUserBalance(Number(row.tg_id))
+      // push a fresh profile so the player's app updates immediately if they're online
+      const sid = tgSocket.get(Number(row.tg_id))
+      if (sid) {
+        try {
+          const fresh = await getUser(row.tg_id)
+          if (fresh) io.to(sid).emit('profile', dbProfile(fresh))
+        } catch {
+          /* ignore */
+        }
+      }
+      return { ok: true, username: row.username, balance: 0 }
+    })
   if (req.method === 'GET' && req.url === '/status') {
     // Non-sensitive readiness probe: exposes ONLY whether the payout sender
     // initialised (true iff the seed matched HOT_TON_ADDRESS). No address, no
