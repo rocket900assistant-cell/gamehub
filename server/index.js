@@ -194,6 +194,20 @@ const RECONNECT_GRACE_MS = 120000 // 2 min to reconnect before a started game ab
 // persistent DB (Neon Postgres) — optional; no-ops if DATABASE_URL is unset
 initDb()
   .then(() => refundOrphanedStakes()) // return any stakes stuck by a prior restart
+  .then(async () => {
+    // One-time correction: a 5.05-GRAM deposit was credited twice (TonAPI showed the
+    // transfer as an in_progress trace and again once finalized, each under a different
+    // ref). Idempotent via the fixed ref — applies exactly once across any restarts.
+    if (!dbEnabled || OWNER_TG_ID == null) return
+    const bal = await adjustGram({
+      tgId: OWNER_TG_ID,
+      delta: -5.05,
+      kind: 'adjust',
+      ref: 'fix:dup-deposit-20260715',
+      meta: { reason: 'double-credited deposit' },
+    })
+    if (bal != null) console.log('[gram] applied -5.05 dup-deposit correction → balance', bal)
+  })
   .catch((e) => console.error('[db] init failed:', e.message))
 
 /** Shape a users row for the client. */
