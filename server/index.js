@@ -201,19 +201,7 @@ initDb()
     // marker, so it runs exactly once and never wipes real balances on later restarts.
     const did = await resetAllBalancesOnce('reset-balances-20260716')
     if (did) {
-      // The wiped ledger no longer has the dedup refs for pre-reset on-chain deposits,
-      // so raise the deposit floor to the latest event lt: the watcher then ignores every
-      // transfer up to now and only credits deposits made AFTER the reset.
-      if (PLATFORM_TON_ADDRESS) {
-        try {
-          const ev = await tonapi(`/v2/accounts/${PLATFORM_TON_ADDRESS}/events?limit=1`)
-          const lt = ev.events?.[0]?.lt
-          if (lt != null) await setFlag('deposit_floor_lt', lt)
-        } catch (e) {
-          console.error('[gram] deposit floor set failed:', e.message)
-        }
-      }
-      depositFloorLt = null // force pollDeposits to reload the fresh floor
+      await raiseDepositFloor() // don't let the watcher re-credit the wiped deposits
       console.log('[gram] reset all balances to 0 + cleared ledger history')
     }
   })
@@ -612,16 +600,22 @@ const httpServer = createServer((req, res) => {
   if (req.url === '/admin/players') return adminRoute(req, res, adminPlayers)
   if (req.url === '/admin/zero-balance')
     return adminRoute(req, res, async (body) => {
-      if (body?.all) return { ok: true, cleared: await zeroAllBalances() }
+      if (body?.all) {
+        const cleared = await zeroAllBalances()
+        await raiseDepositFloor() // deleted deposit refs must not re-credit
+        return { ok: true, cleared }
+      }
       const row = await userByUsername(body?.username)
       if (!row) return { error: 'not-found' }
       await zeroUserBalance(Number(row.tg_id))
+      await raiseDepositFloor() // deleted deposit refs must not re-credit
       // push a fresh profile so the player's app updates immediately if they're online
       const sid = tgSocket.get(Number(row.tg_id))
       if (sid) {
         try {
           const fresh = await getUser(row.tg_id)
           if (fresh) io.to(sid).emit('profile', dbProfile(fresh))
+          io.to(sid).emit('gram:history', { items: await getGramHistory(row.tg_id) }) // now empty
         } catch {
           /* ignore */
         }
@@ -764,6 +758,21 @@ async function tonapi(path) {
   const r = await fetch(TONAPI + path, { headers })
   if (!r.ok) throw new Error('tonapi ' + r.status)
   return r.json()
+}
+
+/** Set the deposit watermark to the latest on-chain event lt, so the watcher ignores
+ *  every transfer up to now. Call after wiping ledger history (deleted deposit refs
+ *  would otherwise re-credit). Only deposits made AFTER this point get credited. */
+async function raiseDepositFloor() {
+  if (!PLATFORM_TON_ADDRESS) return
+  try {
+    const ev = await tonapi(`/v2/accounts/${PLATFORM_TON_ADDRESS}/events?limit=1`)
+    const lt = ev.events?.[0]?.lt
+    if (lt != null) await setFlag('deposit_floor_lt', lt)
+  } catch (e) {
+    console.error('[gram] deposit floor set failed:', e.message)
+  }
+  depositFloorLt = null // force pollDeposits to reload the fresh floor
 }
 
 async function pollDeposits() {

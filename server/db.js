@@ -493,28 +493,46 @@ export async function resetAllBalancesOnce(flag) {
   }
 }
 
-/** Zero one user's balance (by tg_id), logging a ledger adjustment for audit.
- *  Returns the new balance (0), or null if the user/DB is missing. */
+/** Zero one user's balance (by tg_id) AND wipe their GRAM history for a clean slate.
+ *  Returns the new balance (0), or null if the user/DB is missing. NOTE: the caller
+ *  must raise the deposit floor afterwards so the watcher won't re-credit the deleted
+ *  on-chain deposits (their dedup refs are gone). */
 export async function zeroUserBalance(tgId) {
   if (!pool || tgId == null) return null
-  const bal = await getBalance(tgId)
-  if (bal !== 0) {
-    await adjustGram({
-      tgId,
-      delta: -bal,
-      kind: 'adjust',
-      ref: `zero:${tgId}:${Date.now()}`,
-      meta: { reason: 'admin zero balance' },
-    })
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await client.query('UPDATE users SET balance_gram = 0 WHERE tg_id = $1', [tgId])
+    await client.query('DELETE FROM gram_ledger WHERE tg_id = $1', [tgId])
+    await client.query('COMMIT')
+    return 0
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {})
+    console.error('[db] zeroUserBalance failed:', e.message)
+    return null
+  } finally {
+    client.release()
   }
-  return 0
 }
 
-/** Zero EVERY user's balance (including house). Bulk test-reset — returns rows changed. */
+/** Zero EVERY user's balance (including house) AND wipe all GRAM history. Bulk test
+ *  reset — returns rows changed. Caller must raise the deposit floor afterwards. */
 export async function zeroAllBalances() {
   if (!pool) return 0
-  const { rowCount } = await pool.query('UPDATE users SET balance_gram = 0 WHERE balance_gram <> 0')
-  return rowCount
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const { rowCount } = await client.query('UPDATE users SET balance_gram = 0 WHERE balance_gram <> 0')
+    await client.query('DELETE FROM gram_ledger')
+    await client.query('COMMIT')
+    return rowCount
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {})
+    console.error('[db] zeroAllBalances failed:', e.message)
+    return 0
+  } finally {
+    client.release()
+  }
 }
 
 /** Read a value from the app_flags key/value store (null if unset). */
