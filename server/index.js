@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, userByUsername, createFriendRequest, listIncomingRequests, acceptFriendRequest, declineFriendRequest, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, debitIfAffordable, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, listWithdrawalHistory, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes, getAdminStats, listUsers, resetAllBalancesOnce, getFlag, setFlag, zeroUserBalance, zeroAllBalances } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, userByUsername, createFriendRequest, listIncomingRequests, acceptFriendRequest, declineFriendRequest, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, debitIfAffordable, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, listWithdrawalHistory, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes, getAdminStats, listUsers, resetAllBalancesOnce, clearGameHistoryOnce, getFlag, setFlag, zeroUserBalance, zeroAllBalances } from './db.js'
 import { settleStakes } from './gramStakes.js'
 import { initSender, senderReady, hotBalance, sendTon } from './tonSender.js'
 import { verifyInitData } from './telegram.js'
@@ -204,6 +204,9 @@ initDb()
       await raiseDepositFloor() // don't let the watcher re-credit the wiped deposits
       console.log('[gram] reset all balances to 0 + cleared ledger history')
     }
+    // One-time wipe of leftover test games so the dashboard's stake-volume tile reads 0.
+    if (await clearGameHistoryOnce('clear-history-20260716'))
+      console.log('[gram] cleared game_history (stake-volume + games stats)')
   })
   .catch((e) => console.error('[db] init failed:', e.message))
 

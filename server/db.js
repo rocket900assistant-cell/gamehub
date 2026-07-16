@@ -537,6 +537,31 @@ export async function zeroAllBalances() {
   }
 }
 
+/** One-time wipe of game_history (leftover test games) so the dashboard's stake-volume
+ *  and games stats start clean. Idempotent via an app_flags marker — runs at most once. */
+export async function clearGameHistoryOnce(flag) {
+  if (!pool) return false
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const done = await client.query('SELECT 1 FROM app_flags WHERE key = $1', [flag])
+    if (done.rowCount > 0) {
+      await client.query('ROLLBACK')
+      return false
+    }
+    await client.query('DELETE FROM game_history')
+    await client.query('INSERT INTO app_flags (key) VALUES ($1)', [flag])
+    await client.query('COMMIT')
+    return true
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {})
+    console.error('[db] clearGameHistoryOnce failed:', e.message)
+    return false
+  } finally {
+    client.release()
+  }
+}
+
 /** Read a value from the app_flags key/value store (null if unset). */
 export async function getFlag(key) {
   if (!pool) return null
