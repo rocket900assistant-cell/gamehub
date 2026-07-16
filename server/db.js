@@ -504,6 +504,7 @@ export async function zeroUserBalance(tgId) {
     await client.query('BEGIN')
     await client.query('UPDATE users SET balance_gram = 0 WHERE tg_id = $1', [tgId])
     await client.query('DELETE FROM gram_ledger WHERE tg_id = $1', [tgId])
+    await client.query('DELETE FROM game_history WHERE p1 = $1 OR p2 = $1', [tgId]) // clears their stake volume
     await client.query('COMMIT')
     return 0
   } catch (e) {
@@ -524,6 +525,7 @@ export async function zeroAllBalances() {
     await client.query('BEGIN')
     const { rowCount } = await client.query('UPDATE users SET balance_gram = 0 WHERE balance_gram <> 0')
     await client.query('DELETE FROM gram_ledger')
+    await client.query('DELETE FROM game_history') // clears the stake-volume + games stats
     await client.query('COMMIT')
     return rowCount
   } catch (e) {
