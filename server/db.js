@@ -96,6 +96,12 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS gram_ledger_user ON gram_ledger (tg_id, id);
     ALTER TABLE users ADD COLUMN IF NOT EXISTS deposit_tag TEXT;
     CREATE UNIQUE INDEX IF NOT EXISTS users_deposit_tag ON users (deposit_tag) WHERE deposit_tag IS NOT NULL;
+    -- small key/value store for one-time migrations + watermarks (separate from the ledger)
+    CREATE TABLE IF NOT EXISTS app_flags (
+      key        TEXT PRIMARY KEY,
+      value      TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
     -- "house" account (tg_id 0) accrues the owner's fee; its balance_gram = withdrawable profit
     INSERT INTO users (tg_id, name) VALUES (0, 'HOUSE') ON CONFLICT (tg_id) DO NOTHING;
   `)
@@ -456,6 +462,59 @@ export async function adjustGram({ tgId, delta, kind, status = 'done', ref = nul
     return null
   } finally {
     client.release()
+  }
+}
+
+/** One-time full reset of test balances + GRAM history. Zeroes every user's balance
+ *  (including the house account) and wipes the gram_ledger. Idempotent: a marker in
+ *  app_flags (a table separate from the ledger, so wiping the ledger can't un-guard it)
+ *  ensures it runs at most once per `flag`. Returns true only on the run that applied it. */
+export async function resetAllBalancesOnce(flag) {
+  if (!pool) return false
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const done = await client.query('SELECT 1 FROM app_flags WHERE key = $1', [flag])
+    if (done.rowCount > 0) {
+      await client.query('ROLLBACK')
+      return false
+    }
+    await client.query('UPDATE users SET balance_gram = 0')
+    await client.query('DELETE FROM gram_ledger')
+    await client.query('INSERT INTO app_flags (key) VALUES ($1)', [flag])
+    await client.query('COMMIT')
+    return true
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {})
+    console.error('[db] resetAllBalancesOnce failed:', e.message)
+    return false
+  } finally {
+    client.release()
+  }
+}
+
+/** Read a value from the app_flags key/value store (null if unset). */
+export async function getFlag(key) {
+  if (!pool) return null
+  try {
+    const { rows } = await pool.query('SELECT value FROM app_flags WHERE key = $1', [key])
+    return rows[0] ? rows[0].value : null
+  } catch {
+    return null
+  }
+}
+
+/** Upsert a value into the app_flags key/value store. */
+export async function setFlag(key, value) {
+  if (!pool) return
+  try {
+    await pool.query(
+      `INSERT INTO app_flags (key, value) VALUES ($1,$2)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [key, String(value)],
+    )
+  } catch (e) {
+    console.error('[db] setFlag failed:', e.message)
   }
 }
 

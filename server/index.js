@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, userByUsername, createFriendRequest, listIncomingRequests, acceptFriendRequest, declineFriendRequest, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, debitIfAffordable, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, listWithdrawalHistory, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes, getAdminStats, listUsers } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, userByUsername, createFriendRequest, listIncomingRequests, acceptFriendRequest, declineFriendRequest, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, debitIfAffordable, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, listWithdrawalHistory, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes, getAdminStats, listUsers, resetAllBalancesOnce, getFlag, setFlag } from './db.js'
 import { settleStakes } from './gramStakes.js'
 import { initSender, senderReady, hotBalance, sendTon } from './tonSender.js'
 import { verifyInitData } from './telegram.js'
@@ -195,18 +195,27 @@ const RECONNECT_GRACE_MS = 120000 // 2 min to reconnect before a started game ab
 initDb()
   .then(() => refundOrphanedStakes()) // return any stakes stuck by a prior restart
   .then(async () => {
-    // One-time correction: a 5.05-GRAM deposit was credited twice (TonAPI showed the
-    // transfer as an in_progress trace and again once finalized, each under a different
-    // ref). Idempotent via the fixed ref — applies exactly once across any restarts.
-    if (!dbEnabled || OWNER_TG_ID == null) return
-    const bal = await adjustGram({
-      tgId: OWNER_TG_ID,
-      delta: -5.05,
-      kind: 'adjust',
-      ref: 'fix:dup-deposit-20260715',
-      meta: { reason: 'double-credited deposit' },
-    })
-    if (bal != null) console.log('[gram] applied -5.05 dup-deposit correction → balance', bal)
+    // One-time reset of the test balances/history that got out of sync during testing
+    // (real TON is safe on the wallet; only in-profile GRAM balances were off). Zeroes
+    // every balance and clears deposit/withdrawal history. Idempotent via an app_flags
+    // marker, so it runs exactly once and never wipes real balances on later restarts.
+    const did = await resetAllBalancesOnce('reset-balances-20260716')
+    if (did) {
+      // The wiped ledger no longer has the dedup refs for pre-reset on-chain deposits,
+      // so raise the deposit floor to the latest event lt: the watcher then ignores every
+      // transfer up to now and only credits deposits made AFTER the reset.
+      if (PLATFORM_TON_ADDRESS) {
+        try {
+          const ev = await tonapi(`/v2/accounts/${PLATFORM_TON_ADDRESS}/events?limit=1`)
+          const lt = ev.events?.[0]?.lt
+          if (lt != null) await setFlag('deposit_floor_lt', lt)
+        } catch (e) {
+          console.error('[gram] deposit floor set failed:', e.message)
+        }
+      }
+      depositFloorLt = null // force pollDeposits to reload the fresh floor
+      console.log('[gram] reset all balances to 0 + cleared ledger history')
+    }
   })
   .catch((e) => console.error('[db] init failed:', e.message))
 
@@ -730,6 +739,7 @@ const TONAPI = 'https://tonapi.io'
 const TONAPI_KEY = process.env.TONAPI_KEY
 let platformRaw = null // our address in raw 0:.. form (for the direction check)
 let pollingDeposits = false
+let depositFloorLt = null // ignore on-chain events at/below this lt (set on a balance reset)
 
 async function tonapi(path) {
   const headers = TONAPI_KEY ? { Authorization: `Bearer ${TONAPI_KEY}` } : {}
@@ -746,12 +756,15 @@ async function pollDeposits() {
       const acc = await tonapi(`/v2/accounts/${PLATFORM_TON_ADDRESS}`)
       platformRaw = acc?.address || null
     }
+    if (depositFloorLt == null) depositFloorLt = Number(await getFlag('deposit_floor_lt')) || 0
     const data = await tonapi(`/v2/accounts/${PLATFORM_TON_ADDRESS}/events?limit=50`)
     for (const ev of data.events || []) {
       // Skip traces that aren't finalized yet: their event_id can change once the
       // trace settles, which would make the same transfer credit twice under two
       // different refs. Finalized events reappear on a later poll (every 25s).
       if (ev.in_progress) continue
+      // Skip anything at/below the reset watermark (pre-reset test deposits).
+      if (depositFloorLt && Number(ev.lt) <= depositFloorLt) continue
       const actions = ev.actions || []
       for (let i = 0; i < actions.length; i++) {
         const a = actions[i]
