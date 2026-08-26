@@ -1387,6 +1387,22 @@ setInterval(() => {
   for (const room of rooms.values()) tick(room)
 }, 250)
 
+// Authoritative clock+turn sync for active chess games. The client counts its clock
+// down locally between moves; if it ever disagrees with the server on whose turn it
+// is (a dropped game:state, or a move the server rejected), it would drain the wrong
+// side for minutes and show a bogus time-out. This heartbeat corrects any drift — and
+// the turn itself — within ~2s, so the displayed clock always matches the server.
+setInterval(() => {
+  for (const room of rooms.values()) {
+    if (room.over || !room.started || room.game !== 'chess') continue
+    emitToRoom(room, 'clock:sync', {
+      clocks: room.clocks,
+      turn: room.chess.turn(),
+      fen: room.chess.fen(),
+    })
+  }
+}, 2000)
+
 // ── GRAM stakes: escrow at start, settle at end (human-vs-human only) ──
 /** Does this player (human) have enough GRAM to cover a stake? */
 async function canAffordStake(userId, stake) {
@@ -2062,6 +2078,7 @@ io.on('connection', (socket) => {
     } catch {
       return
     }
+    room.lastTick = Date.now() // don't charge the pre-move gap to the opponent
     emitToRoom(room, 'game:state', {
       fen: room.chess.fen(),
       turn: room.chess.turn(),

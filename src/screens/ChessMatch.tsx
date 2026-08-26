@@ -201,6 +201,7 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
   const [reviewIdx, setReviewIdx] = useState<number | null>(null)
   const [showMoves, setShowMoves] = useState(false)
   const startRef = useRef(Date.now())
+  const pendingMoveAt = useRef(0) // when we last emitted a move (to not fight the sync)
   const [abortLeft, setAbortLeft] = useState(10)
   const [chatOpen, setChatOpen] = useState(false)
   const chatOpenRef = useRef(false)
@@ -302,6 +303,25 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
       eloDelta: number
       gram?: number
     }) => setResult(o)
+    // Authoritative clock/turn heartbeat from the server (~every 2s). Always adopt the
+    // server clocks; if our board disagrees on whose turn it is, we've desynced — reload
+    // the position. Skip the reload right after we sent a move (the game:state for it is
+    // still in flight) so we don't fight our own optimistic update.
+    const onClockSync = (st: { clocks: { w: number; b: number }; turn: Side; fen: string }) => {
+      setClocks(st.clocks)
+      if (gameRef.current.turn() !== st.turn && Date.now() - pendingMoveAt.current > 1500) {
+        gameRef.current.load(st.fen)
+        try {
+          histRef.current.load(st.fen)
+        } catch {
+          /* ignore */
+        }
+        setFen(st.fen)
+        setLastMove(null)
+        setSelected(null)
+        setReviewIdx(null)
+      }
+    }
     const onOffered = (p: { stake: number; from: string }) => setRematchOffer(p)
     const onDeclined = () => {
       setRematchWaiting(false)
@@ -309,12 +329,14 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
     }
     const onWithdrawn = () => setRematchOffer(null)
     s.on('game:state', onState)
+    s.on('clock:sync', onClockSync)
     s.on('game:over', onOver)
     s.on('rematch:offered', onOffered)
     s.on('rematch:declined', onDeclined)
     s.on('rematch:withdrawn', onWithdrawn)
     return () => {
       s.off('game:state', onState)
+      s.off('clock:sync', onClockSync)
       s.off('game:over', onOver)
       s.off('rematch:offered', onOffered)
       s.off('rematch:declined', onDeclined)
@@ -378,6 +400,7 @@ export function ChessMatch({ user, match, myName, myElo, onMinimize, onExit }: C
     setLastMove({ from, to })
     setSelected(null)
     if (match.mode === 'online') {
+      pendingMoveAt.current = Date.now()
       getSocket().emit('move', { roomId: match.roomId, from, to })
     } else if (g.isGameOver()) {
       if (g.isCheckmate())
