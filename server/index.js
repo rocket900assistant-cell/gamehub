@@ -550,7 +550,12 @@ function adminRoute(req, res, produce) {
 }
 
 async function adminPlayers() {
-  const rows = await listUsers(300)
+  let rows = []
+  try {
+    rows = await listUsers(300)
+  } catch (e) {
+    console.error('[admin] listUsers:', e.message)
+  }
   return rows.map((u) => ({
     id: Number(u.tg_id),
     name: u.name,
@@ -565,17 +570,29 @@ async function adminPlayers() {
 let statsCache = { at: 0, data: null }
 async function adminStats() {
   if (Date.now() - statsCache.at < 30000 && statsCache.data) return statsCache.data
-  const db = await getAdminStats()
+  // Never let one failing sub-call 500 the whole dashboard — degrade gracefully.
+  let db = null
+  try {
+    db = await getAdminStats()
+  } catch (e) {
+    console.error('[admin] getAdminStats:', e.message)
+  }
+  let hot = null
+  try {
+    if (senderReady()) hot = await hotBalance()
+  } catch (e) {
+    console.error('[admin] hotBalance:', e.message)
+  }
   const activeGames = [...rooms.values()].filter((r) => r.started && !r.over).length
   const data = {
     ...(db ?? {}),
     onlineNow: tgSocket.size,
     activeGames,
-    hotBalance: senderReady() ? await hotBalance() : null,
+    hotBalance: hot,
     senderReady: senderReady(),
     at: new Date().toISOString(),
   }
-  statsCache = { at: Date.now(), data }
+  if (db) statsCache = { at: Date.now(), data } // don't cache a degraded (db-less) result
   return data
 }
 
