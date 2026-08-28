@@ -10,7 +10,9 @@ const pool = url
   ? new pg.Pool({
       connectionString: url,
       ssl: { rejectUnauthorized: false }, // Neon requires SSL
-      max: 8,
+      max: 5,
+      idleTimeoutMillis: 3000, // release idle connections fast so Neon can auto-suspend
+      allowExitOnIdle: true,
     })
   : null
 
