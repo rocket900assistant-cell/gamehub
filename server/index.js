@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
-import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, userByUsername, createFriendRequest, listIncomingRequests, acceptFriendRequest, declineFriendRequest, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, debitIfAffordable, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, listWithdrawalHistory, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes, getAdminStats, listUsers, resetAllBalancesOnce, clearGameHistoryOnce, fullResetAllOnce, getFlag, setFlag, zeroUserBalance, zeroAllBalances } from './db.js'
+import { initDb, upsertUser, getUser, recordResult, applyElo, dbEnabled, addFriendship, removeFriendship, getFriends, userByUsername, createFriendRequest, listIncomingRequests, acceptFriendRequest, declineFriendRequest, setUserName, setUserVip, getHistory, getEloTrend, recordPayment, grantEntitlement, getEntitlements, getGramHistory, adjustGram, debitIfAffordable, getOrCreateDepositTag, userByDepositTag, getBalance, createWithdrawal, listPendingWithdrawals, listApprovedWithdrawals, listWithdrawalHistory, getWithdrawal, setWithdrawalStatus, getFeeHistory, refundOrphanedStakes, getAdminStats, listUsers, resetAllBalancesOnce, clearGameHistoryOnce, fullResetAllOnce, getFlag, setFlag, zeroUserBalance, zeroAllBalances, debugStats } from './db.js'
 import { settleStakes } from './gramStakes.js'
 import { initSender, senderReady, hotBalance, sendTon } from './tonSender.js'
 import { verifyInitData } from './telegram.js'
@@ -597,7 +597,7 @@ async function adminStats() {
 }
 
 // HTTP server: health-check ("/") + the Telegram webhook (payments).
-const httpServer = createServer((req, res) => {
+const httpServer = createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === WEBHOOK_PATH) {
     if (req.headers['x-telegram-bot-api-secret-token'] !== WEBHOOK_SECRET) {
       res.writeHead(401)
@@ -653,12 +653,15 @@ const httpServer = createServer((req, res) => {
       }
       return { ok: true, username: row.username, balance: 0 }
     })
-  if (req.method === 'GET' && req.url === '/status') {
+  if (req.method === 'GET' && req.url && req.url.startsWith('/status')) {
     // Non-sensitive readiness probe: exposes ONLY whether the payout sender
     // initialised (true iff the seed matched HOT_TON_ADDRESS). No address, no
     // balance, no secrets — safe to be public.
+    const out = { ok: true, senderReady: senderReady(), lastHotError }
+    // TEMP: gated DB diagnostic for the admin-dashboard "0 users" bug.
+    if (req.url.includes('diag=gh7392')) out.db = await debugStats()
     res.writeHead(200, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ ok: true, senderReady: senderReady(), lastHotError }))
+    res.end(JSON.stringify(out))
     return
   }
   res.writeHead(200, { 'content-type': 'text/plain' })

@@ -586,6 +586,18 @@ export async function clearGameHistoryOnce(flag) {
   }
 }
 
+/** TEMP diagnostic: raw user count + any DB error, to debug the admin dashboard. */
+export async function debugStats() {
+  if (!pool) return { ok: false, error: 'no-pool (DATABASE_URL missing / not connected)' }
+  try {
+    const u = await pool.query('SELECT COUNT(*)::int AS n FROM users')
+    const nz = await pool.query('SELECT COUNT(*)::int AS n FROM users WHERE tg_id <> 0')
+    return { ok: true, usersAll: u.rows[0].n, usersNonHouse: nz.rows[0].n }
+  } catch (e) {
+    return { ok: false, error: e.message }
+  }
+}
+
 /** Read a value from the app_flags key/value store (null if unset). */
 export async function getFlag(key) {
   if (!pool) return null
