@@ -628,30 +628,29 @@ export async function setFlag(key, value) {
 /** Log a Stars payment. Idempotent on charge_id — returns true only the FIRST time. */
 export async function recordPayment({ tgId, product, stars, chargeId }) {
   if (!pool || !tgId) return true // no DB: treat as new so the grant still runs locally
-  try {
-    const { rows } = await pool.query(
-      `INSERT INTO payments (tg_id, product, stars, charge_id) VALUES ($1,$2,$3,$4)
-       ON CONFLICT (charge_id) DO NOTHING RETURNING id`,
-      [tgId, product, stars, chargeId ?? null],
-    )
-    return rows.length > 0 // false = duplicate charge, already processed
-  } catch (e) {
-    console.error('[db] recordPayment failed:', e.message)
-    return false
-  }
+  // THROWS on a database failure, on purpose. This used to catch and `return false`
+  // — the very same value that means "duplicate charge, already processed" — so an
+  // unreachable database was indistinguishable from an already-handled payment: the
+  // caller skipped the grant, answered Telegram 200, and the player's Stars were
+  // gone with nothing granted and no redelivery. Let it throw so the webhook can
+  // ask Telegram to send the update again.
+  const { rows } = await pool.query(
+    `INSERT INTO payments (tg_id, product, stars, charge_id) VALUES ($1,$2,$3,$4)
+     ON CONFLICT (charge_id) DO NOTHING RETURNING id`,
+    [tgId, product, stars, chargeId ?? null],
+  )
+  return rows.length > 0 // false = duplicate charge, already recorded
 }
 
 /** Grant a durable entitlement (owned skin, etc.). Idempotent. */
 export async function grantEntitlement(tgId, item) {
   if (!pool || !tgId) return
-  try {
-    await pool.query(
-      'INSERT INTO entitlements (tg_id, item) VALUES ($1,$2) ON CONFLICT DO NOTHING',
-      [tgId, item],
-    )
-  } catch (e) {
-    console.error('[db] grantEntitlement failed:', e.message)
-  }
+  // Throws on failure, like setUserVip: this is the delivery half of a paid Stars
+  // purchase, and swallowing the error left the player charged and empty-handed.
+  await pool.query(
+    'INSERT INTO entitlements (tg_id, item) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+    [tgId, item],
+  )
 }
 
 /** All items a player owns. */

@@ -609,14 +609,37 @@ const httpServer = createServer(async (req, res) => {
       body += c
       if (body.length > 1e6) req.destroy()
     })
-    req.on('end', () => {
-      res.writeHead(200)
-      res.end('ok') // acknowledge fast, then process
+    req.on('end', async () => {
+      let update = null
       try {
-        handleTgUpdate(JSON.parse(body))
+        update = JSON.parse(body)
       } catch (e) {
         console.error('[tg] webhook parse:', e.message)
+        res.writeHead(200)
+        res.end('ok') // malformed body — a redelivery would fail identically
+        return
       }
+      // A PAYMENT is granted BEFORE we acknowledge. Telegram only redelivers an
+      // update it did not get a 2xx for, so acking first (as this did) meant a DB
+      // blip turned a real 999★ purchase into a silent loss: no grant, no retry,
+      // no refund. Stars are already charged by this point — the grant MUST survive.
+      if (update?.message?.successful_payment) {
+        try {
+          await handleTgUpdate(update)
+          res.writeHead(200)
+          res.end('ok')
+        } catch (e) {
+          console.error('[tg] payment grant failed → asking Telegram to redeliver:', e.message)
+          queueFailedPayment(update) // second net, in case Telegram gives up first
+          res.writeHead(500)
+          res.end('retry')
+        }
+        return
+      }
+      // Everything else acks fast — a pre_checkout_query must be answered in 10s.
+      res.writeHead(200)
+      res.end('ok')
+      handleTgUpdate(update).catch((e) => console.error('[tg] update failed:', e.message))
     })
     return
   }
@@ -751,10 +774,49 @@ async function handleTgUpdate(update) {
     const tgId = update.message.from?.id
     const [userId, product] = String(sp.invoice_payload || '').split('::')
     if (!product || !productInfo(product)) return
+    // Throws if the database is unreachable → the webhook answers non-2xx and
+    // Telegram redelivers. Nothing here may be swallowed: the Stars are already spent.
     const fresh = await recordPayment({ tgId, product, stars: sp.total_amount, chargeId: sp.telegram_payment_charge_id })
-    if (fresh) await grantProduct(tgId, userId, product) // grant once per charge (idempotent)
+    // Re-grant on a DUPLICATE charge too. Both grants are idempotent (a VIP flag, an
+    // entitlement row with ON CONFLICT DO NOTHING), and the payment row can be
+    // committed just before the grant itself fails — in which case every later
+    // redelivery sees "duplicate" and would leave a paid-for item ungranted forever.
+    await grantProduct(tgId, userId, product)
+    if (!fresh) console.log(`[tg] duplicate charge ${sp.telegram_payment_charge_id} — grant re-applied`)
   }
 }
+
+// Payments whose grant threw (almost always: database unreachable). Telegram's own
+// redelivery is the primary net — this is the backup for when it stops retrying.
+// `recordPayment` is idempotent on charge_id, so a retry can never double-grant.
+const failedPayments = []
+const FAILED_PAYMENT_TRIES = 10
+function queueFailedPayment(update) {
+  if (failedPayments.length >= 50) return // pathological — the logs carry the charge
+  failedPayments.push({ update, tries: 0 })
+}
+// Touches the database only while the queue is non-empty, so an idle server stays
+// idle and lets Neon suspend.
+setInterval(async () => {
+  const job = failedPayments.shift()
+  if (!job) return
+  job.tries++
+  try {
+    await handleTgUpdate(job.update)
+    console.log('[tg] queued payment granted on retry')
+  } catch (e) {
+    if (job.tries < FAILED_PAYMENT_TRIES) {
+      failedPayments.push(job)
+    } else {
+      const sp = job.update.message?.successful_payment || {}
+      console.error(
+        `[tg] GRANT MANUALLY — gave up after ${job.tries} tries:`,
+        `charge=${sp.telegram_payment_charge_id} payload=${sp.invoice_payload} stars=${sp.total_amount}`,
+        e.message,
+      )
+    }
+  }
+}, 60_000)
 
 /** Point Telegram's webhook at this server so payments reach us. */
 async function setupWebhook() {
@@ -786,6 +848,20 @@ const TONAPI_KEY = process.env.TONAPI_KEY
 let platformRaw = null // our address in raw 0:.. form (for the direction check)
 let pollingDeposits = false
 let depositFloorLt = null // ignore on-chain events at/below this lt (set on a balance reset)
+// Deposit actions already settled (credited, or confirmed as "not one of ours").
+// TonAPI returns the SAME last-50 events on every poll, so without this cache each
+// poll re-ran a `userByDepositTag` query per commented event — a Postgres hit every
+// 25s round the clock, which is what kept Neon from ever auto-suspending and burned
+// its monthly compute quota. Pure cache: crediting is idempotent on the `ton:` ref,
+// so an empty cache after a restart just costs one extra lookup per event.
+const seenDepositActions = new Map() // `${event_id}:${i}` → true (insertion-ordered)
+const SEEN_DEPOSITS_MAX = 500
+function markDepositSeen(key) {
+  seenDepositActions.set(key, true)
+  while (seenDepositActions.size > SEEN_DEPOSITS_MAX) {
+    seenDepositActions.delete(seenDepositActions.keys().next().value) // drop oldest
+  }
+}
 
 async function tonapi(path) {
   const headers = TONAPI_KEY ? { Authorization: `Bearer ${TONAPI_KEY}` } : {}
@@ -834,8 +910,13 @@ async function pollDeposits() {
         const comment = tr?.comment && String(tr.comment).trim()
         if (!comment) continue
         if (platformRaw && tr.recipient?.address !== platformRaw) continue // must be INCOMING
+        const seenKey = `${ev.event_id}:${i}`
+        if (seenDepositActions.has(seenKey)) continue // settled earlier → no DB query
         const tgId = await userByDepositTag(comment)
-        if (!tgId) continue
+        if (!tgId) {
+          markDepositSeen(seenKey) // not one of our deposit tags, and never will be
+          continue
+        }
         const gram = Math.round((Number(tr.amount) / 1e9) * 100) / 100
         if (!(gram > 0)) continue
         const ref = `ton:${ev.event_id}:${i}`
@@ -854,6 +935,9 @@ async function pollDeposits() {
           }
           console.log(`[gram] credited +${gram} → tg ${tgId} (${ref})`)
         }
+        // Credited just now, or credited on an earlier run (adjustGram returned
+        // null) — either way it is settled and must not cost another query.
+        markDepositSeen(seenKey)
       }
     }
   } catch (e) {
@@ -870,11 +954,41 @@ if (PLATFORM_TON_ADDRESS) {
 // ── Withdrawal sender: send approved payouts from the hot wallet ──
 const MAX_AUTO_WITHDRAW = Number(process.env.MAX_AUTO_WITHDRAW ?? 0) // 0 = no cap; above this stays manual
 let sendingWithdrawals = false
+// The payout worker used to poll `listApprovedWithdrawals()` every 20s even with an
+// empty queue. That single query, forever, is what kept Neon awake 24/7 (0.25 CU ×
+// 720h = 180 CU-hrs/month against 100 included) and blacked out the whole data layer
+// mid-month, twice. It is now event-driven: an approval nudges the worker directly,
+// and the slow sweep below runs ONLY while something retryable is still queued
+// (hot wallet too low, or a send that failed before broadcast).
+const WITHDRAW_SWEEP_MS = Math.max(60_000, Number(process.env.WITHDRAW_SWEEP_MS) || 10 * 60_000)
+let withdrawBacklog = true // unknown at boot → one check on startup
+let withdrawNudgeTimer = null
+let withdrawRerun = false // an approval landed while a pass was already running
+
+/** Run the payout worker shortly. Called whenever the owner approves a withdrawal. */
+function nudgeWithdrawals(delayMs = 1500) {
+  if (!senderReady() || !dbEnabled || withdrawNudgeTimer) return
+  withdrawNudgeTimer = setTimeout(() => {
+    withdrawNudgeTimer = null
+    processWithdrawals()
+  }, delayMs)
+}
 let lastHotError = null // last withdrawal-send problem, surfaced on /status for diagnostics
 
 async function processWithdrawals() {
-  if (!senderReady() || !dbEnabled || sendingWithdrawals) return
+  if (!senderReady() || !dbEnabled) return
+  // A pass already reading the queue cannot see a row approved a moment later, and
+  // there is no 20s poll to pick it up any more — so remember to run again.
+  if (sendingWithdrawals) {
+    withdrawRerun = true
+    return
+  }
   sendingWithdrawals = true
+  // Rows a LATER automatic attempt could still send (low float, pre-broadcast
+  // failure, DB error). Rows that are permanently manual — malformed, or over the
+  // auto cap — deliberately do NOT count, otherwise one such row would keep the
+  // sweep (and the database) awake forever.
+  let retryable = 0
   try {
     const list = await listApprovedWithdrawals()
     for (const w of list) {
@@ -887,11 +1001,13 @@ async function processWithdrawals() {
         bal = await hotBalance()
       } catch (e) {
         lastHotError = `hotBalance: ${e.message}`
+        retryable++
         break
       }
       if (bal < payout + 0.05) {
         lastHotError = `low balance ${bal} < ${payout + 0.05}`
         console.warn(`[hot] balance ${bal} < payout ${payout} — top up the hot wallet`)
+        retryable++
         break // queue the rest until topped up
       }
       // lock this row so it can't be picked twice; a crash mid-send leaves it
@@ -910,18 +1026,30 @@ async function processWithdrawals() {
       } catch (e) {
         lastHotError = `send wd ${w.id}: ${e.message}`
         console.error(`[hot] send failed (wd ${w.id}):`, e.message)
+        retryable++
         await setWithdrawalStatus(w.id, 'sending', 'approved') // pre-broadcast fail → retry next cycle
       }
     }
   } catch (e) {
     console.error('[hot] processWithdrawals:', e.message)
+    retryable++ // could not even read the queue (DB down) → look again later
   } finally {
     sendingWithdrawals = false
+    withdrawBacklog = retryable > 0
+    if (withdrawRerun) {
+      withdrawRerun = false
+      nudgeWithdrawals(500) // catch the approval this pass was too early to see
+    }
   }
 }
 initSender().then((s) => {
   if (s) {
-    setInterval(processWithdrawals, 20000)
+    // Safety net only: skips the query entirely unless the last pass left something
+    // an automatic retry could send. Approvals come in through nudgeWithdrawals().
+    setInterval(() => {
+      if (withdrawBacklog) processWithdrawals()
+    }, WITHDRAW_SWEEP_MS)
+    nudgeWithdrawals(3000) // pick up anything approved while the process was down
     console.log('[hot] withdrawal sender on')
   }
 })
@@ -2405,6 +2533,7 @@ io.on('connection', (socket) => {
     if (fee > 0) await adjustGram({ tgId: 0, delta: fee, kind: 'fee', ref: `wfee:${id}` }) // owner income
     cb?.({ ok: true })
     notifyOwnerWithdrawals()
+    nudgeWithdrawals() // send it now instead of waiting for a poll
     // NOTE: the on-chain send runs once HOT_TON_MNEMONIC is configured; until then
     // approved requests queue for payout.
   })
